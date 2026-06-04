@@ -1,0 +1,29 @@
+const service = require('./choferes.service')
+const { ok } = require('../../utils/respuesta')
+
+const listar = async (req, res) => {
+  const choferes = await service.listar()
+  return ok(res, choferes)
+}
+
+const obtener = async (req, res) => {
+  const chofer = await service.obtener(req.params.id)
+  return ok(res, chofer)
+}
+
+const crear = async (req, res) => {
+  const chofer = await service.crear(req.body)
+  return ok(res, chofer, 'Chofer creado', 201)
+}
+
+const actualizar = async (req, res) => {
+  const chofer = await service.actualizar(req.params.id, req.body)
+  return ok(res, chofer, 'Chofer actualizado')
+}
+
+const eliminar = async (req, res) => {
+  await service.eliminar(req.params.id)
+  return ok(res, null, 'Chofer eliminado')
+}
+
+module.exports = { listar, obtener, crear, actualizar, eliminar }

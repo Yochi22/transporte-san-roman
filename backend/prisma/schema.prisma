@@ -1,0 +1,215 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Rol {
+  ADMIN
+  OPERACIONES
+}
+
+enum EstadoCamion {
+  DISPONIBLE
+  EN_RUTA
+  EN_TALLER
+}
+
+enum TipoVehiculo {
+  NPR
+  TORONTO
+  FURGON
+}
+
+enum EstadoChofer {
+  DISPONIBLE
+  EN_RUTA
+  DESCANSO
+}
+
+enum EstadoLogistico {
+  PENDIENTE
+  EN_CURSO
+  COMPLETADO
+}
+
+enum EstadoFinanciero {
+  PENDIENTE
+  LIQUIDADO
+}
+
+enum TipoParada {
+  CARGA
+  DESCARGA
+  PERNOCTA
+}
+
+enum EstadoParada {
+  PENDIENTE
+  EN_CURSO
+  COMPLETADA
+}
+
+enum TipoReporte {
+  CARGANDO
+  EN_RUTA
+  EN_PERNOCTA
+  DESCARGADO
+  ESPERANDO_INSTRUCCIONES
+  LIBRE
+  OTRO
+}
+
+enum TipoGasto {
+  COMBUSTIBLE
+  PEAJE
+  COMIDA
+  HOSPEDAJE
+  REPARACION
+  OTRO
+}
+
+enum OrigenGasto {
+  CHOFER
+  ADMIN
+}
+
+model Usuario {
+  id           String   @id @default(uuid())
+  nombre       String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  rol          Rol      @default(OPERACIONES)
+  activo       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  viajesCreados Viaje[]  @relation("ViajeCreador")
+
+
+  @@map("usuarios")
+}
+
+model Chofer {
+  id               String       @id @default(uuid())
+  nombre           String
+  cedula           String       @unique
+  telefono         String       @unique // Formato: 584XXXXXXXXX
+  whatsappChatId   String?      @unique @map("whatsapp_chat_id") // El JID de WhatsApp (@s.whatsapp.net o @lid)
+  estado           EstadoChofer @default(DISPONIBLE)
+  ubicacionActual  String?      @default("Sede") @map("ubicacion_actual")
+  ultimoReporteAt  DateTime?    @map("ultimo_reporte_at")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+  viajes           Viaje[]
+  reportes         ReporteChofer[]
+  gastos           Gasto[]
+
+  @@map("choferes")
+}
+
+model Camion {
+  id               String      @id @default(uuid())
+  placa            String      @unique
+  tipoVehiculo     TipoVehiculo @default(NPR) @map("tipo_vehiculo")
+  placaFurgon      String?      @unique @map("placa_furgon")
+  placaChuto       String?      @unique @map("placa_chuto")
+  marcaModelo      String      @map("marca_modelo")
+  estado           EstadoCamion @default(DISPONIBLE)
+  ubicacionActual  String?      @default("Sede") @map("ubicacion_actual")
+  motivoTaller     String?     @map("motivo_taller")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+  viajes           Viaje[]
+
+  @@map("camiones")
+}
+
+model Viaje {
+  id                   String           @id @default(uuid())
+  codigo               String           @unique
+  camionId             String           @map("camion_id")
+  choferId             String           @map("chofer_id")
+  creadoPorId          String           @map("creado_por_id")
+  estadoLogistico      EstadoLogistico  @default(PENDIENTE) @map("estado_logistico")
+  estadoFinanciero     EstadoFinanciero @default(PENDIENTE) @map("estado_financiero")
+  documentacionRecibida Boolean         @default(false) @map("documentacion_recibida")
+  numeroGuia            String?         @unique @map("numero_guia")
+  viaticosDepositados  Decimal          @default(0) @map("viaticos_depositados")
+  viaticosGastados     Decimal          @default(0) @map("viaticos_gastados")
+  honorariosChofer     Decimal          @default(0) @map("honorarios_chofer")
+  fechaLiquidacion     DateTime?        @map("fecha_liquidacion")
+  observaciones        String?
+  fechaInicio          DateTime?        @map("fecha_inicio")
+  fechaCierre          DateTime?        @map("fecha_cierre")
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+
+  camion    Camion          @relation(fields: [camionId], references: [id])
+  chofer    Chofer          @relation(fields: [choferId], references: [id])
+  creadoPor Usuario         @relation("ViajeCreador", fields: [creadoPorId], references: [id])
+  paradas   Parada[]
+  reportes  ReporteChofer[]
+  gastos    Gasto[]
+
+  @@map("viajes")
+}
+
+model Parada {
+  id               String       @id @default(uuid())
+  viajeId          String       @map("viaje_id")
+  orden            Int
+  tramo            Int          @default(1)
+  tipo             TipoParada
+  lugar            String
+  ciudad           String
+  descripcionCarga String?      @map("descripcion_carga")
+  estado           EstadoParada @default(PENDIENTE)
+  comprobanteUrl   String?      @map("comprobante_url") // Foto de la factura/guía firmada
+  completadaAt     DateTime?    @map("completada_at")
+  createdAt        DateTime     @default(now()) @map("created_at")
+
+  viaje Viaje @relation(fields: [viajeId], references: [id])
+  reportes ReporteChofer[]
+
+  @@map("paradas")
+}
+
+model ReporteChofer {
+  id              String      @id @default(uuid())
+  viajeId         String      @map("viaje_id")
+  choferId        String      @map("chofer_id")
+  paradaId        String?     @map("parada_id")
+  mensajeOriginal String      @map("mensaje_original")
+  tipoReporte     TipoReporte @map("tipo_reporte")
+  ubicacion       String?
+  procesadoPorIa  String?     @map("procesado_por_ia")
+  createdAt       DateTime    @default(now()) @map("created_at")
+
+  viaje  Viaje  @relation(fields: [viajeId], references: [id])
+  chofer Chofer @relation(fields: [choferId], references: [id])
+  parada Parada? @relation(fields: [paradaId], references: [id], onDelete: SetNull)
+
+  @@map("reportes_chofer")
+}
+
+model Gasto {
+  id             String    @id @default(uuid())
+  viajeId        String    @map("viaje_id")
+  choferId       String    @map("chofer_id")
+  tipo           TipoGasto
+  origen         OrigenGasto @default(ADMIN)
+  monto          Decimal
+  descripcion    String?
+  comprobanteUrl String?   @map("comprobante_url")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  viaje  Viaje  @relation(fields: [viajeId], references: [id])
+  chofer Chofer @relation(fields: [choferId], references: [id])
+
+  @@map("gastos")
+}
