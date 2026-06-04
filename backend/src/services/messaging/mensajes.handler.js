@@ -33,7 +33,7 @@ const buscarChofer = async (remoteJid) => {
     include: includeChoferConViajes(),
   })
 
-  if (chofer) return chofer
+  if (chofer?.activo) return chofer
 
   if (remoteJid.endsWith('@s.whatsapp.net')) {
     const telefono = normalizarTelefono(remoteJid.replace('@s.whatsapp.net', '').split(':')[0])
@@ -43,7 +43,7 @@ const buscarChofer = async (remoteJid) => {
       include: includeChoferConViajes(),
     })
 
-    if (chofer && !chofer.whatsappChatId) {
+    if (chofer?.activo && !chofer.whatsappChatId) {
       await prisma.chofer.update({
         where: { id: chofer.id },
         data: { whatsappChatId: remoteJid },
@@ -261,15 +261,16 @@ const procesarReporte = async ({
 
     let viajesCompletados = []
     if (resultado.tipo === 'ESPERANDO_INSTRUCCIONES') {
-      await tx.parada.updateMany({
+      const paradasPendientes = await tx.parada.count({
         where: { viajeId: viaje.id, estado: { not: 'COMPLETADA' } },
-        data: { estado: 'COMPLETADA', completadaAt: new Date() },
       })
-      await tx.viaje.update({
-        where: { id: viaje.id },
-        data: { estadoLogistico: 'COMPLETADO', fechaCierre: new Date() },
-      })
-      viajesCompletados = [viaje.id]
+      if (paradasPendientes === 0) {
+        await tx.viaje.update({
+          where: { id: viaje.id },
+          data: { estadoLogistico: 'COMPLETADO', fechaCierre: new Date() },
+        })
+        viajesCompletados = [viaje.id]
+      }
     }
 
     if (resultado.tipo === 'LIBRE') {
@@ -302,8 +303,12 @@ const procesarReporte = async ({
       ubicacionActual: ubicacion || chofer.ubicacionActual,
       ultimoReporteAt: new Date(),
     }
+    const [viajesChoferRestantes, viajesCamionRestantes] = await Promise.all([
+      tx.viaje.count({ where: { choferId: chofer.id, estadoLogistico: 'EN_CURSO' } }),
+      tx.viaje.count({ where: { camionId: viaje.camionId, estadoLogistico: 'EN_CURSO' } }),
+    ])
 
-    if (resultado.tipo === 'LIBRE' || resultado.tipo === 'ESPERANDO_INSTRUCCIONES') {
+    if (resultado.tipo === 'LIBRE' || resultado.tipo === 'ESPERANDO_INSTRUCCIONES' || viajesChoferRestantes === 0) {
       dataChofer.estado = 'DISPONIBLE'
       if (resultado.tipo === 'LIBRE') dataChofer.ubicacionActual = ubicacion || 'Sede Barquisimeto'
     }
@@ -318,7 +323,7 @@ const procesarReporte = async ({
       data: {
         ubicacionActual: ubicacion || chofer.ubicacionActual,
         estado:
-          resultado.tipo === 'LIBRE' || resultado.tipo === 'ESPERANDO_INSTRUCCIONES'
+          resultado.tipo === 'LIBRE' || resultado.tipo === 'ESPERANDO_INSTRUCCIONES' || viajesCamionRestantes === 0
             ? 'DISPONIBLE'
             : undefined,
       },
@@ -436,7 +441,7 @@ const procesarVinculacion = async (remoteJid, texto, enviarMensaje) => {
     where: { telefono: telefonoIngresado },
   })
 
-  if (!chofer) {
+  if (!chofer?.activo) {
     await enviarMensaje(
       remoteJid,
       [
@@ -467,8 +472,6 @@ const procesarVinculacion = async (remoteJid, texto, enviarMensaje) => {
       '',
       `Bienvenido, ${chofer.nombre}.`,
       'Tu WhatsApp ha sido vinculado al sistema de Transporte San Roman.',
-      '',
-      'Escribe menu para ver tus opciones.',
     ].join('\n')
   )
 }

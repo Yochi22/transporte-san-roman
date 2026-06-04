@@ -17,6 +17,7 @@ const camionesRoutes = require('./modules/camiones/camiones.routes')
 const viajesRoutes = require('./modules/viajes/viajes.routes')
 const reportesRoutes = require('./modules/reportes/reportes.routes')
 const gastosRoutes = require('./modules/gastos/gastos.routes')
+const tallerRoutes = require('./modules/taller/taller.routes')
 
 const app = express()
 
@@ -44,6 +45,7 @@ app.use('/api/camiones', camionesRoutes)
 app.use('/api/viajes', viajesRoutes)
 app.use('/api/reportes', reportesRoutes)
 app.use('/api/gastos', gastosRoutes)
+app.use('/api/taller', tallerRoutes)
 
 const frontendDist = path.resolve(__dirname, '../../frontend/dist')
 if (fs.existsSync(frontendDist)) {

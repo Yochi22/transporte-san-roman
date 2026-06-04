@@ -1,31 +1,21 @@
--- CreateEnum
 CREATE TYPE "Rol" AS ENUM ('ADMIN', 'OPERACIONES');
 
--- CreateEnum
 CREATE TYPE "EstadoCamion" AS ENUM ('DISPONIBLE', 'EN_RUTA', 'EN_TALLER');
 
--- CreateEnum
 CREATE TYPE "EstadoChofer" AS ENUM ('DISPONIBLE', 'EN_RUTA', 'DESCANSO');
 
--- CreateEnum
 CREATE TYPE "EstadoLogistico" AS ENUM ('PENDIENTE', 'EN_CURSO', 'COMPLETADO');
 
--- CreateEnum
 CREATE TYPE "EstadoFinanciero" AS ENUM ('PENDIENTE', 'LIQUIDADO');
 
--- CreateEnum
 CREATE TYPE "TipoParada" AS ENUM ('CARGA', 'DESCARGA', 'PERNOCTA');
 
--- CreateEnum
 CREATE TYPE "EstadoParada" AS ENUM ('PENDIENTE', 'EN_CURSO', 'COMPLETADA');
 
--- CreateEnum
 CREATE TYPE "TipoReporte" AS ENUM ('CARGANDO', 'EN_RUTA', 'EN_PERNOCTA', 'DESCARGADO', 'ESPERANDO_INSTRUCCIONES', 'LIBRE', 'OTRO');
 
--- CreateEnum
 CREATE TYPE "TipoGasto" AS ENUM ('COMBUSTIBLE', 'PEAJE', 'COMIDA', 'HOSPEDAJE', 'REPARACION', 'OTRO');
 
--- CreateTable
 CREATE TABLE "usuarios" (
     "id" TEXT NOT NULL,
     "nombre" TEXT NOT NULL,
@@ -39,7 +29,6 @@ CREATE TABLE "usuarios" (
     CONSTRAINT "usuarios_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
 CREATE TABLE "choferes" (
     "id" TEXT NOT NULL,
     "usuario_id" TEXT NOT NULL,
@@ -54,7 +43,6 @@ CREATE TABLE "choferes" (
     CONSTRAINT "choferes_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
 CREATE TABLE "camiones" (
     "id" TEXT NOT NULL,
     "placa" TEXT NOT NULL,
@@ -67,7 +55,6 @@ CREATE TABLE "camiones" (
     CONSTRAINT "camiones_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
 CREATE TABLE "viajes" (
     "id" TEXT NOT NULL,
     "codigo" TEXT NOT NULL,
@@ -87,7 +74,6 @@ CREATE TABLE "viajes" (
     CONSTRAINT "viajes_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
 CREATE TABLE "paradas" (
     "id" TEXT NOT NULL,
     "viaje_id" TEXT NOT NULL,
@@ -103,7 +89,6 @@ CREATE TABLE "paradas" (
     CONSTRAINT "paradas_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
 CREATE TABLE "reportes_chofer" (
     "id" TEXT NOT NULL,
     "viaje_id" TEXT NOT NULL,
@@ -117,7 +102,6 @@ CREATE TABLE "reportes_chofer" (
     CONSTRAINT "reportes_chofer_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
 CREATE TABLE "gastos" (
     "id" TEXT NOT NULL,
     "viaje_id" TEXT NOT NULL,
@@ -131,44 +115,30 @@ CREATE TABLE "gastos" (
     CONSTRAINT "gastos_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
 CREATE UNIQUE INDEX "usuarios_email_key" ON "usuarios"("email");
 
--- CreateIndex
 CREATE UNIQUE INDEX "choferes_usuario_id_key" ON "choferes"("usuario_id");
 
--- CreateIndex
 CREATE UNIQUE INDEX "choferes_telefono_key" ON "choferes"("telefono");
 
--- CreateIndex
 CREATE UNIQUE INDEX "camiones_placa_key" ON "camiones"("placa");
 
--- CreateIndex
 CREATE UNIQUE INDEX "viajes_codigo_key" ON "viajes"("codigo");
 
--- AddForeignKey
 ALTER TABLE "choferes" ADD CONSTRAINT "choferes_usuario_id_fkey" FOREIGN KEY ("usuario_id") REFERENCES "usuarios"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
--- AddForeignKey
 ALTER TABLE "viajes" ADD CONSTRAINT "viajes_camion_id_fkey" FOREIGN KEY ("camion_id") REFERENCES "camiones"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
--- AddForeignKey
 ALTER TABLE "viajes" ADD CONSTRAINT "viajes_chofer_id_fkey" FOREIGN KEY ("chofer_id") REFERENCES "choferes"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
--- AddForeignKey
 ALTER TABLE "viajes" ADD CONSTRAINT "viajes_creado_por_id_fkey" FOREIGN KEY ("creado_por_id") REFERENCES "usuarios"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
--- AddForeignKey
 ALTER TABLE "paradas" ADD CONSTRAINT "paradas_viaje_id_fkey" FOREIGN KEY ("viaje_id") REFERENCES "viajes"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
--- AddForeignKey
 ALTER TABLE "reportes_chofer" ADD CONSTRAINT "reportes_chofer_viaje_id_fkey" FOREIGN KEY ("viaje_id") REFERENCES "viajes"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
--- AddForeignKey
 ALTER TABLE "reportes_chofer" ADD CONSTRAINT "reportes_chofer_chofer_id_fkey" FOREIGN KEY ("chofer_id") REFERENCES "choferes"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
--- AddForeignKey
 ALTER TABLE "gastos" ADD CONSTRAINT "gastos_viaje_id_fkey" FOREIGN KEY ("viaje_id") REFERENCES "viajes"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
--- AddForeignKey
 ALTER TABLE "gastos" ADD CONSTRAINT "gastos_chofer_id_fkey" FOREIGN KEY ("chofer_id") REFERENCES "choferes"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

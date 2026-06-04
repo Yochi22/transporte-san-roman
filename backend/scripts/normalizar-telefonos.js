@@ -1,9 +1,3 @@
-/**
- * Script para normalizar los teléfonos de choferes ya registrados
- * en la base de datos al formato WhatsApp (584XXXXXXXXX).
- * 
- * Ejecutar: node scripts/normalizar-telefonos.js
- */
 require('dotenv').config()
 const { PrismaClient } = require('@prisma/client')
 const { normalizarTelefono } = require('../src/utils/normalizarTelefono')

@@ -78,6 +78,21 @@ enum OrigenGasto {
   ADMIN
 }
 
+enum TipoMantenimiento {
+  REPARACION
+  CAMBIO_ACEITE
+  CAUCHOS
+  FRENOS
+  BATERIA
+  REVISION
+  OTRO
+}
+
+enum EstadoMantenimiento {
+  EN_PROCESO
+  COMPLETADO
+}
+
 model Usuario {
   id           String   @id @default(uuid())
   nombre       String
@@ -98,11 +113,12 @@ model Chofer {
   id               String       @id @default(uuid())
   nombre           String
   cedula           String       @unique
-  telefono         String       @unique // Formato: 584XXXXXXXXX
-  whatsappChatId   String?      @unique @map("whatsapp_chat_id") // El JID de WhatsApp (@s.whatsapp.net o @lid)
+  telefono         String       @unique
+  whatsappChatId   String?      @unique @map("whatsapp_chat_id")
   estado           EstadoChofer @default(DISPONIBLE)
   ubicacionActual  String?      @default("Sede") @map("ubicacion_actual")
   ultimoReporteAt  DateTime?    @map("ultimo_reporte_at")
+  activo           Boolean      @default(true)
   createdAt        DateTime     @default(now()) @map("created_at")
   updatedAt        DateTime     @updatedAt @map("updated_at")
   viajes           Viaje[]
@@ -122,11 +138,32 @@ model Camion {
   estado           EstadoCamion @default(DISPONIBLE)
   ubicacionActual  String?      @default("Sede") @map("ubicacion_actual")
   motivoTaller     String?     @map("motivo_taller")
+  activo           Boolean     @default(true)
   createdAt        DateTime    @default(now()) @map("created_at")
   updatedAt        DateTime    @updatedAt @map("updated_at")
   viajes           Viaje[]
+  mantenimientos   MantenimientoVehiculo[]
 
   @@map("camiones")
+}
+
+model MantenimientoVehiculo {
+  id                String              @id @default(uuid())
+  camionId          String              @map("camion_id")
+  tipo              TipoMantenimiento
+  estado            EstadoMantenimiento @default(EN_PROCESO)
+  falla             String
+  descripcion       String?
+  kilometraje       Int?
+  costo             Decimal             @default(0)
+  fechaIngreso      DateTime            @default(now()) @map("fecha_ingreso")
+  fechaSalida       DateTime?           @map("fecha_salida")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  camion Camion @relation(fields: [camionId], references: [id])
+
+  @@map("mantenimientos_vehiculos")
 }
 
 model Viaje {
@@ -168,8 +205,10 @@ model Parada {
   lugar            String
   ciudad           String
   descripcionCarga String?      @map("descripcion_carga")
+  fechaProgramada  DateTime?    @map("fecha_programada")
+  cargarAlDescargar Boolean     @default(false) @map("cargar_al_descargar")
   estado           EstadoParada @default(PENDIENTE)
-  comprobanteUrl   String?      @map("comprobante_url") // Foto de la factura/guía firmada
+  comprobanteUrl   String?      @map("comprobante_url")
   completadaAt     DateTime?    @map("completada_at")
   createdAt        DateTime     @default(now()) @map("created_at")
 

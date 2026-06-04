@@ -30,4 +30,18 @@ const crear = async (datos) => {
   })
 }
 
-module.exports = { listar, porViaje, crear }
+const depurarReportesCerrados = async (diasRetencion = 7) => {
+  const limite = new Date()
+  limite.setDate(limite.getDate() - diasRetencion)
+
+  return prisma.reporteChofer.deleteMany({
+    where: {
+      viaje: {
+        estadoLogistico: 'COMPLETADO',
+        fechaCierre: { lte: limite }
+      }
+    }
+  })
+}
+
+module.exports = { listar, porViaje, crear, depurarReportesCerrados }

@@ -6,7 +6,9 @@ const { autenticar, adminOOperaciones } = require('../../middlewares/auth.middle
 router.use(autenticar, adminOOperaciones)
 
 router.get('/', ctrl.listar)
+router.get('/archivo/listado', ctrl.listarArchivo)
 router.get('/liquidaciones/listado', ctrl.listarLiquidaciones)
+router.get('/pendientes-liquidacion/listado', ctrl.listarPendientesLiquidacion)
 router.get('/:id', ctrl.obtener)
 router.post('/', ctrl.crear)
 router.patch('/:id', ctrl.actualizar)

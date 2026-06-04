@@ -19,6 +19,66 @@ const listar = async (filtros = {}) => {
   })
 }
 
+const listarArchivo = async (filtros = {}) => {
+  const page = Math.max(1, Number(filtros.page) || 1)
+  const pageSize = Math.min(50, Math.max(1, Number(filtros.pageSize) || 10))
+  const where = { estadoLogistico: 'COMPLETADO' }
+  const rango = construirRangoArchivo(filtros.periodo, filtros.fecha)
+
+  if (rango) {
+    where.fechaCierre = { gte: rango.desde, lte: rango.hasta }
+  }
+
+  const [items, total] = await prisma.$transaction([
+    prisma.viaje.findMany({
+      where,
+      include: {
+        chofer: true,
+        camion: true,
+        paradas: { orderBy: { orden: 'asc' } },
+        reportes: { orderBy: { createdAt: 'desc' } },
+        gastos: { orderBy: { createdAt: 'desc' } }
+      },
+      orderBy: { fechaCierre: 'desc' },
+      skip: (page - 1) * pageSize,
+      take: pageSize
+    }),
+    prisma.viaje.count({ where })
+  ])
+
+  return { items, total, page, pageSize }
+}
+
+const construirRangoArchivo = (periodo, fecha) => {
+  if (!periodo || periodo === 'todos') return null
+  const base = fecha ? new Date(`${fecha}T12:00:00`) : new Date()
+  if (Number.isNaN(base.getTime())) return null
+  const desde = new Date(base)
+  const hasta = new Date(base)
+
+  if (periodo === 'dia') {
+    desde.setHours(0, 0, 0, 0)
+    hasta.setHours(23, 59, 59, 999)
+  } else if (periodo === 'semana') {
+    const day = desde.getDay()
+    const offset = day === 0 ? -6 : 1 - day
+    desde.setDate(desde.getDate() + offset)
+    desde.setHours(0, 0, 0, 0)
+    hasta.setTime(desde.getTime())
+    hasta.setDate(hasta.getDate() + 6)
+    hasta.setHours(23, 59, 59, 999)
+  } else if (periodo === 'mes') {
+    desde.setDate(1)
+    desde.setHours(0, 0, 0, 0)
+    hasta.setMonth(hasta.getMonth() + 1, 0)
+    hasta.setHours(23, 59, 59, 999)
+  } else {
+    return null
+  }
+
+  return { desde, hasta }
+}
+
 const obtener = async (id) => {
   return prisma.viaje.findUniqueOrThrow({
     where: { id },
@@ -49,6 +109,7 @@ const crear = async (datos, creadoPorId) => {
   }
 
   const codigo = generarCodigoViaje()
+  const primeraCarga = paradas.find((parada) => parada.tipo === 'CARGA' && parada.fechaProgramada)
 
   const viaje = await prisma.viaje.create({
     data: {
@@ -58,13 +119,16 @@ const crear = async (datos, creadoPorId) => {
       creadoPorId,
       viaticosDepositados: Number(viaticosDepositados) || 0,
       estadoLogistico: 'EN_CURSO',
+      fechaInicio: primeraCarga ? new Date(primeraCarga.fechaProgramada) : null,
       paradas: {
         create: paradas.map((p, i) => ({
           orden: i + 1,
           tramo: 1,
           tipo: p.tipo,
           lugar: p.lugar,
-          ciudad: p.ciudad
+          ciudad: p.ciudad,
+          fechaProgramada: p.fechaProgramada ? new Date(p.fechaProgramada) : null,
+          cargarAlDescargar: p.tipo === 'CARGA' && !!p.cargarAlDescargar
         }))
       }
     }
@@ -73,7 +137,7 @@ const crear = async (datos, creadoPorId) => {
   await prisma.camion.update({ where: { id: camionId }, data: { estado: 'EN_RUTA' } })
   await prisma.chofer.update({ where: { id: choferId }, data: { estado: 'EN_RUTA' } })
 
-  return viaje
+  return obtener(viaje.id)
 }
 
 const agregarTramo = async (id, datos) => {
@@ -94,7 +158,9 @@ const agregarTramo = async (id, datos) => {
         tramo: nuevoTramo,
         tipo: parada.tipo,
         lugar: parada.lugar,
-        ciudad: parada.ciudad
+        ciudad: parada.ciudad,
+        fechaProgramada: parada.fechaProgramada ? new Date(parada.fechaProgramada) : null,
+        cargarAlDescargar: parada.tipo === 'CARGA' && !!parada.cargarAlDescargar
       }))
     }),
     prisma.viaje.update({
@@ -217,6 +283,34 @@ const listarLiquidaciones = async (filtros = {}) => {
   })
 }
 
+const listarPendientesLiquidacion = async (filtros = {}) => {
+  const page = Math.max(1, Number(filtros.page) || 1)
+  const pageSize = Math.min(50, Math.max(1, Number(filtros.pageSize) || 10))
+  const where = {
+    estadoLogistico: 'COMPLETADO',
+    estadoFinanciero: 'PENDIENTE'
+  }
+
+  const [items, total] = await prisma.$transaction([
+    prisma.viaje.findMany({
+      where,
+      include: {
+        chofer: true,
+        camion: true,
+        paradas: { orderBy: { orden: 'asc' } },
+        reportes: { orderBy: { createdAt: 'desc' } },
+        gastos: { orderBy: { createdAt: 'desc' } }
+      },
+      orderBy: [{ fechaCierre: 'desc' }, { createdAt: 'desc' }],
+      skip: (page - 1) * pageSize,
+      take: pageSize
+    }),
+    prisma.viaje.count({ where })
+  ])
+
+  return { items, total, page, pageSize }
+}
+
 const actualizarHonorarios = async (id, honorariosChofer) => {
   return prisma.viaje.update({
     where: { id },
@@ -239,7 +333,7 @@ const cerrar = async (id, soloLogistica = false, numeroGuia = null) => {
       data: { estado: 'COMPLETADA', completadaAt: new Date() }
     })
 
-    return tx.viaje.update({
+    const actualizado = await tx.viaje.update({
       where: { id },
       data: {
         estadoLogistico: 'COMPLETADO',
@@ -250,11 +344,35 @@ const cerrar = async (id, soloLogistica = false, numeroGuia = null) => {
         fechaCierre: new Date()
       }
     })
+
+    await recalcularEstadoRecursos(tx, viaje.choferId, viaje.camionId)
+    return actualizado
   })
+}
+
+const recalcularEstadoRecursos = async (tx, choferId, camionId) => {
+  const [viajesChofer, viajesCamion, camion] = await Promise.all([
+    tx.viaje.count({ where: { choferId, estadoLogistico: 'EN_CURSO' } }),
+    tx.viaje.count({ where: { camionId, estadoLogistico: 'EN_CURSO' } }),
+    tx.camion.findUnique({ where: { id: camionId }, select: { estado: true } })
+  ])
+
+  await tx.chofer.update({
+    where: { id: choferId },
+    data: { estado: viajesChofer > 0 ? 'EN_RUTA' : 'DISPONIBLE' }
+  })
+
+  if (camion?.estado !== 'EN_TALLER') {
+    await tx.camion.update({
+      where: { id: camionId },
+      data: { estado: viajesCamion > 0 ? 'EN_RUTA' : 'DISPONIBLE' }
+    })
+  }
 }
 
 module.exports = {
   listar,
+  listarArchivo,
   obtener,
   crear,
   actualizar,
@@ -264,6 +382,7 @@ module.exports = {
   confirmarDocumentacion,
   obtenerLiquidacion,
   listarLiquidaciones,
+  listarPendientesLiquidacion,
   actualizarHonorarios,
   agregarTramo,
   actualizarParada

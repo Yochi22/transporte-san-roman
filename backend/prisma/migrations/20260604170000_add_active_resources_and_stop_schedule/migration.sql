@@ -1,0 +1,3 @@
+ALTER TABLE "choferes" ADD COLUMN "activo" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "camiones" ADD COLUMN "activo" BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE "paradas" ADD COLUMN "fecha_programada" TIMESTAMP(3);

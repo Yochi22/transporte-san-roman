@@ -3,6 +3,7 @@ const { normalizarTelefono } = require('../../utils/normalizarTelefono')
 
 const listar = async () => {
   return prisma.chofer.findMany({
+    where: { activo: true },
     orderBy: { nombre: 'asc' }
   })
 }
@@ -35,9 +36,14 @@ const actualizar = async (id, datos) => {
 }
 
 const eliminar = async (id) => {
-  const viajes = await prisma.viaje.count({ where: { choferId: id } })
-  if (viajes > 0) throw { status: 409, message: 'No se puede eliminar un chofer con viajes registrados' }
-  return prisma.chofer.delete({ where: { id } })
+  const viajesActivos = await prisma.viaje.count({
+    where: { choferId: id, estadoLogistico: 'EN_CURSO' }
+  })
+  if (viajesActivos > 0) throw { status: 409, message: 'No se puede eliminar un chofer con viajes activos' }
+  return prisma.chofer.update({
+    where: { id },
+    data: { activo: false, estado: 'DISPONIBLE', whatsappChatId: null }
+  })
 }
 
 module.exports = { listar, obtener, crear, actualizar, eliminar }

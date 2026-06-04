@@ -24,9 +24,6 @@ const normalizar = (valor = '') =>
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
 
-/**
- * Transcribe un buffer de audio usando Gemini.
- */
 const transcribirAudio = async (audioBuffer, mimeType = 'audio/ogg') => {
   try {
     if (!Buffer.isBuffer(audioBuffer) || audioBuffer.length === 0) {

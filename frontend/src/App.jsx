@@ -48,6 +48,7 @@ const tabs = [
   { id: 'viajes', label: 'Viajes', icon: Route },
   { id: 'despacho', label: 'Agendamiento', icon: Send },
   { id: 'recursos', label: 'Recursos', icon: Users },
+  { id: 'taller', label: 'Taller', icon: Wrench },
   { id: 'liquidaciones', label: 'Liquidaciones', icon: Calculator },
 ]
 
@@ -261,6 +262,9 @@ export default function App() {
             {activeTab === 'recursos' && (
               <RecursosView data={data} onDone={() => fetchData()} />
             )}
+            {activeTab === 'taller' && (
+              <TallerView camiones={data.camionesOperativos} onDone={() => fetchData()} />
+            )}
             {activeTab === 'liquidaciones' && (
               <LiquidacionesView viajes={data.liquidados} choferes={choferes} onDone={() => fetchData()} />
             )}
@@ -350,12 +354,156 @@ function Monitor({ data, alertas, onSelect }) {
 function ViajesView({ data, onSelect }) {
   return (
     <div className="space-y-6">
-      <div className="grid gap-5 xl:grid-cols-2">
-        <TripList title="En curso" viajes={data.activos} onSelect={onSelect} />
-        <TripList title="Pendientes de liquidacion" viajes={data.pendientesLiquidacion} onSelect={onSelect} />
-      </div>
-      <TripList title="Archivo logistico" viajes={data.completados} onSelect={onSelect} />
+      <TripList title="En curso" viajes={data.activos} onSelect={onSelect} />
+      <PendientesLiquidacion onSelect={onSelect} />
+      <ArchivoLogistico onSelect={onSelect} />
     </div>
+  )
+}
+
+function PendientesLiquidacion({ onSelect }) {
+  const [page, setPage] = useState(1)
+  const [data, setData] = useState({ items: [], total: 0, pageSize: 10 })
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    const cargar = async () => {
+      setLoading(true)
+      try {
+        const response = await api.get('/viajes/pendientes-liquidacion/listado', {
+          params: { page, pageSize: data.pageSize },
+        })
+        if (active) setData(response.data?.data || { items: [], total: 0, pageSize: 10 })
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    cargar()
+    return () => {
+      active = false
+    }
+  }, [page, data.pageSize])
+
+  return (
+    <section className="space-y-3">
+      <SectionTitle title="Pendientes de liquidacion" subtitle={`${data.total} registros`} />
+      <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">
+        {data.items.map((viaje) => (
+          <button key={viaje.id} onClick={() => onSelect(viaje)} className="grid w-full gap-2 border-b border-neutral-100 px-4 py-3 text-left last:border-b-0 hover:bg-neutral-50 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_140px_120px_24px] sm:items-center">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">{viaje.codigo}</p>
+              <p className="truncate text-xs text-neutral-500">{formatRoute(viaje)}</p>
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{viaje.chofer?.nombre || 'Sin chofer'}</p>
+              <p className="truncate text-xs text-neutral-500">{vehicleLabel(viaje.camion)}</p>
+            </div>
+            <div>
+              <p className="text-sm font-semibold">{money(balance(viaje))}</p>
+              <p className="text-xs text-neutral-500">Balance</p>
+            </div>
+            <div>
+              <p className="text-sm font-medium">{formatDate(viaje.fechaCierre)}</p>
+              <p className="text-xs text-neutral-500">Cierre logistico</p>
+            </div>
+            <ChevronRight className="hidden text-neutral-400 sm:block" size={18} />
+          </button>
+        ))}
+        {!loading && data.items.length === 0 && <Empty text="Sin viajes pendientes de liquidacion." />}
+        {loading && <Empty text="Cargando pendientes..." />}
+      </div>
+      <Pagination page={page} total={data.total} pageSize={data.pageSize} onChange={setPage} />
+    </section>
+  )
+}
+
+function ArchivoLogistico({ onSelect }) {
+  const [periodo, setPeriodo] = useState('todos')
+  const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10))
+  const [page, setPage] = useState(1)
+  const [archivo, setArchivo] = useState({ items: [], total: 0, pageSize: 10 })
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    const cargar = async () => {
+      setLoading(true)
+      try {
+        const response = await api.get('/viajes/archivo/listado', {
+          params: { periodo, fecha, page, pageSize: archivo.pageSize },
+        })
+        if (active) setArchivo(response.data?.data || { items: [], total: 0, pageSize: 10 })
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    cargar()
+    return () => {
+      active = false
+    }
+  }, [periodo, fecha, page, archivo.pageSize])
+
+  const cambiarPeriodo = (value) => {
+    setPeriodo(value)
+    setPage(1)
+  }
+
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <SectionTitle title="Archivo logistico" subtitle={`${archivo.total} registros`} />
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex rounded-md border border-neutral-200 bg-white p-1">
+            {[
+              ['todos', 'Todos'],
+              ['dia', 'Dia'],
+              ['semana', 'Semana'],
+              ['mes', 'Mes'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => cambiarPeriodo(value)}
+                className={`h-8 px-3 text-xs font-medium ${periodo === value ? 'rounded bg-neutral-950 text-white' : 'text-neutral-600'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {periodo !== 'todos' && (
+            <input
+              type="date"
+              value={fecha}
+              onChange={(event) => {
+                setFecha(event.target.value)
+                setPage(1)
+              }}
+              className="input sm:w-40"
+            />
+          )}
+        </div>
+      </div>
+      <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">
+        {archivo.items.map((viaje) => (
+          <button key={viaje.id} onClick={() => onSelect(viaje)} className="flex w-full items-center gap-3 border-b border-neutral-100 px-4 py-3 text-left last:border-b-0 hover:bg-neutral-50">
+            <StatusDot estado={viaje.estadoLogistico} />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">{viaje.codigo}</p>
+              <p className="truncate text-xs text-neutral-500">{viaje.chofer?.nombre || 'Sin chofer'} · {formatRoute(viaje)}</p>
+            </div>
+            <div className="hidden text-right sm:block">
+              <p className="text-sm font-semibold">{formatDate(viaje.fechaCierre)}</p>
+              <p className="text-xs text-neutral-500">{viaje.estadoFinanciero}</p>
+            </div>
+            <ChevronRight className="text-neutral-400" size={18} />
+          </button>
+        ))}
+        {!loading && archivo.items.length === 0 && <Empty text="Sin registros para este periodo." />}
+        {loading && <Empty text="Cargando archivo..." />}
+      </div>
+      <Pagination page={page} total={archivo.total} pageSize={archivo.pageSize} onChange={setPage} />
+    </section>
   )
 }
 
@@ -437,8 +585,8 @@ function TripCard({ viaje, onSelect }) {
 function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
   const [form, setForm] = useState({ choferId: '', camionId: '', viaticosDepositados: '' })
   const [paradas, setParadas] = useState([
-    { id: crypto.randomUUID(), tipo: 'CARGA', lugar: '', ciudad: '' },
-    { id: crypto.randomUUID(), tipo: 'DESCARGA', lugar: '', ciudad: '' },
+    { id: crypto.randomUUID(), tipo: 'CARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
+    { id: crypto.randomUUID(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
   ])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -451,7 +599,7 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
   }
 
   const addParada = () => {
-    setParadas((prev) => [...prev, { id: crypto.randomUUID(), tipo: 'DESCARGA', lugar: '', ciudad: '' }])
+    setParadas((prev) => [...prev, { id: crypto.randomUUID(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' }])
   }
 
   const removeParada = (id) => {
@@ -468,12 +616,18 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
         camionId: form.camionId,
         choferId: form.choferId,
         viaticosDepositados: Number(form.viaticosDepositados) || 0,
-        paradas: paradas.map(({ tipo, lugar, ciudad }) => ({ tipo, lugar, ciudad })),
+        paradas: paradas.map(({ tipo, lugar, ciudad, fechaProgramada, programacion }) => ({
+          tipo,
+          lugar,
+          ciudad,
+          fechaProgramada: tipo === 'CARGA' && programacion === 'FECHA_HORA' ? fechaProgramada : null,
+          cargarAlDescargar: tipo === 'CARGA' && programacion === 'AL_DESCARGAR',
+        })),
       })
       setForm({ choferId: '', camionId: '', viaticosDepositados: '' })
       setParadas([
-        { id: crypto.randomUUID(), tipo: 'CARGA', lugar: '', ciudad: '' },
-        { id: crypto.randomUUID(), tipo: 'DESCARGA', lugar: '', ciudad: '' },
+        { id: crypto.randomUUID(), tipo: 'CARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
+        { id: crypto.randomUUID(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
       ])
       onDone()
     } catch (err) {
@@ -526,15 +680,29 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
 
         <div className="mt-4 space-y-3">
           {paradas.map((parada, index) => (
-            <div key={parada.id} className="grid gap-3 rounded-md border border-neutral-200 p-3 md:grid-cols-[64px_160px_1fr_1fr_40px]">
+            <div key={parada.id} className="grid gap-3 rounded-md border border-neutral-200 p-3 md:grid-cols-[52px_130px_1fr_1fr_220px_40px]">
               <div className="flex h-10 items-center text-sm font-semibold text-neutral-500">#{index + 1}</div>
-              <select value={parada.tipo} onChange={(event) => updateParada(parada.id, { tipo: event.target.value })} className="input">
+              <select value={parada.tipo} onChange={(event) => updateParada(parada.id, { tipo: event.target.value, fechaProgramada: event.target.value === 'CARGA' ? parada.fechaProgramada : '', programacion: 'SIN_PROGRAMAR' })} className="input">
                 <option value="CARGA">Carga</option>
                 <option value="DESCARGA">Descarga</option>
                 <option value="PERNOCTA">Pernocta</option>
               </select>
               <input required value={parada.lugar} onChange={(event) => updateParada(parada.id, { lugar: event.target.value })} className="input" placeholder="Lugar" />
               <input required value={parada.ciudad} onChange={(event) => updateParada(parada.id, { ciudad: event.target.value })} className="input" placeholder="Ciudad" />
+              {parada.tipo === 'CARGA' ? (
+                <div className="space-y-2">
+                  <select value={parada.programacion} onChange={(event) => updateParada(parada.id, { programacion: event.target.value, fechaProgramada: event.target.value === 'FECHA_HORA' ? parada.fechaProgramada : '' })} className="input">
+                    <option value="SIN_PROGRAMAR">Sin programar</option>
+                    <option value="FECHA_HORA">Fecha y hora</option>
+                    <option value="AL_DESCARGAR">Al descargar</option>
+                  </select>
+                  {parada.programacion === 'FECHA_HORA' && (
+                    <input required type="datetime-local" value={parada.fechaProgramada} onChange={(event) => updateParada(parada.id, { fechaProgramada: event.target.value })} className="input" />
+                  )}
+                </div>
+              ) : (
+                <div className="flex h-10 items-center text-xs text-neutral-400">Sin hora programada</div>
+              )}
               <button type="button" onClick={() => removeParada(parada.id)} className="grid h-10 w-10 place-items-center rounded-md text-neutral-400 hover:bg-red-50 hover:text-red-600">
                 <X size={16} />
               </button>
@@ -619,17 +787,6 @@ function ResourcePanel({ title, items, type, onDone }) {
     }
   }
 
-  const cambiarTaller = async (item) => {
-    if (item.estado === 'EN_TALLER') {
-      await api.patch(`/camiones/${item.id}/salir-taller`)
-    } else {
-      const motivo = window.prompt('Motivo de fuera de servicio')
-      if (!motivo) return
-      await api.patch(`/camiones/${item.id}/taller`, { motivo })
-    }
-    onDone()
-  }
-
   return (
     <section className="rounded-md border border-neutral-200 bg-white">
       <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
@@ -695,11 +852,6 @@ function ResourcePanel({ title, items, type, onDone }) {
               <span className={`rounded-md px-2 py-1 text-xs font-medium ${item.estadoCalculado === 'DISPONIBLE' ? 'bg-emerald-50 text-emerald-700' : item.estadoCalculado === 'EN_TALLER' ? 'bg-red-50 text-red-700' : 'bg-neutral-100 text-neutral-700'}`}>
                 {item.estadoCalculado}
               </span>
-              {type === 'camion' && (
-                <button onClick={() => cambiarTaller(item)} title={item.estado === 'EN_TALLER' ? 'Volver a servicio' : 'Fuera de servicio'} className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-amber-50 hover:text-amber-700">
-                  <Wrench size={14} />
-                </button>
-              )}
               <button onClick={() => editar(item)} title="Editar" className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100">
                 <Edit3 size={14} />
               </button>
@@ -714,6 +866,183 @@ function ResourcePanel({ title, items, type, onDone }) {
         <Pagination page={page} total={items.length} pageSize={pageSize} onChange={setPage} />
       </div>
     </section>
+  )
+}
+
+function TallerView({ camiones, onDone }) {
+  const emptyForm = {
+    camionId: '',
+    tipo: 'REPARACION',
+    falla: '',
+    descripcion: '',
+    kilometraje: '',
+    costo: '',
+    fechaIngreso: new Date().toISOString().slice(0, 10),
+  }
+  const [form, setForm] = useState(emptyForm)
+  const [open, setOpen] = useState(false)
+  const [estado, setEstado] = useState('TODOS')
+  const [camionId, setCamionId] = useState('')
+  const [page, setPage] = useState(1)
+  const [data, setData] = useState({ items: [], total: 0, activos: 0, pageSize: 10 })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [refreshKey, setRefreshKey] = useState(0)
+
+  useEffect(() => {
+    let active = true
+    const cargar = async () => {
+      setLoading(true)
+      try {
+        const response = await api.get('/taller', { params: { estado, camionId, page, pageSize: data.pageSize } })
+        if (active) setData(response.data?.data || { items: [], total: 0, activos: 0, pageSize: 10 })
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+    cargar()
+    return () => {
+      active = false
+    }
+  }, [estado, camionId, page, data.pageSize, refreshKey])
+
+  const submit = async (event) => {
+    event.preventDefault()
+    setError('')
+    try {
+      await api.post('/taller', form)
+      setForm(emptyForm)
+      setOpen(false)
+      setPage(1)
+      setRefreshKey((value) => value + 1)
+      onDone()
+    } catch (err) {
+      setError(err.response?.data?.mensaje || 'No se pudo registrar el ingreso al taller.')
+    }
+  }
+
+  const completar = async (item) => {
+    const costo = window.prompt('Costo final del trabajo', Number(item.costo || 0))
+    if (costo === null) return
+    const descripcion = window.prompt('Trabajo realizado u observaciones', item.descripcion || '')
+    await api.patch(`/taller/${item.id}/completar`, { costo, descripcion })
+    setRefreshKey((value) => value + 1)
+    onDone()
+  }
+
+  return (
+    <div className="space-y-6">
+      <section className="grid gap-4 sm:grid-cols-3">
+        <Metric title="Trabajos activos" value={data.activos} icon={Wrench} tone="amber" />
+        <Metric title="Unidades fuera de servicio" value={camiones.filter((camion) => camion.estado === 'EN_TALLER').length} icon={Truck} tone="neutral" />
+        <Metric title="Registros encontrados" value={data.total} icon={ClipboardList} tone="blue" />
+      </section>
+
+      <section className="rounded-md border border-neutral-200 bg-white">
+        <div className="flex flex-col gap-3 border-b border-neutral-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <SectionTitle title="Control de taller" subtitle="Reparaciones y mantenimientos de la flota" />
+          <button onClick={() => setOpen((value) => !value)} className="btn-primary">
+            <Plus size={16} />
+            Registrar ingreso
+          </button>
+        </div>
+
+        {open && (
+          <form onSubmit={submit} className="grid gap-3 border-b border-neutral-100 bg-neutral-50 p-4 md:grid-cols-3">
+            <Field label="Unidad">
+              <select required value={form.camionId} onChange={(event) => setForm({ ...form, camionId: event.target.value })} className="input">
+                <option value="">Seleccionar</option>
+                {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)}</option>)}
+              </select>
+            </Field>
+            <Field label="Tipo de trabajo">
+              <select value={form.tipo} onChange={(event) => setForm({ ...form, tipo: event.target.value })} className="input">
+                <option value="REPARACION">Reparacion</option>
+                <option value="CAMBIO_ACEITE">Cambio de aceite</option>
+                <option value="CAUCHOS">Cauchos</option>
+                <option value="FRENOS">Frenos</option>
+                <option value="BATERIA">Bateria</option>
+                <option value="REVISION">Revision</option>
+                <option value="OTRO">Otro</option>
+              </select>
+            </Field>
+            <Field label="Fecha de ingreso">
+              <input required type="date" value={form.fechaIngreso} onChange={(event) => setForm({ ...form, fechaIngreso: event.target.value })} className="input" />
+            </Field>
+            <Field label="Falla o trabajo">
+              <input required value={form.falla} onChange={(event) => setForm({ ...form, falla: event.target.value })} className="input" placeholder="Ej. fuga de aceite" />
+            </Field>
+            <Field label="Kilometraje">
+              <input type="number" min="0" value={form.kilometraje} onChange={(event) => setForm({ ...form, kilometraje: event.target.value })} className="input" placeholder="Opcional" />
+            </Field>
+            <Field label="Costo estimado">
+              <input type="number" min="0" step="0.01" value={form.costo} onChange={(event) => setForm({ ...form, costo: event.target.value })} className="input" placeholder="0.00" />
+            </Field>
+            <div className="md:col-span-3">
+              <Field label="Descripcion">
+                <input value={form.descripcion} onChange={(event) => setForm({ ...form, descripcion: event.target.value })} className="input" placeholder="Detalles, repuestos o diagnostico" />
+              </Field>
+            </div>
+            {error && <p className="text-sm text-red-600 md:col-span-3">{error}</p>}
+            <button className="btn-primary md:col-span-3">
+              <Check size={16} />
+              Guardar ingreso
+            </button>
+          </form>
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <SectionTitle title="Historial de unidades" subtitle={`${data.total} registros`} />
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <select value={estado} onChange={(event) => { setEstado(event.target.value); setPage(1) }} className="input sm:w-44">
+              <option value="TODOS">Todos los estados</option>
+              <option value="EN_PROCESO">En proceso</option>
+              <option value="COMPLETADO">Completados</option>
+            </select>
+            <select value={camionId} onChange={(event) => { setCamionId(event.target.value); setPage(1) }} className="input sm:w-56">
+              <option value="">Toda la flota</option>
+              {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">
+          {data.items.map((item) => (
+            <div key={item.id} className="grid gap-3 border-b border-neutral-100 px-4 py-4 last:border-b-0 md:grid-cols-[minmax(0,1fr)_150px_150px_130px_auto] md:items-center">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold">{vehicleLabel(item.camion)}</p>
+                <p className="truncate text-sm text-neutral-700">{labelMantenimiento(item.tipo)}: {item.falla}</p>
+                <p className="mt-1 truncate text-xs text-neutral-500">{item.descripcion || 'Sin detalles adicionales'}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium">{formatDate(item.fechaIngreso)}</p>
+                <p className="text-xs text-neutral-500">Ingreso</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium">{item.kilometraje ? `${item.kilometraje.toLocaleString()} km` : 'Sin registro'}</p>
+                <p className="text-xs text-neutral-500">Kilometraje</p>
+              </div>
+              <div>
+                <p className="text-sm font-semibold">{money(item.costo)}</p>
+                <p className="text-xs text-neutral-500">{item.estado === 'EN_PROCESO' ? 'Estimado' : 'Costo final'}</p>
+              </div>
+              {item.estado === 'EN_PROCESO' ? (
+                <button onClick={() => completar(item)} className="btn-secondary">
+                  <Check size={16} />
+                  Completar
+                </button>
+              ) : (
+                <span className="rounded-md bg-emerald-50 px-2 py-1 text-center text-xs font-medium text-emerald-700">COMPLETADO</span>
+              )}
+            </div>
+          ))}
+          {!loading && data.items.length === 0 && <Empty text="Sin registros de taller." />}
+          {loading && <Empty text="Cargando historial..." />}
+        </div>
+        <Pagination page={page} total={data.total} pageSize={data.pageSize} onChange={setPage} />
+      </section>
+    </div>
   )
 }
 
@@ -1002,6 +1331,12 @@ function ViajeDrawer({ viaje, onClose, onDone }) {
                       <div>
                         <p className="text-sm font-semibold">{parada.lugar}</p>
                         <p className="text-xs text-neutral-500">{parada.ciudad}</p>
+                        {parada.fechaProgramada && (
+                          <p className="mt-1 text-xs font-medium text-blue-700">Carga programada: {formatDate(parada.fechaProgramada)}</p>
+                        )}
+                        {parada.cargarAlDescargar && (
+                          <p className="mt-1 text-xs font-medium text-amber-700">Carga: al descargar el viaje anterior</p>
+                        )}
                       </div>
                       <div className="flex flex-wrap gap-1">
                         {['PENDIENTE', 'EN_CURSO', 'COMPLETADA'].map((estado) => (
@@ -1434,9 +1769,23 @@ function pageTitle(tab) {
     viajes: 'Viajes',
     despacho: 'Agendamiento',
     recursos: 'Recursos',
+    taller: 'Taller',
     liquidaciones: 'Liquidaciones',
   }
   return titles[tab] || 'Panel'
+}
+
+function labelMantenimiento(tipo) {
+  const labels = {
+    REPARACION: 'Reparacion',
+    CAMBIO_ACEITE: 'Cambio de aceite',
+    CAUCHOS: 'Cauchos',
+    FRENOS: 'Frenos',
+    BATERIA: 'Bateria',
+    REVISION: 'Revision',
+    OTRO: 'Otro',
+  }
+  return labels[tipo] || tipo
 }
 
 function Pagination({ page, total, pageSize, onChange }) {
@@ -1506,7 +1855,7 @@ function playAlertSound() {
     oscillator.start()
     oscillator.stop(context.currentTime + 0.35)
   } catch {
-    // El navegador puede bloquear audio hasta la primera interaccion.
+    return
   }
 }
 

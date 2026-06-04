@@ -1,5 +1,6 @@
 const service = require('./viajes.service')
 const { ok } = require('../../utils/respuesta')
+const { enviarMensaje } = require('../../services/messaging/whatsapp')
 
 const listar = async (req, res) => {
   const viajes = await service.listar(req.query)
@@ -13,7 +14,48 @@ const obtener = async (req, res) => {
 
 const crear = async (req, res) => {
   const viaje = await service.crear(req.body, req.usuario.id)
+  await notificarAgendamiento(viaje)
   return ok(res, viaje, 'Viaje creado', 201)
+}
+
+const listarArchivo = async (req, res) => {
+  const archivo = await service.listarArchivo(req.query)
+  return ok(res, archivo)
+}
+
+const notificarAgendamiento = async (viaje) => {
+  if (!viaje.chofer?.whatsappChatId) return
+  const paradas = viaje.paradas.map((parada, index) => {
+    const hora = parada.fechaProgramada
+      ? ` - ${new Date(parada.fechaProgramada).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Caracas' })}`
+      : parada.cargarAlDescargar
+        ? ' - AL DESCARGAR el viaje anterior'
+        : ''
+    return `${index + 1}. ${parada.tipo}: ${parada.lugar}, ${parada.ciudad}${hora}`
+  })
+
+  const mensaje = [
+    `Nuevo viaje agendado: ${viaje.codigo}`,
+    `Unidad: ${viaje.camion?.placa || 'Por confirmar'}`,
+    '',
+    ...paradas,
+    '',
+    'Opciones de reporte:',
+    '1 - Cargando',
+    '2 - En ruta',
+    '3 - Descargado',
+    '4 - Esperando instrucciones',
+    '5 - En pernocta',
+    '6 - Registrar gasto',
+    '',
+    'Tambien puedes escribir o enviar una nota de voz con tu reporte.'
+  ].join('\n')
+
+  try {
+    await enviarMensaje(viaje.chofer.whatsappChatId, mensaje)
+  } catch (error) {
+    console.error('No se pudo notificar el agendamiento por WhatsApp:', error.message)
+  }
 }
 
 const actualizar = async (req, res) => {
@@ -64,6 +106,11 @@ const listarLiquidaciones = async (req, res) => {
   return ok(res, liquidaciones)
 }
 
+const listarPendientesLiquidacion = async (req, res) => {
+  const pendientes = await service.listarPendientesLiquidacion(req.query)
+  return ok(res, pendientes)
+}
+
 const actualizarHonorarios = async (req, res) => {
   const viaje = await service.actualizarHonorarios(req.params.id, req.body.honorariosChofer)
   return ok(res, viaje, 'Honorarios actualizados')
@@ -71,6 +118,7 @@ const actualizarHonorarios = async (req, res) => {
 
 module.exports = {
   listar,
+  listarArchivo,
   obtener,
   crear,
   actualizar,
@@ -80,6 +128,7 @@ module.exports = {
   cerrar,
   obtenerLiquidacion,
   listarLiquidaciones,
+  listarPendientesLiquidacion,
   actualizarHonorarios,
   recargarViaticos,
   confirmarDocumentacion

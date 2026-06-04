@@ -16,8 +16,6 @@ const logger = pino({ level: 'silent' })
 
 const enviarMensaje = async (destino, texto) => {
   if (!sock) throw new Error('WhatsApp no conectado')
-  // Si ya es un JID completo (@lid, @s.whatsapp.net), usar tal cual
-  // Si es solo un número, formatearlo como @s.whatsapp.net
   const jid = destino.includes('@') ? destino : `${destino}@s.whatsapp.net`
   try {
     await sock.sendMessage(jid, { text: texto })
@@ -86,7 +84,6 @@ const iniciarWhatsApp = async (io) => {
 
       const remoteJid = msg.key.remoteJid
 
-      // Ignorar mensajes de grupos y broadcasts
       if (remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') continue
 
       console.log(`[WhatsApp] Mensaje recibido de JID: ${remoteJid}`)

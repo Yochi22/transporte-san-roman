@@ -7,7 +7,7 @@ La aplicacion se publica como dos contenedores:
 
 ## Preparacion
 
-1. Copiar `backend/.env.example` como `backend/.env`.
+1. Crear `backend/.env` con las variables de produccion.
 2. Completar las variables de base de datos, JWT, Gemini y administrador.
 3. Definir `FRONTEND_URL` con el dominio publico del panel.
 4. Instalar Docker Engine y Docker Compose en el servidor.
@@ -44,7 +44,7 @@ Railway despliega la aplicacion completa como un solo servicio usando el
 
 1. Conectar el repositorio de GitHub en Railway.
 2. Crear un servicio desde ese repositorio sin configurar Root Directory.
-3. Agregar las variables descritas en `backend/.env.example`.
+3. Agregar las variables requeridas por el backend.
 4. Generar un dominio publico desde `Settings > Networking`.
 5. Crear un volumen y montarlo en `/app/backend/.whatsapp-auth`.
 
