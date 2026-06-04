@@ -36,3 +36,24 @@ docker compose up -d --build
 ```
 
 El volumen `whatsapp_auth` conserva la sesion de WhatsApp entre despliegues.
+
+## Railway
+
+Railway despliega la aplicacion completa como un solo servicio usando el
+`Dockerfile` de la raiz.
+
+1. Conectar el repositorio de GitHub en Railway.
+2. Crear un servicio desde ese repositorio sin configurar Root Directory.
+3. Agregar las variables descritas en `backend/.env.example`.
+4. Generar un dominio publico desde `Settings > Networking`.
+5. Crear un volumen y montarlo en `/app/backend/.whatsapp-auth`.
+
+En Railway, definir:
+
+```env
+NODE_ENV=production
+WHATSAPP_AUTH_PATH=/app/backend/.whatsapp-auth
+FRONTEND_URL=https://DOMINIO_GENERADO.railway.app
+```
+
+No es necesario definir `PORT`: Railway lo proporciona automaticamente.

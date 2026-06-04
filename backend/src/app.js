@@ -5,6 +5,8 @@ const express = require('express')
 const cors = require('cors')
 const helmet = require('helmet')
 const morgan = require('morgan')
+const path = require('path')
+const fs = require('fs')
 
 const { manejarErrores } = require('./middlewares/error.middleware')
 
@@ -42,6 +44,17 @@ app.use('/api/camiones', camionesRoutes)
 app.use('/api/viajes', viajesRoutes)
 app.use('/api/reportes', reportesRoutes)
 app.use('/api/gastos', gastosRoutes)
+
+const frontendDist = path.resolve(__dirname, '../../frontend/dist')
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist))
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/socket.io')) {
+      return next()
+    }
+    return res.sendFile(path.join(frontendDist, 'index.html'))
+  })
+}
 
 app.use(manejarErrores)
 
