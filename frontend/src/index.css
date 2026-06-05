@@ -35,6 +35,72 @@ button:disabled {
   opacity: 0.6;
 }
 
+.sanroman-alert {
+  width: min(92vw, 430px);
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 24px 70px rgb(0 0 0 / 18%);
+}
+
+.sanroman-alert .swal2-title {
+  color: #171717;
+  font-size: 20px;
+  letter-spacing: 0;
+}
+
+.sanroman-alert .swal2-html-container {
+  color: #737373;
+  font-size: 14px;
+}
+
+.sanroman-alert-confirm,
+.sanroman-alert-cancel {
+  min-width: 112px;
+  height: 40px;
+  border-radius: 6px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sanroman-alert-confirm {
+  background: #171717;
+  color: white;
+}
+
+.sanroman-alert-cancel {
+  border: 1px solid #e5e5e5;
+  background: white;
+  color: #525252;
+}
+
+.sanroman-alert-input {
+  height: 42px;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  box-shadow: none;
+  font-size: 14px;
+}
+
+.sanroman-alert-label {
+  display: block;
+  margin: 12px 0 6px;
+  color: #525252;
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.sanroman-alert-field {
+  width: 100%;
+  margin: 0;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  box-shadow: none;
+  font-size: 14px;
+}
+
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;

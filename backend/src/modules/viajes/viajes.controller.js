@@ -90,8 +90,9 @@ const confirmarDocumentacion = async (req, res) => {
 }
 
 const cerrar = async (req, res) => {
-  const { soloLogistica, numeroGuia } = req.body
-  const viaje = await service.cerrar(req.params.id, !!soloLogistica, numeroGuia)
+  const { numeroGuia } = req.body
+  const soloLogistica = req.body.soloLogistica === true
+  const viaje = await service.cerrar(req.params.id, soloLogistica, numeroGuia)
   const mensaje = soloLogistica ? 'Viaje completado logísticamente' : 'Viaje cerrado y liquidado completamente'
   return ok(res, viaje, mensaje)
 }

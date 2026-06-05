@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import { io } from 'socket.io-client'
+import Swal from 'sweetalert2'
+import 'sweetalert2/dist/sweetalert2.min.css'
 import logo from './assets/logo.png'
 import {
   AlertTriangle,
@@ -36,6 +38,59 @@ const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin
 
 const api = axios.create({ baseURL: API_BASE })
 const socket = io(SOCKET_URL, { autoConnect: false })
+
+const alertOptions = {
+  customClass: {
+    popup: 'sanroman-alert',
+    confirmButton: 'sanroman-alert-confirm',
+    cancelButton: 'sanroman-alert-cancel',
+    input: 'sanroman-alert-input',
+  },
+  buttonsStyling: false,
+}
+
+const notifySuccess = (title, text = '') => Swal.fire({
+  ...alertOptions,
+  icon: 'success',
+  title,
+  text,
+  timer: 1800,
+  showConfirmButton: false,
+})
+
+const notifyError = (text) => Swal.fire({
+  ...alertOptions,
+  icon: 'error',
+  title: 'No se pudo completar',
+  text,
+})
+
+const confirmAction = (title, text, confirmButtonText = 'Confirmar') => Swal.fire({
+  ...alertOptions,
+  imageUrl: logo,
+  imageWidth: 112,
+  imageAlt: 'Transporte San Roman',
+  title,
+  text,
+  showCancelButton: true,
+  confirmButtonText,
+  cancelButtonText: 'Cancelar',
+  reverseButtons: true,
+})
+
+const requestNumber = (title, value = '', placeholder = '0.00') => Swal.fire({
+  ...alertOptions,
+  title,
+  input: 'number',
+  inputValue: value,
+  inputPlaceholder: placeholder,
+  inputAttributes: { min: '0', step: '0.01' },
+  showCancelButton: true,
+  confirmButtonText: 'Guardar',
+  cancelButtonText: 'Cancelar',
+  reverseButtons: true,
+  inputValidator: (inputValue) => (inputValue === '' || Number(inputValue) < 0 ? 'Ingresa un monto valido' : undefined),
+})
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
@@ -87,6 +142,11 @@ export default function App() {
     setIsAuthenticated(false)
     setSelectedViaje(null)
   }, [])
+
+  const confirmLogout = async () => {
+    const result = await confirmAction('Cerrar sesion', 'Tendras que ingresar nuevamente para acceder al panel.', 'Salir')
+    if (result.isConfirmed) logout()
+  }
 
   const fetchData = useCallback(async ({ refreshSelected = false } = {}) => {
     if (!localStorage.getItem('token')) return
@@ -205,7 +265,7 @@ export default function App() {
                 <RefreshCw size={16} />
                 Actualizar
               </button>
-              <button onClick={logout} className="flex h-10 w-full items-center justify-center gap-2 rounded-md text-sm font-medium text-red-600 hover:bg-red-50">
+              <button onClick={confirmLogout} className="flex h-10 w-full items-center justify-center gap-2 rounded-md text-sm font-medium text-red-600 hover:bg-red-50">
                 <LogOut size={16} />
                 Salir
               </button>
@@ -629,9 +689,12 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
         { id: crypto.randomUUID(), tipo: 'CARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
         { id: crypto.randomUUID(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
       ])
+      await notifySuccess(viajeExistente ? 'Tramo agregado' : 'Viaje agendado', 'El chofer recibira el detalle por WhatsApp.')
       onDone()
     } catch (err) {
-      setError(err.response?.data?.mensaje || 'No se pudo crear el viaje.')
+      const message = err.response?.data?.mensaje || 'No se pudo crear el viaje.'
+      setError(message)
+      await notifyError(message)
     } finally {
       setSaving(false)
     }
@@ -663,8 +726,8 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
               {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)} · {camion.estadoCalculado}</option>)}
             </select>
           </Field>
-          <Field label="Viaticos">
-            <input required type="number" min="0" step="0.01" value={form.viaticosDepositados} onChange={(event) => setForm({ ...form, viaticosDepositados: event.target.value })} className="input" placeholder="0.00" />
+          <Field label="Viaticos (opcional)">
+            <input type="number" min="0" step="0.01" value={form.viaticosDepositados} onChange={(event) => setForm({ ...form, viaticosDepositados: event.target.value })} className="input" placeholder="Sin viaticos" />
           </Field>
         </div>
       </section>
@@ -755,9 +818,12 @@ function ResourcePanel({ title, items, type, onDone }) {
       setForm(emptyForm())
       setEditingId(null)
       setOpen(false)
+      await notifySuccess(editingId ? 'Registro actualizado' : 'Registro creado')
       onDone()
     } catch (err) {
-      setError(err.response?.data?.mensaje || 'No se pudo guardar.')
+      const message = err.response?.data?.mensaje || 'No se pudo guardar.'
+      setError(message)
+      await notifyError(message)
     }
   }
 
@@ -778,12 +844,17 @@ function ResourcePanel({ title, items, type, onDone }) {
   }
 
   const eliminar = async (item) => {
-    if (!window.confirm(`Eliminar ${type === 'chofer' ? item.nombre : item.placa}?`)) return
+    const name = type === 'chofer' ? item.nombre : item.placa
+    const result = await confirmAction(`Eliminar ${name}`, 'El registro dejara de aparecer, pero se conservara su historial.', 'Eliminar')
+    if (!result.isConfirmed) return
     try {
       await api.delete(`/${type === 'chofer' ? 'choferes' : 'camiones'}/${item.id}`)
+      await notifySuccess('Registro eliminado')
       onDone()
     } catch (err) {
-      setError(err.response?.data?.mensaje || 'No se pudo eliminar.')
+      const message = err.response?.data?.mensaje || 'No se pudo eliminar.'
+      setError(message)
+      await notifyError(message)
     }
   }
 
@@ -915,19 +986,47 @@ function TallerView({ camiones, onDone }) {
       setOpen(false)
       setPage(1)
       setRefreshKey((value) => value + 1)
+      await notifySuccess('Ingreso registrado', 'La unidad ahora aparece fuera de servicio.')
       onDone()
     } catch (err) {
-      setError(err.response?.data?.mensaje || 'No se pudo registrar el ingreso al taller.')
+      const message = err.response?.data?.mensaje || 'No se pudo registrar el ingreso al taller.'
+      setError(message)
+      await notifyError(message)
     }
   }
 
   const completar = async (item) => {
-    const costo = window.prompt('Costo final del trabajo', Number(item.costo || 0))
-    if (costo === null) return
-    const descripcion = window.prompt('Trabajo realizado u observaciones', item.descripcion || '')
-    await api.patch(`/taller/${item.id}/completar`, { costo, descripcion })
-    setRefreshKey((value) => value + 1)
-    onDone()
+    const result = await Swal.fire({
+      ...alertOptions,
+      title: 'Completar trabajo de taller',
+      html: `
+        <label class="sanroman-alert-label">Costo final</label>
+        <input id="taller-costo" class="swal2-input sanroman-alert-field" type="number" min="0" step="0.01">
+        <label class="sanroman-alert-label">Trabajo realizado u observaciones</label>
+        <textarea id="taller-descripcion" class="swal2-textarea sanroman-alert-field"></textarea>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Completar',
+      cancelButtonText: 'Cancelar',
+      reverseButtons: true,
+      didOpen: () => {
+        document.getElementById('taller-costo').value = Number(item.costo || 0)
+        document.getElementById('taller-descripcion').value = item.descripcion || ''
+      },
+      preConfirm: () => ({
+        costo: document.getElementById('taller-costo').value,
+        descripcion: document.getElementById('taller-descripcion').value,
+      }),
+    })
+    if (!result.isConfirmed) return
+    try {
+      await api.patch(`/taller/${item.id}/completar`, result.value)
+      setRefreshKey((value) => value + 1)
+      await notifySuccess('Trabajo completado', 'La unidad fue actualizada correctamente.')
+      onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo completar el trabajo.')
+    }
   }
 
   return (
@@ -1062,10 +1161,15 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
   const totalDepositado = filtrados.reduce((total, viaje) => total + Number(viaje.viaticosDepositados || 0), 0)
 
   const editarHonorarios = async (viaje) => {
-    const monto = window.prompt(`Honorarios para ${viaje.chofer?.nombre}`, Number(viaje.honorariosChofer || 0))
-    if (monto === null) return
-    await api.patch(`/viajes/${viaje.id}/honorarios`, { honorariosChofer: Number(monto) })
-    onDone()
+    const result = await requestNumber(`Honorarios para ${viaje.chofer?.nombre}`, Number(viaje.honorariosChofer || 0))
+    if (!result.isConfirmed) return
+    try {
+      await api.patch(`/viajes/${viaje.id}/honorarios`, { honorariosChofer: Number(result.value) })
+      await notifySuccess('Honorarios actualizados')
+      onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudieron actualizar los honorarios.')
+    }
   }
 
   const descargarPdf = async () => {
@@ -1137,6 +1241,7 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
     doc.text(`Honorarios: ${money(totalHonorarios)}`, 190, y + 7)
     doc.text(`Total egresos: ${money(totalGastos + totalHonorarios)}`, 20, y + 14)
     doc.save(`liquidaciones-${periodo}-${new Date().toISOString().slice(0, 10)}.pdf`)
+    await notifySuccess('PDF generado', 'El resumen de liquidaciones fue descargado.')
   }
 
   return (
@@ -1224,12 +1329,15 @@ function ViajeDrawer({ viaje, onClose, onDone }) {
   const ultimaUbicacion = viaje.chofer?.ubicacionActual || viaje.reportes?.find((reporte) => reporte.ubicacion)?.ubicacion || 'Sin ubicacion'
 
   const recargar = async () => {
-    const monto = window.prompt('Monto de viaticos')
-    if (!monto) return
+    const result = await requestNumber('Recargar viaticos')
+    if (!result.isConfirmed) return
     setSaving('recarga')
     try {
-      await api.patch(`/viajes/${viaje.id}/recarga`, { monto: Number(monto) })
+      await api.patch(`/viajes/${viaje.id}/recarga`, { monto: Number(result.value) })
+      await notifySuccess('Viaticos recargados')
       onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudieron recargar los viaticos.')
     } finally {
       setSaving('')
     }
@@ -1238,10 +1346,17 @@ function ViajeDrawer({ viaje, onClose, onDone }) {
   const ejecutarCierre = async (soloLogistica, guia = viaje.numeroGuia) => {
     setSaving(soloLogistica ? 'cerrar' : 'liquidar')
     try {
-      await api.post(`/viajes/${viaje.id}/cerrar`, { soloLogistica, numeroGuia: guia?.trim() || null })
+      const response = await api.post(`/viajes/${viaje.id}/cerrar`, { soloLogistica, numeroGuia: guia?.trim() || null })
+      const actualizado = response.data?.data
+      if (!soloLogistica && actualizado?.estadoFinanciero !== 'LIQUIDADO') {
+        throw new Error('El viaje no cambio a estado liquidado.')
+      }
       setShowLiquidarModal(false)
+      await notifySuccess(soloLogistica ? 'Logistica completada' : 'Viaje liquidado')
       onDone()
       onClose()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || err.message || 'No se pudo cerrar el viaje.')
     } finally {
       setSaving('')
     }
@@ -1252,6 +1367,12 @@ function ViajeDrawer({ viaje, onClose, onDone }) {
       setShowLiquidarModal(true)
       return
     }
+    const result = await confirmAction(
+      'Completar solo la logistica',
+      'El viaje seguira apareciendo como pendiente de liquidacion hasta registrar su cierre financiero.',
+      'Completar logistica'
+    )
+    if (!result.isConfirmed) return
     await ejecutarCierre(true)
   }
 
@@ -1259,7 +1380,10 @@ function ViajeDrawer({ viaje, onClose, onDone }) {
     setSaving(paradaId)
     try {
       await api.patch(`/viajes/${viaje.id}/paradas/${paradaId}`, { estado })
+      await notifySuccess('Parada actualizada')
       onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo actualizar la parada.')
     } finally {
       setSaving('')
     }
@@ -1277,17 +1401,25 @@ function ViajeDrawer({ viaje, onClose, onDone }) {
       })
       setGastoForm({ tipo: 'PEAJE', monto: '', descripcion: '' })
       setShowGastoForm(false)
+      await notifySuccess('Gasto registrado')
       onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo registrar el gasto.')
     } finally {
       setSaving('')
     }
   }
 
   const eliminarGasto = async (gastoId) => {
+    const result = await confirmAction('Eliminar gasto', 'Esta accion retirara el gasto del balance del viaje.', 'Eliminar')
+    if (!result.isConfirmed) return
     setSaving(gastoId)
     try {
       await api.delete(`/gastos/${gastoId}`)
+      await notifySuccess('Gasto eliminado')
       onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo eliminar el gasto.')
     } finally {
       setSaving('')
     }
@@ -1428,7 +1560,7 @@ function ViajeDrawer({ viaje, onClose, onDone }) {
             {viaje.estadoLogistico !== 'COMPLETADO' && (
               <button onClick={() => cerrar(true)} disabled={Boolean(saving)} className="btn-secondary">
                 <FileCheck size={16} />
-                Completar logistica
+                Solo completar logistica
               </button>
             )}
             {viaje.estadoFinanciero !== 'LIQUIDADO' && (
@@ -1495,9 +1627,11 @@ function Login({ onLogin }) {
       const token = res.data?.data?.token
       if (!token) throw new Error('Token no recibido')
       localStorage.setItem('token', token)
+      await notifySuccess('Bienvenido', 'Sesion iniciada correctamente.')
       onLogin()
     } catch {
       setError('Credenciales invalidas.')
+      await notifyError('Correo o clave incorrectos.')
     } finally {
       setLoading(false)
     }
