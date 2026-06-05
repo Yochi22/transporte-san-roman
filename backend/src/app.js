@@ -18,6 +18,7 @@ const viajesRoutes = require('./modules/viajes/viajes.routes')
 const reportesRoutes = require('./modules/reportes/reportes.routes')
 const gastosRoutes = require('./modules/gastos/gastos.routes')
 const tallerRoutes = require('./modules/taller/taller.routes')
+const { obtenerEstadoWhatsApp } = require('./services/messaging/whatsapp')
 
 const app = express()
 
@@ -36,6 +37,51 @@ app.use(express.json())
 
 app.get('/health', (req, res) => {
   res.json({ ok: true, servicio: 'Transporte San Román API', version: '1.0.0' })
+})
+
+app.get('/api/whatsapp/status', (req, res) => {
+  const estado = obtenerEstadoWhatsApp()
+  res.json({
+    conectado: estado.conectado,
+    qrDisponible: Boolean(estado.qrDataUrl)
+  })
+})
+
+app.get('/whatsapp-qr', (req, res) => {
+  const estado = obtenerEstadoWhatsApp()
+  const contenido = estado.conectado
+    ? '<div class="status ok">WhatsApp conectado</div><p>La sesion esta activa. Ya puedes volver al panel.</p>'
+    : estado.qrDataUrl
+      ? `<img src="${estado.qrDataUrl}" alt="QR de WhatsApp" /><p>Abre WhatsApp, ve a Dispositivos vinculados y escanea este codigo.</p>`
+      : '<div class="status wait">Esperando QR</div><p>Si no aparece, espera unos segundos y recarga esta pagina.</p>'
+
+  res.type('html').send(`<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="refresh" content="12" />
+  <title>QR WhatsApp | Transporte San Roman</title>
+  <style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#fafaf9;color:#171717;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    main{width:min(92vw,520px);border:1px solid #e5e5e5;border-radius:10px;background:#fff;padding:28px;text-align:center;box-shadow:0 22px 70px rgb(0 0 0 / 10%)}
+    h1{margin:0 0 8px;font-size:22px}
+    p{margin:12px auto 0;max-width:390px;color:#737373;font-size:14px;line-height:1.5}
+    img{display:block;width:min(78vw,420px);height:auto;margin:20px auto;border:12px solid #fff;border-radius:8px;box-shadow:0 0 0 1px #e5e5e5}
+    .status{display:inline-flex;margin:20px 0 4px;border-radius:6px;padding:10px 14px;font-weight:700;font-size:14px}
+    .ok{background:#ecfdf5;color:#047857}
+    .wait{background:#fffbeb;color:#92400e}
+    small{display:block;margin-top:16px;color:#a3a3a3}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Vincular WhatsApp</h1>
+    ${contenido}
+    <small>Esta pagina se actualiza automaticamente.</small>
+  </main>
+</body>
+</html>`)
 })
 
 app.use('/api/auth', authRoutes)

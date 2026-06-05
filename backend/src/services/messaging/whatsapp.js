@@ -7,11 +7,15 @@ const {
 } = require('@whiskeysockets/baileys')
 const { Boom } = require('@hapi/boom')
 const qrcode = require('qrcode-terminal')
+const QRCode = require('qrcode')
 const pino = require('pino')
 const path = require('path')
 
 let sock = null
 let socketIO = null
+let ultimoQr = null
+let ultimoQrDataUrl = null
+let whatsappConectado = false
 const logger = pino({ level: 'silent' })
 
 const enviarMensaje = async (destino, texto) => {
@@ -43,14 +47,23 @@ const iniciarWhatsApp = async (io) => {
     const { connection, lastDisconnect, qr } = update
 
     if (qr) {
+      ultimoQr = qr
+      ultimoQrDataUrl = await QRCode.toDataURL(qr, {
+        margin: 2,
+        width: 420,
+        color: { dark: '#171717', light: '#ffffff' }
+      })
+      whatsappConectado = false
       console.log('\n========================================')
       console.log('Escanea este QR con WhatsApp:')
       console.log('========================================\n')
       qrcode.generate(qr, { small: true })
-      if (socketIO) socketIO.emit('whatsapp:qr', { qr })
+      console.log('QR web disponible en /whatsapp-qr')
+      if (socketIO) socketIO.emit('whatsapp:qr', { qr, dataUrl: ultimoQrDataUrl })
     }
 
     if (connection === 'close') {
+      whatsappConectado = false
       const shouldReconnect =
         lastDisconnect?.error instanceof Boom
           ? lastDisconnect.error.output?.statusCode !== DisconnectReason.loggedOut
@@ -65,6 +78,9 @@ const iniciarWhatsApp = async (io) => {
     }
 
     if (connection === 'open') {
+      whatsappConectado = true
+      ultimoQr = null
+      ultimoQrDataUrl = null
       console.log('WhatsApp conectado exitosamente')
       if (socketIO) socketIO.emit('whatsapp:conectado')
     }
@@ -143,5 +159,10 @@ const iniciarWhatsApp = async (io) => {
 }
 
 const obtenerSock = () => sock
+const obtenerEstadoWhatsApp = () => ({
+  conectado: whatsappConectado,
+  qr: ultimoQr,
+  qrDataUrl: ultimoQrDataUrl
+})
 
-module.exports = { iniciarWhatsApp, enviarMensaje, obtenerSock }
+module.exports = { iniciarWhatsApp, enviarMensaje, obtenerSock, obtenerEstadoWhatsApp }
