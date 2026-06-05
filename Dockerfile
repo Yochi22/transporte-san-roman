@@ -14,6 +14,7 @@ COPY frontend/package*.json ./frontend/
 RUN cd frontend && npm ci
 
 COPY frontend/index.html frontend/vite.config.js frontend/eslint.config.js frontend/postcss.config.js frontend/tailwind.config.js ./frontend/
+COPY frontend/public ./frontend/public
 COPY frontend/src ./frontend/src
 RUN cd frontend && npm run build
 
