@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim
+FROM node:20-bookworm-slim AS build
 
 WORKDIR /app
 
@@ -7,23 +7,36 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY backend/package*.json ./backend/
-RUN cd backend && npm ci
-
 COPY backend/prisma ./backend/prisma
-RUN cd backend && npx prisma generate
-
+RUN cd backend && npm ci && npx prisma generate
 COPY backend/src ./backend/src
 
 COPY frontend/package*.json ./frontend/
 RUN cd frontend && npm ci
-
 COPY frontend/index.html frontend/vite.config.js frontend/eslint.config.js frontend/postcss.config.js frontend/tailwind.config.js ./frontend/
 COPY frontend/public ./frontend/public
 COPY frontend/src ./frontend/src
 RUN cd frontend && npm run build
+RUN cd backend && npm prune --omit=dev
+
+FROM node:20-bookworm-slim
+
+WORKDIR /app/backend
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY --chown=node:node --from=build /app/backend/package*.json ./
+COPY --chown=node:node --from=build /app/backend/node_modules ./node_modules
+COPY --chown=node:node --from=build /app/backend/prisma ./prisma
+COPY --chown=node:node --from=build /app/backend/src ./src
+COPY --chown=node:node --from=build /app/frontend/dist /app/frontend/dist
+
+RUN mkdir -p /app/backend/.whatsapp-auth && chown -R node:node /app
 
 ENV NODE_ENV=production
 EXPOSE 3000
 
-WORKDIR /app/backend
+USER node
 CMD ["node", "src/server.js"]

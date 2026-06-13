@@ -17,7 +17,7 @@ const actualizar = async (req, res) => {
 }
 
 const desactivar = async (req, res) => {
-  await service.desactivar(req.params.id)
+  await service.desactivar(req.params.id, req.usuario.id)
   return ok(res, {}, 'Usuario desactivado')
 }
 

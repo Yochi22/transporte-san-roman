@@ -12,7 +12,6 @@
   "dependencies": {
     "@tailwindcss/postcss": "^4.3.0",
     "axios": "^1.16.1",
-    "date-fns": "^4.4.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.17.0",

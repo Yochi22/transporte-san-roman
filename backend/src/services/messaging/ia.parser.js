@@ -48,7 +48,7 @@ const transcribirAudio = async (audioBuffer, mimeType = 'audio/ogg') => {
 
     const result = await model.generateContent([prompt, audioPart])
     const texto = result.response.text().trim()
-    console.log(`[IA] Transcripcion exitosa: "${texto}"`)
+    console.log('[IA] Transcripcion completada')
     return texto
   } catch (err) {
     console.error(`[IA Error] Error en transcribirAudio (${mimeType}):`, err.message)

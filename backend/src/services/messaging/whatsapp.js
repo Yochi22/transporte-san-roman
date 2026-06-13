@@ -6,7 +6,6 @@ const {
   normalizeMessageContent
 } = require('@whiskeysockets/baileys')
 const { Boom } = require('@hapi/boom')
-const qrcode = require('qrcode-terminal')
 const QRCode = require('qrcode')
 const pino = require('pino')
 const path = require('path')
@@ -17,6 +16,7 @@ let ultimoQr = null
 let ultimoQrDataUrl = null
 let whatsappConectado = false
 const logger = pino({ level: 'silent' })
+const MAX_AUDIO_BYTES = 20 * 1024 * 1024
 
 const enviarMensaje = async (destino, texto) => {
   if (!sock) throw new Error('WhatsApp no conectado')
@@ -24,7 +24,8 @@ const enviarMensaje = async (destino, texto) => {
   try {
     await sock.sendMessage(jid, { text: texto })
   } catch (err) {
-    console.error('Error enviando mensaje a', jid, ':', err.message)
+    console.error('No se pudo enviar un mensaje de WhatsApp:', err.message)
+    throw err
   }
 }
 
@@ -54,12 +55,8 @@ const iniciarWhatsApp = async (io) => {
         color: { dark: '#171717', light: '#ffffff' }
       })
       whatsappConectado = false
-      console.log('\n========================================')
-      console.log('Escanea este QR con WhatsApp:')
-      console.log('========================================\n')
-      qrcode.generate(qr, { small: true })
       console.log('QR web disponible en /whatsapp-qr')
-      if (socketIO) socketIO.emit('whatsapp:qr', { qr, dataUrl: ultimoQrDataUrl })
+      if (socketIO) socketIO.emit('whatsapp:qr-disponible')
     }
 
     if (connection === 'close') {
@@ -102,7 +99,7 @@ const iniciarWhatsApp = async (io) => {
 
       if (remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') continue
 
-      console.log(`[WhatsApp] Mensaje recibido de JID: ${remoteJid}`)
+      console.log('[WhatsApp] Mensaje recibido')
 
       const contenido = normalizeMessageContent(msg.message)
       let texto =
@@ -116,7 +113,11 @@ const iniciarWhatsApp = async (io) => {
 
       if (audioMsg) {
         try {
-          console.log('[WhatsApp] Descargando nota de voz...')
+          const fileLength = Number(audioMsg.fileLength || 0)
+          if (fileLength > MAX_AUDIO_BYTES) {
+            await enviarMensaje(remoteJid, 'La nota de voz supera el limite permitido de 20 MB.')
+            continue
+          }
           const buffer = await downloadMediaMessage(
             msg,
             'buffer',
@@ -126,12 +127,9 @@ const iniciarWhatsApp = async (io) => {
               logger,
             }
           )
-          console.log('[WhatsApp] Transcribiendo nota de voz...')
-          
           const transcripcion = await transcribirAudio(buffer, audioMsg.mimetype || 'audio/ogg')
           
           if (transcripcion) {
-            console.log(`[WhatsApp] Transcripción: "${transcripcion}"`)
             texto = transcripcion
           } else {
             await enviarMensaje(remoteJid, '⚠️ No pude entender el audio. Por favor intenta de nuevo o escribe el reporte.')

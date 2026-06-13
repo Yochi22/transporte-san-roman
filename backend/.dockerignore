@@ -1,5 +1,7 @@
-node_modules
 .env
+.env.*
 .whatsapp-auth
+node_modules
 *.log
-scripts
+*.pem
+*.key

@@ -1,37 +1,50 @@
 const prisma = require('../../config/database')
+const { camionPanelSelect } = require('../../utils/prismaSelects')
 
 const listar = async () => {
   return prisma.camion.findMany({
     where: { activo: true },
-    orderBy: { placa: 'asc' }
+    select: camionPanelSelect,
+    orderBy: { placa: 'asc' },
+    take: 500
   })
 }
 
 const obtener = async (id) => {
-  return prisma.camion.findUniqueOrThrow({ where: { id } })
+  return prisma.camion.findUniqueOrThrow({ where: { id }, select: camionPanelSelect })
 }
 
 const crear = async (datos) => {
   const data = normalizarDatosCamion(datos)
   return prisma.camion.create({
-    data
+    data,
+    select: camionPanelSelect
   })
 }
 
 const actualizar = async (id, datos) => {
   return prisma.camion.update({
     where: { id },
-    data: normalizarDatosCamion(datos)
+    data: normalizarDatosCamion(datos),
+    select: camionPanelSelect
   })
 }
 
 const normalizarDatosCamion = (datos) => {
   const tipoVehiculo = datos.tipoVehiculo || 'NPR'
+  if (!['NPR', 'TORONTO', 'FURGON'].includes(tipoVehiculo)) {
+    throw { status: 400, message: 'Tipo de vehiculo invalido' }
+  }
   const placaFurgon = tipoVehiculo === 'FURGON' ? datos.placaFurgon?.trim().toUpperCase() : null
   const placaChuto = tipoVehiculo === 'FURGON' ? datos.placaChuto?.trim().toUpperCase() : null
   const placa = tipoVehiculo === 'FURGON' ? placaChuto : datos.placa?.trim().toUpperCase()
+  const marcaModelo = datos.marcaModelo?.trim() || tipoVehiculo
 
   if (!placa) throw { status: 400, message: 'La placa es requerida' }
+  if (placa.length > 20 || placaFurgon?.length > 20 || placaChuto?.length > 20) {
+    throw { status: 400, message: 'La placa es invalida' }
+  }
+  if (marcaModelo.length > 100) throw { status: 400, message: 'Marca o modelo invalido' }
   if (tipoVehiculo === 'FURGON' && (!placaFurgon || !placaChuto)) {
     throw { status: 400, message: 'El furgon requiere placa del furgon y placa del chuto' }
   }
@@ -41,45 +54,8 @@ const normalizarDatosCamion = (datos) => {
     placa,
     placaFurgon,
     placaChuto,
-    marcaModelo: datos.marcaModelo || tipoVehiculo,
+    marcaModelo,
   }
-}
-
-const entrarTaller = async (id, motivo) => {
-  const falla = motivo?.trim() || 'Fuera de servicio'
-  return prisma.$transaction(async (tx) => {
-    const activo = await tx.mantenimientoVehiculo.findFirst({
-      where: { camionId: id, estado: 'EN_PROCESO' }
-    })
-    if (!activo) {
-      await tx.mantenimientoVehiculo.create({
-        data: { camionId: id, tipo: 'REPARACION', falla }
-      })
-    }
-    return tx.camion.update({
-      where: { id },
-      data: { estado: 'EN_TALLER', motivoTaller: falla }
-    })
-  })
-}
-
-const salirTaller = async (id) => {
-  return prisma.$transaction(async (tx) => {
-    await tx.mantenimientoVehiculo.updateMany({
-      where: { camionId: id, estado: 'EN_PROCESO' },
-      data: { estado: 'COMPLETADO', fechaSalida: new Date() }
-    })
-    const viajesActivos = await tx.viaje.count({
-      where: { camionId: id, estadoLogistico: 'EN_CURSO' }
-    })
-    return tx.camion.update({
-      where: { id },
-      data: {
-        estado: viajesActivos > 0 ? 'EN_RUTA' : 'DISPONIBLE',
-        motivoTaller: null
-      }
-    })
-  })
 }
 
 const eliminar = async (id) => {
@@ -93,4 +69,4 @@ const eliminar = async (id) => {
   })
 }
 
-module.exports = { listar, obtener, crear, actualizar, entrarTaller, salirTaller, eliminar }
+module.exports = { listar, obtener, crear, actualizar, eliminar }

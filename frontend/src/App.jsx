@@ -36,8 +36,12 @@ import {
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin
 
-const api = axios.create({ baseURL: API_BASE })
-const socket = io(SOCKET_URL, { autoConnect: false })
+const api = axios.create({
+  baseURL: API_BASE,
+  withCredentials: true,
+  headers: { 'X-Requested-With': 'XMLHttpRequest' },
+})
+const socket = io(SOCKET_URL, { autoConnect: false, withCredentials: true })
 
 const alertOptions = {
   customClass: {
@@ -92,12 +96,6 @@ const requestNumber = (title, value = '', placeholder = '0.00') => Swal.fire({
   inputValidator: (inputValue) => (inputValue === '' || Number(inputValue) < 0 ? 'Ingresa un monto valido' : undefined),
 })
 
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
-  if (token) config.headers.Authorization = `Bearer ${token}`
-  return config
-})
-
 const tabs = [
   { id: 'monitor', label: 'Resumen', icon: LayoutDashboard },
   { id: 'viajes', label: 'Viajes', icon: Route },
@@ -124,7 +122,9 @@ const reporteStyles = {
 }
 
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(Boolean(localStorage.getItem('token')))
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [authChecking, setAuthChecking] = useState(true)
+  const [usuario, setUsuario] = useState(null)
   const [activeTab, setActiveTab] = useState('monitor')
   const [menuOpen, setMenuOpen] = useState(false)
   const [selectedViaje, setSelectedViaje] = useState(null)
@@ -138,18 +138,24 @@ export default function App() {
   const [camiones, setCamiones] = useState([])
 
   const logout = useCallback(() => {
-    localStorage.removeItem('token')
     setIsAuthenticated(false)
+    setUsuario(null)
     setSelectedViaje(null)
   }, [])
 
   const confirmLogout = async () => {
     const result = await confirmAction('Cerrar sesion', 'Tendras que ingresar nuevamente para acceder al panel.', 'Salir')
-    if (result.isConfirmed) logout()
+    if (result.isConfirmed) {
+      try {
+        await api.post('/auth/logout', {})
+      } finally {
+        logout()
+      }
+    }
   }
 
   const fetchData = useCallback(async ({ refreshSelected = false } = {}) => {
-    if (!localStorage.getItem('token')) return
+    if (!isAuthenticated) return
     setLoading(true)
     setError('')
 
@@ -180,7 +186,30 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }, [logout])
+  }, [isAuthenticated, logout])
+
+  useEffect(() => {
+    let mounted = true
+    localStorage.removeItem('token')
+
+    api.get('/auth/perfil')
+      .then((response) => {
+        if (mounted) {
+          setUsuario(response.data?.data || null)
+          setIsAuthenticated(true)
+        }
+      })
+      .catch(() => {
+        if (mounted) setIsAuthenticated(false)
+      })
+      .finally(() => {
+        if (mounted) setAuthChecking(false)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   useEffect(() => {
     if (!isAuthenticated) return
@@ -222,9 +251,22 @@ export default function App() {
   }, [fetchData, isAuthenticated])
 
   const data = useMemo(() => buildOperationalData({ viajes, choferes, camiones, query }), [viajes, choferes, camiones, query])
+  const isAdmin = usuario?.rol === 'ADMIN'
+  const visibleTabs = useMemo(
+    () => tabs.filter((tab) => tab.id !== 'liquidaciones' || isAdmin),
+    [isAdmin]
+  )
+
+  if (authChecking) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-stone-50">
+        <RefreshCw className="animate-spin text-neutral-500" size={24} />
+      </div>
+    )
+  }
 
   if (!isAuthenticated) {
-    return <Login onLogin={() => setIsAuthenticated(true)} />
+    return <Login onLogin={(nextUsuario) => { setUsuario(nextUsuario); setIsAuthenticated(true) }} />
   }
 
   return (
@@ -241,7 +283,7 @@ export default function App() {
             </div>
 
             <nav className="mt-8 space-y-1">
-              {tabs.map((tab) => {
+              {visibleTabs.map((tab) => {
                 const Icon = tab.icon
                 const active = activeTab === tab.id
                 return (
@@ -320,12 +362,12 @@ export default function App() {
               <DespachoView choferes={data.choferesOperativos} camiones={data.camionesOperativos.filter((camion) => camion.estado !== 'EN_TALLER')} viajesActivos={data.activos} onDone={() => fetchData()} />
             )}
             {activeTab === 'recursos' && (
-              <RecursosView data={data} onDone={() => fetchData()} />
+              <RecursosView data={data} isAdmin={isAdmin} onDone={() => fetchData()} />
             )}
             {activeTab === 'taller' && (
               <TallerView camiones={data.camionesOperativos} onDone={() => fetchData()} />
             )}
-            {activeTab === 'liquidaciones' && (
+            {isAdmin && activeTab === 'liquidaciones' && (
               <LiquidacionesView viajes={data.liquidados} choferes={choferes} onDone={() => fetchData()} />
             )}
           </div>
@@ -335,6 +377,7 @@ export default function App() {
       {selectedViaje && (
         <ViajeDrawer
           viaje={selectedViaje}
+          isAdmin={isAdmin}
           onClose={() => setSelectedViaje(null)}
           onDone={() => fetchData({ refreshSelected: true })}
         />
@@ -784,16 +827,16 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
   )
 }
 
-function RecursosView({ data, onDone }) {
+function RecursosView({ data, isAdmin, onDone }) {
   return (
     <div className="grid gap-5 xl:grid-cols-2">
-      <ResourcePanel title="Choferes" items={data.choferesOperativos} type="chofer" onDone={onDone} />
-      <ResourcePanel title="Camiones" items={data.camionesOperativos} type="camion" onDone={onDone} />
+      <ResourcePanel title="Choferes" items={data.choferesOperativos} type="chofer" isAdmin={isAdmin} onDone={onDone} />
+      <ResourcePanel title="Camiones" items={data.camionesOperativos} type="camion" isAdmin={isAdmin} onDone={onDone} />
     </div>
   )
 }
 
-function ResourcePanel({ title, items, type, onDone }) {
+function ResourcePanel({ title, items, type, isAdmin, onDone }) {
   const [open, setOpen] = useState(false)
   const emptyForm = () => type === 'chofer'
     ? { nombre: '', cedula: '', telefono: '' }
@@ -862,10 +905,12 @@ function ResourcePanel({ title, items, type, onDone }) {
     <section className="rounded-md border border-neutral-200 bg-white">
       <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
         <SectionTitle title={title} subtitle={`${items.length} registros`} />
-        <button onClick={() => { setEditingId(null); setForm(emptyForm()); setOpen((value) => !value) }} className="btn-secondary">
-          <Plus size={16} />
-          Nuevo
-        </button>
+        {isAdmin && (
+          <button onClick={() => { setEditingId(null); setForm(emptyForm()); setOpen((value) => !value) }} className="btn-secondary">
+            <Plus size={16} />
+            Nuevo
+          </button>
+        )}
       </div>
 
       {open && (
@@ -923,12 +968,16 @@ function ResourcePanel({ title, items, type, onDone }) {
               <span className={`rounded-md px-2 py-1 text-xs font-medium ${item.estadoCalculado === 'DISPONIBLE' ? 'bg-emerald-50 text-emerald-700' : item.estadoCalculado === 'EN_TALLER' ? 'bg-red-50 text-red-700' : 'bg-neutral-100 text-neutral-700'}`}>
                 {item.estadoCalculado}
               </span>
-              <button onClick={() => editar(item)} title="Editar" className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100">
-                <Edit3 size={14} />
-              </button>
-              <button onClick={() => eliminar(item)} title="Eliminar" className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-red-50 hover:text-red-700">
-                <Trash2 size={14} />
-              </button>
+              {isAdmin && (
+                <button onClick={() => editar(item)} title="Editar" className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100">
+                  <Edit3 size={14} />
+                </button>
+              )}
+              {isAdmin && (
+                <button onClick={() => eliminar(item)} title="Eliminar" className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-red-50 hover:text-red-700">
+                  <Trash2 size={14} />
+                </button>
+              )}
             </div>
           </div>
         ))}
@@ -1315,7 +1364,7 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
   )
 }
 
-function ViajeDrawer({ viaje, onClose, onDone }) {
+function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   const [saving, setSaving] = useState('')
   const [gastoForm, setGastoForm] = useState({ tipo: 'PEAJE', monto: '', descripcion: '' })
   const [showGastoForm, setShowGastoForm] = useState(false)
@@ -1489,21 +1538,23 @@ function ViajeDrawer({ viaje, onClose, onDone }) {
             </div>
           </section>
 
-          <section className="grid gap-3 sm:grid-cols-3">
-            <Fact icon={Wallet} label="Viaticos depositados" value={money(viaje.viaticosDepositados)} />
-            <Fact icon={Banknote} label="Gastos acumulados" value={money(totalGastado)} />
-            <Fact icon={Check} label="Disponible" value={money(balance(viaje))} />
-          </section>
+          {isAdmin && (
+            <section className="grid gap-3 sm:grid-cols-3">
+              <Fact icon={Wallet} label="Viaticos depositados" value={money(viaje.viaticosDepositados)} />
+              <Fact icon={Banknote} label="Gastos acumulados" value={money(totalGastado)} />
+              <Fact icon={Check} label="Disponible" value={money(balance(viaje))} />
+            </section>
+          )}
 
-          <section className="grid gap-5 xl:grid-cols-2">
-            <div className="space-y-3">
+          <section className={`grid gap-5 ${isAdmin ? 'xl:grid-cols-2' : ''}`}>
+            {isAdmin && <div className="space-y-3">
               <SectionTitle title="Reportes" subtitle={`${viaje.reportes?.length || 0} mensajes`} />
               <div className="rounded-md border border-neutral-200">
                 {paginate(viaje.reportes || [], reportPage, detailPageSize).map((reporte) => <ReportRow key={reporte.id} reporte={reporte} />)}
                 {(viaje.reportes?.length || 0) === 0 && <Empty text="Sin reportes." />}
               </div>
               <Pagination page={reportPage} total={viaje.reportes?.length || 0} pageSize={detailPageSize} onChange={setReportPage} />
-            </div>
+            </div>}
 
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-2">
@@ -1553,17 +1604,19 @@ function ViajeDrawer({ viaje, onClose, onDone }) {
           </section>
 
           <section className="flex flex-col gap-2 border-t border-neutral-200 pt-5 sm:flex-row sm:justify-end">
-            <button onClick={recargar} disabled={Boolean(saving)} className="btn-secondary">
-              <Wallet size={16} />
-              Recargar viaticos
-            </button>
+            {isAdmin && (
+              <button onClick={recargar} disabled={Boolean(saving)} className="btn-secondary">
+                <Wallet size={16} />
+                Recargar viaticos
+              </button>
+            )}
             {viaje.estadoLogistico !== 'COMPLETADO' && (
               <button onClick={() => cerrar(true)} disabled={Boolean(saving)} className="btn-secondary">
                 <FileCheck size={16} />
                 Solo completar logistica
               </button>
             )}
-            {viaje.estadoFinanciero !== 'LIQUIDADO' && (
+            {isAdmin && viaje.estadoFinanciero !== 'LIQUIDADO' && (
               <button onClick={() => cerrar(false)} disabled={Boolean(saving)} className="btn-primary">
                 <Check size={16} />
                 Liquidar
@@ -1573,7 +1626,7 @@ function ViajeDrawer({ viaje, onClose, onDone }) {
         </div>
       </aside>
 
-      {showLiquidarModal && (
+      {isAdmin && showLiquidarModal && (
         <div className="absolute inset-0 z-20 grid place-items-center bg-neutral-950/40 px-4">
           <div className="w-full max-w-md rounded-md border border-neutral-200 bg-white p-5 shadow-xl">
             <div className="flex items-start justify-between gap-3">
@@ -1624,11 +1677,10 @@ function Login({ onLogin }) {
     setError('')
     try {
       const res = await api.post('/auth/login', { email, password })
-      const token = res.data?.data?.token
-      if (!token) throw new Error('Token no recibido')
-      localStorage.setItem('token', token)
+      const usuario = res.data?.data?.usuario
+      if (!usuario) throw new Error('Usuario no recibido')
       await notifySuccess('Bienvenido', 'Sesion iniciada correctamente.')
-      onLogin()
+      onLogin(usuario)
     } catch {
       setError('Credenciales invalidas.')
       await notifyError('Correo o clave incorrectos.')

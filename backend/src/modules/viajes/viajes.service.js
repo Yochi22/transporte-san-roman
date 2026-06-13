@@ -1,5 +1,45 @@
 const prisma = require('../../config/database')
 const { generarCodigoViaje } = require('../../utils/generarCodigo')
+const { choferPanelSelect, camionPanelSelect, reportePanelSelect } = require('../../utils/prismaSelects')
+
+const viajePanelInclude = {
+  chofer: { select: choferPanelSelect },
+  camion: { select: camionPanelSelect },
+  paradas: { orderBy: { orden: 'asc' } },
+  reportes: { select: reportePanelSelect, orderBy: { createdAt: 'desc' }, take: 100 },
+  gastos: { orderBy: { createdAt: 'desc' }, take: 200 }
+}
+
+const validarMonto = (valor, campo) => {
+  const numero = Number(valor || 0)
+  if (!Number.isFinite(numero) || numero < 0 || numero > 1_000_000_000) {
+    throw { status: 400, message: `${campo} invalido` }
+  }
+  return numero
+}
+
+const validarParadas = (paradas) => {
+  if (!Array.isArray(paradas) || paradas.length < 2 || paradas.length > 50) {
+    throw { status: 400, message: 'El viaje debe tener entre 2 y 50 paradas' }
+  }
+
+  return paradas.map((parada) => {
+    const tipo = parada.tipo
+    const lugar = parada.lugar?.trim()
+    const ciudad = parada.ciudad?.trim()
+    if (!['CARGA', 'DESCARGA', 'PERNOCTA'].includes(tipo) || !lugar || !ciudad) {
+      throw { status: 400, message: 'Datos de parada invalidos' }
+    }
+    if (lugar.length > 160 || ciudad.length > 100) {
+      throw { status: 400, message: 'Lugar o ciudad demasiado largo' }
+    }
+    const fechaProgramada = parada.fechaProgramada ? new Date(parada.fechaProgramada) : null
+    if (fechaProgramada && Number.isNaN(fechaProgramada.getTime())) {
+      throw { status: 400, message: 'Fecha programada invalida' }
+    }
+    return { ...parada, tipo, lugar, ciudad, fechaProgramada }
+  })
+}
 
 const listar = async (filtros = {}) => {
   const where = {}
@@ -8,14 +48,9 @@ const listar = async (filtros = {}) => {
 
   return prisma.viaje.findMany({
     where,
-    include: {
-      chofer: true,
-      camion: true,
-      paradas: { orderBy: { orden: 'asc' } },
-      reportes: { orderBy: { createdAt: 'desc' } },
-      gastos: { orderBy: { createdAt: 'desc' } }
-    },
-    orderBy: { createdAt: 'desc' }
+    include: viajePanelInclude,
+    orderBy: { createdAt: 'desc' },
+    take: 500
   })
 }
 
@@ -32,13 +67,7 @@ const listarArchivo = async (filtros = {}) => {
   const [items, total] = await prisma.$transaction([
     prisma.viaje.findMany({
       where,
-      include: {
-        chofer: true,
-        camion: true,
-        paradas: { orderBy: { orden: 'asc' } },
-        reportes: { orderBy: { createdAt: 'desc' } },
-        gastos: { orderBy: { createdAt: 'desc' } }
-      },
+      include: viajePanelInclude,
       orderBy: { fechaCierre: 'desc' },
       skip: (page - 1) * pageSize,
       take: pageSize
@@ -82,21 +111,40 @@ const construirRangoArchivo = (periodo, fecha) => {
 const obtener = async (id) => {
   return prisma.viaje.findUniqueOrThrow({
     where: { id },
-    include: {
-      chofer: true,
-      camion: true,
-      paradas: { orderBy: { orden: 'asc' } },
-      reportes: { orderBy: { createdAt: 'desc' } },
-      gastos: { orderBy: { createdAt: 'desc' } }
-    }
+    include: viajePanelInclude
   })
 }
 
 const crear = async (datos, creadoPorId) => {
-  const { camionId, choferId, viaticosDepositados, paradas } = datos
-  const camion = await prisma.camion.findUniqueOrThrow({ where: { id: camionId } })
+  const { camionId, choferId } = datos
+  if (typeof camionId !== 'string' || typeof choferId !== 'string') {
+    throw { status: 400, message: 'Chofer y unidad son requeridos' }
+  }
+  const paradas = validarParadas(datos.paradas)
+  const viaticosDepositados = validarMonto(datos.viaticosDepositados, 'Monto de viaticos')
+  const [camion, chofer] = await Promise.all([
+    prisma.camion.findUniqueOrThrow({ where: { id: camionId } }),
+    prisma.chofer.findUniqueOrThrow({ where: { id: choferId } })
+  ])
+  if (!camion.activo || !chofer.activo) {
+    throw { status: 409, message: 'El chofer o la unidad no estan activos' }
+  }
   if (camion.estado === 'EN_TALLER') {
     throw { status: 409, message: 'La unidad esta fuera de servicio y no puede ser despachada' }
+  }
+
+  const asignacionConflictiva = await prisma.viaje.findFirst({
+    where: {
+      estadoLogistico: 'EN_CURSO',
+      OR: [
+        { camionId, choferId: { not: choferId } },
+        { choferId, camionId: { not: camionId } }
+      ]
+    },
+    select: { id: true }
+  })
+  if (asignacionConflictiva) {
+    throw { status: 409, message: 'El chofer o la unidad ya tienen otra asignacion activa' }
   }
 
   const viajeActivo = await prisma.viaje.findFirst({
@@ -117,7 +165,7 @@ const crear = async (datos, creadoPorId) => {
       camionId,
       choferId,
       creadoPorId,
-      viaticosDepositados: Number(viaticosDepositados) || 0,
+      viaticosDepositados,
       estadoLogistico: 'EN_CURSO',
       fechaInicio: primeraCarga ? new Date(primeraCarga.fechaProgramada) : null,
       paradas: {
@@ -127,7 +175,7 @@ const crear = async (datos, creadoPorId) => {
           tipo: p.tipo,
           lugar: p.lugar,
           ciudad: p.ciudad,
-          fechaProgramada: p.fechaProgramada ? new Date(p.fechaProgramada) : null,
+          fechaProgramada: p.fechaProgramada,
           cargarAlDescargar: p.tipo === 'CARGA' && !!p.cargarAlDescargar
         }))
       }
@@ -141,7 +189,8 @@ const crear = async (datos, creadoPorId) => {
 }
 
 const agregarTramo = async (id, datos) => {
-  const { paradas = [], viaticosDepositados = 0 } = datos
+  const paradas = validarParadas(datos.paradas)
+  const viaticosDepositados = validarMonto(datos.viaticosDepositados, 'Monto de viaticos')
   const viaje = await prisma.viaje.findUniqueOrThrow({
     where: { id },
     include: { paradas: true }
@@ -159,14 +208,14 @@ const agregarTramo = async (id, datos) => {
         tipo: parada.tipo,
         lugar: parada.lugar,
         ciudad: parada.ciudad,
-        fechaProgramada: parada.fechaProgramada ? new Date(parada.fechaProgramada) : null,
+        fechaProgramada: parada.fechaProgramada,
         cargarAlDescargar: parada.tipo === 'CARGA' && !!parada.cargarAlDescargar
       }))
     }),
     prisma.viaje.update({
       where: { id },
       data: {
-        viaticosDepositados: { increment: Number(viaticosDepositados) || 0 },
+        viaticosDepositados: { increment: viaticosDepositados },
         estadoLogistico: 'EN_CURSO',
         estadoFinanciero: 'PENDIENTE',
         fechaCierre: null
@@ -178,9 +227,16 @@ const agregarTramo = async (id, datos) => {
 }
 
 const actualizarParada = async (viajeId, paradaId, estado) => {
+  if (!['PENDIENTE', 'EN_CURSO', 'COMPLETADA'].includes(estado)) {
+    throw { status: 400, message: 'Estado de parada invalido' }
+  }
   const parada = await prisma.parada.findFirstOrThrow({
-    where: { id: paradaId, viajeId }
+    where: { id: paradaId, viajeId },
+    include: { viaje: { select: { estadoLogistico: true } } }
   })
+  if (parada.viaje.estadoLogistico === 'COMPLETADO') {
+    throw { status: 409, message: 'No se puede modificar una parada de un viaje cerrado' }
+  }
 
   return prisma.parada.update({
     where: { id: parada.id },
@@ -191,41 +247,20 @@ const actualizarParada = async (viajeId, paradaId, estado) => {
   })
 }
 
-const actualizar = async (id, datos) => {
-  return prisma.viaje.update({
-    where: { id },
-    data: datos
-  })
-}
-
-const eliminar = async (id) => {
-  const viaje = await prisma.viaje.findUnique({ where: { id } })
-  if (!viaje) return null
-
-  return prisma.$transaction(async (tx) => {
-    await tx.viaje.delete({ where: { id } })
-
-    const [otrosViajesChofer, otrosViajesCamion] = await Promise.all([
-      tx.viaje.count({ where: { choferId: viaje.choferId, estadoLogistico: 'EN_CURSO' } }),
-      tx.viaje.count({ where: { camionId: viaje.camionId, estadoLogistico: 'EN_CURSO' } })
-    ])
-
-    if (otrosViajesChofer === 0) {
-      await tx.chofer.update({ where: { id: viaje.choferId }, data: { estado: 'DISPONIBLE' } })
-    }
-    if (otrosViajesCamion === 0) {
-      await tx.camion.update({ where: { id: viaje.camionId }, data: { estado: 'DISPONIBLE' } })
-    }
-
-    return viaje
-  })
-}
-
 const recargarViaticos = async (id, monto) => {
+  const montoNumerico = validarMonto(monto, 'Monto de recarga')
+  if (montoNumerico === 0) throw { status: 400, message: 'La recarga debe ser mayor que cero' }
+  const viaje = await prisma.viaje.findUniqueOrThrow({
+    where: { id },
+    select: { estadoFinanciero: true }
+  })
+  if (viaje.estadoFinanciero === 'LIQUIDADO') {
+    throw { status: 409, message: 'No se pueden recargar viaticos a un viaje liquidado' }
+  }
   return prisma.viaje.update({
     where: { id },
-    data: { 
-      viaticosDepositados: { increment: Number(monto) }
+    data: {
+      viaticosDepositados: { increment: montoNumerico }
     }
   })
 }
@@ -234,52 +269,6 @@ const confirmarDocumentacion = async (id) => {
   return prisma.viaje.update({
     where: { id },
     data: { documentacionRecibida: true }
-  })
-}
-
-const obtenerLiquidacion = async (id) => {
-  const viaje = await prisma.viaje.findUniqueOrThrow({
-    where: { id },
-    include: {
-      chofer: true,
-      camion: true,
-      gastos: { orderBy: { createdAt: 'asc' } }
-    }
-  })
-
-  const totalGastado = viaje.gastos.reduce((total, gasto) => total + Number(gasto.monto), 0)
-  const depositado = Number(viaje.viaticosDepositados)
-
-  return {
-    viaje,
-    depositado,
-    totalGastado,
-    balance: depositado - totalGastado
-  }
-}
-
-const listarLiquidaciones = async (filtros = {}) => {
-  const where = { estadoFinanciero: 'LIQUIDADO' }
-  if (filtros.choferId) where.choferId = filtros.choferId
-  if (filtros.desde || filtros.hasta) {
-    where.fechaLiquidacion = {}
-    if (filtros.desde) where.fechaLiquidacion.gte = new Date(filtros.desde)
-    if (filtros.hasta) {
-      const hasta = new Date(filtros.hasta)
-      hasta.setHours(23, 59, 59, 999)
-      where.fechaLiquidacion.lte = hasta
-    }
-  }
-
-  return prisma.viaje.findMany({
-    where,
-    include: {
-      chofer: true,
-      camion: true,
-      paradas: { orderBy: { orden: 'asc' } },
-      gastos: true
-    },
-    orderBy: { fechaLiquidacion: 'desc' }
   })
 }
 
@@ -294,13 +283,7 @@ const listarPendientesLiquidacion = async (filtros = {}) => {
   const [items, total] = await prisma.$transaction([
     prisma.viaje.findMany({
       where,
-      include: {
-        chofer: true,
-        camion: true,
-        paradas: { orderBy: { orden: 'asc' } },
-        reportes: { orderBy: { createdAt: 'desc' } },
-        gastos: { orderBy: { createdAt: 'desc' } }
-      },
+      include: viajePanelInclude,
       orderBy: [{ fechaCierre: 'desc' }, { createdAt: 'desc' }],
       skip: (page - 1) * pageSize,
       take: pageSize
@@ -312,17 +295,27 @@ const listarPendientesLiquidacion = async (filtros = {}) => {
 }
 
 const actualizarHonorarios = async (id, honorariosChofer) => {
+  const monto = validarMonto(honorariosChofer, 'Monto de honorarios')
   return prisma.viaje.update({
     where: { id },
-    data: { honorariosChofer: Number(honorariosChofer) || 0 }
+    data: { honorariosChofer: monto }
   })
 }
 
 const cerrar = async (id, soloLogistica = false, numeroGuia = null) => {
+  if (numeroGuia !== null && (typeof numeroGuia !== 'string' || numeroGuia.trim().length > 100)) {
+    throw { status: 400, message: 'Numero de guia invalido' }
+  }
   const viaje = await prisma.viaje.findUniqueOrThrow({
     where: { id },
-    include: { chofer: true, camion: true, gastos: true }
+    include: { gastos: true }
   })
+  if (viaje.estadoFinanciero === 'LIQUIDADO') {
+    throw { status: 409, message: 'El viaje ya fue liquidado' }
+  }
+  if (soloLogistica && viaje.estadoLogistico === 'COMPLETADO') {
+    throw { status: 409, message: 'La logistica del viaje ya fue completada' }
+  }
 
   const totalGastado = viaje.gastos.reduce((acc, g) => acc + Number(g.monto), 0)
   const guia = numeroGuia?.trim() || viaje.numeroGuia
@@ -375,13 +368,9 @@ module.exports = {
   listarArchivo,
   obtener,
   crear,
-  actualizar,
-  eliminar,
   cerrar,
   recargarViaticos,
   confirmarDocumentacion,
-  obtenerLiquidacion,
-  listarLiquidaciones,
   listarPendientesLiquidacion,
   actualizarHonorarios,
   agregarTramo,

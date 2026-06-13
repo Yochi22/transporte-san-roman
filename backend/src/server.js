@@ -1,16 +1,24 @@
 require('dotenv').config()
+const { validarEntorno } = require('./config/env')
+validarEntorno()
 const http = require('http')
 const { Server } = require('socket.io')
 const app = require('./app')
 const { crearUsuarioInicial } = require('./modules/auth/auth.service')
 const { iniciarWhatsApp } = require('./services/messaging/whatsapp')
 const { depurarReportesCerrados } = require('./modules/reportes/reportes.service')
+const { verificarToken } = require('./config/jwt')
+const prisma = require('./config/database')
+const { SESSION_COOKIE_NAME } = require('./config/session')
 
 const PORT = process.env.PORT || 3000
-const allowedOrigins = (process.env.FRONTEND_URL || '')
+const configuredOrigins = (process.env.FRONTEND_URL || '')
   .split(',')
-  .map((origin) => origin.trim())
+  .map((origin) => origin.trim().replace(/\/$/, ''))
   .filter(Boolean)
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? configuredOrigins
+  : [...new Set([...configuredOrigins, 'http://localhost:5173', 'http://127.0.0.1:5173'])]
 
 const server = http.createServer(app)
 const DIAS_RETENCION_REPORTES = Math.max(1, Number(process.env.DIAS_RETENCION_REPORTES) || 7)
@@ -27,15 +35,50 @@ const ejecutarDepuracionReportes = async () => {
 
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins.length ? allowedOrigins : true,
+    origin: allowedOrigins,
     credentials: true,
   },
+  perMessageDeflate: false,
+  maxHttpBufferSize: 100_000
+})
+
+io.use(async (socket, next) => {
+  try {
+    const cookies = Object.fromEntries(
+      (socket.handshake.headers.cookie || '')
+        .split(';')
+        .map((item) => item.trim().split('='))
+        .filter(([key, value]) => key && value)
+    )
+    const token = cookies[SESSION_COOKIE_NAME]
+    const origin = socket.handshake.headers.origin
+    const originPermitido = origin
+      ? allowedOrigins.includes(origin)
+      : process.env.NODE_ENV !== 'production'
+
+    if (!token || !originPermitido) {
+      return next(new Error('No autorizado'))
+    }
+
+    const payload = verificarToken(decodeURIComponent(token))
+    const usuario = await prisma.usuario.findUnique({
+      where: { id: payload.id },
+      select: { id: true, rol: true, activo: true, sessionVersion: true }
+    })
+    if (!usuario?.activo || usuario.sessionVersion !== payload.sessionVersion) {
+      return next(new Error('No autorizado'))
+    }
+    socket.usuario = { id: usuario.id, rol: usuario.rol }
+    return next()
+  } catch {
+    return next(new Error('No autorizado'))
+  }
 })
 
 io.on('connection', (socket) => {
-  console.log('Panel conectado via WebSocket:', socket.id)
+  console.log('Panel conectado via WebSocket')
   socket.on('disconnect', () => {
-    console.log('Panel desconectado:', socket.id)
+    console.log('Panel desconectado')
   })
 })
 
@@ -48,6 +91,10 @@ server.listen(PORT, async () => {
     setInterval(ejecutarDepuracionReportes, INTERVALO_DEPURACION).unref()
     await iniciarWhatsApp(io)
   } catch (error) {
-    console.error('Error durante el arranque:', error)
+    console.error('Error durante el arranque:', {
+      name: error.name,
+      code: error.code,
+      message: process.env.NODE_ENV === 'production' ? undefined : error.message
+    })
   }
 })

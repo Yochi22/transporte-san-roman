@@ -5,41 +5,63 @@ const express = require('express')
 const cors = require('cors')
 const helmet = require('helmet')
 const morgan = require('morgan')
+const cookieParser = require('cookie-parser')
 const path = require('path')
 const fs = require('fs')
 
 const { manejarErrores } = require('./middlewares/error.middleware')
+const { apiLimiter, requerirJson, protegerCsrf } = require('./middlewares/security.middleware')
+const { autenticar, soloAdmin } = require('./middlewares/auth.middleware')
 
 const authRoutes = require('./modules/auth/auth.routes')
 const usuariosRoutes = require('./modules/usuarios/usuarios.routes')
 const choferesRoutes = require('./modules/choferes/choferes.routes')
 const camionesRoutes = require('./modules/camiones/camiones.routes')
 const viajesRoutes = require('./modules/viajes/viajes.routes')
-const reportesRoutes = require('./modules/reportes/reportes.routes')
 const gastosRoutes = require('./modules/gastos/gastos.routes')
 const tallerRoutes = require('./modules/taller/taller.routes')
 const { obtenerEstadoWhatsApp } = require('./services/messaging/whatsapp')
 
 const app = express()
+const demoPublicQr = process.env.DEMO_PUBLIC_WHATSAPP_QR === 'true'
 
-const allowedOrigins = (process.env.FRONTEND_URL || '')
+const configuredOrigins = (process.env.FRONTEND_URL || '')
   .split(',')
-  .map((origin) => origin.trim())
+  .map((origin) => origin.trim().replace(/\/$/, ''))
   .filter(Boolean)
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? configuredOrigins
+  : [...new Set([...configuredOrigins, 'http://localhost:5173', 'http://127.0.0.1:5173'])]
 
-app.use(helmet())
+app.disable('x-powered-by')
+if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1)
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'same-origin' },
+  referrerPolicy: { policy: 'no-referrer' }
+}))
 app.use(cors({
-  origin: allowedOrigins.length ? allowedOrigins : true,
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true)
+    const rechazo = new Error('Origen no permitido')
+    rechazo.status = 403
+    return callback(rechazo)
+  },
   credentials: true,
 }))
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
-app.use(express.json())
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'tiny' : 'dev'))
+app.use(express.json({ limit: '100kb', strict: true }))
+app.use(cookieParser())
+app.use('/api', apiLimiter, requerirJson, protegerCsrf)
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store')
+  next()
+})
 
 app.get('/health', (req, res) => {
   res.json({ ok: true, servicio: 'Transporte San Román API', version: '1.0.0' })
 })
 
-app.get('/api/whatsapp/status', (req, res) => {
+app.get('/api/whatsapp/status', autenticar, soloAdmin, (req, res) => {
   const estado = obtenerEstadoWhatsApp()
   res.json({
     conectado: estado.conectado,
@@ -47,7 +69,8 @@ app.get('/api/whatsapp/status', (req, res) => {
   })
 })
 
-app.get('/whatsapp-qr', (req, res) => {
+app.get('/whatsapp-qr', ...(demoPublicQr ? [] : [autenticar, soloAdmin]), (req, res) => {
+  res.set('Cache-Control', 'no-store')
   const estado = obtenerEstadoWhatsApp()
   const contenido = estado.conectado
     ? '<div class="status ok">WhatsApp conectado</div><p>La sesion esta activa. Ya puedes volver al panel.</p>'
@@ -89,7 +112,6 @@ app.use('/api/usuarios', usuariosRoutes)
 app.use('/api/choferes', choferesRoutes)
 app.use('/api/camiones', camionesRoutes)
 app.use('/api/viajes', viajesRoutes)
-app.use('/api/reportes', reportesRoutes)
 app.use('/api/gastos', gastosRoutes)
 app.use('/api/taller', tallerRoutes)
 

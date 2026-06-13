@@ -1,30 +1,52 @@
 const service = require('./viajes.service')
-const { ok } = require('../../utils/respuesta')
+const prisma = require('../../config/database')
+const { ok, error } = require('../../utils/respuesta')
 const { enviarMensaje } = require('../../services/messaging/whatsapp')
+
+const filtrarFinanzas = (valor, rol) => {
+  if (rol === 'ADMIN' || !valor) return valor
+  if (Array.isArray(valor)) return valor.map((item) => filtrarFinanzas(item, rol))
+  if (valor.items) return { ...valor, items: filtrarFinanzas(valor.items, rol) }
+
+  const {
+    viaticosDepositados,
+    viaticosGastados,
+    honorariosChofer,
+    fechaLiquidacion,
+    numeroGuia,
+    gastos,
+    ...viaje
+  } = valor
+  return viaje
+}
 
 const listar = async (req, res) => {
   const viajes = await service.listar(req.query)
-  return ok(res, viajes)
+  return ok(res, filtrarFinanzas(viajes, req.usuario.rol))
 }
 
 const obtener = async (req, res) => {
   const viaje = await service.obtener(req.params.id)
-  return ok(res, viaje)
+  return ok(res, filtrarFinanzas(viaje, req.usuario.rol))
 }
 
 const crear = async (req, res) => {
   const viaje = await service.crear(req.body, req.usuario.id)
   await notificarAgendamiento(viaje)
-  return ok(res, viaje, 'Viaje creado', 201)
+  return ok(res, filtrarFinanzas(viaje, req.usuario.rol), 'Viaje creado', 201)
 }
 
 const listarArchivo = async (req, res) => {
   const archivo = await service.listarArchivo(req.query)
-  return ok(res, archivo)
+  return ok(res, filtrarFinanzas(archivo, req.usuario.rol))
 }
 
 const notificarAgendamiento = async (viaje) => {
-  if (!viaje.chofer?.whatsappChatId) return
+  const chofer = await prisma.chofer.findUnique({
+    where: { id: viaje.choferId },
+    select: { whatsappChatId: true }
+  })
+  if (!chofer?.whatsappChatId) return
   const paradas = viaje.paradas.map((parada, index) => {
     const hora = parada.fechaProgramada
       ? ` - ${new Date(parada.fechaProgramada).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Caracas' })}`
@@ -52,30 +74,15 @@ const notificarAgendamiento = async (viaje) => {
   ].join('\n')
 
   try {
-    await enviarMensaje(viaje.chofer.whatsappChatId, mensaje)
+    await enviarMensaje(chofer.whatsappChatId, mensaje)
   } catch (error) {
     console.error('No se pudo notificar el agendamiento por WhatsApp:', error.message)
   }
 }
 
-const actualizar = async (req, res) => {
-  const viaje = await service.actualizar(req.params.id, req.body)
-  return ok(res, viaje, 'Viaje actualizado')
-}
-
-const agregarTramo = async (req, res) => {
-  const viaje = await service.agregarTramo(req.params.id, req.body)
-  return ok(res, viaje, 'Tramo agregado al viaje')
-}
-
 const actualizarParada = async (req, res) => {
   const parada = await service.actualizarParada(req.params.id, req.params.paradaId, req.body.estado)
   return ok(res, parada, 'Estado de parada actualizado')
-}
-
-const eliminar = async (req, res) => {
-  await service.eliminar(req.params.id)
-  return ok(res, null, 'Viaje eliminado satisfactoriamente')
 }
 
 const recargarViaticos = async (req, res) => {
@@ -92,19 +99,12 @@ const confirmarDocumentacion = async (req, res) => {
 const cerrar = async (req, res) => {
   const { numeroGuia } = req.body
   const soloLogistica = req.body.soloLogistica === true
+  if (!soloLogistica && req.usuario.rol !== 'ADMIN') {
+    return error(res, 'Solo un administrador puede liquidar viajes', 403)
+  }
   const viaje = await service.cerrar(req.params.id, soloLogistica, numeroGuia)
   const mensaje = soloLogistica ? 'Viaje completado logísticamente' : 'Viaje cerrado y liquidado completamente'
-  return ok(res, viaje, mensaje)
-}
-
-const obtenerLiquidacion = async (req, res) => {
-  const liquidacion = await service.obtenerLiquidacion(req.params.id)
-  return ok(res, liquidacion)
-}
-
-const listarLiquidaciones = async (req, res) => {
-  const liquidaciones = await service.listarLiquidaciones(req.query)
-  return ok(res, liquidaciones)
+  return ok(res, filtrarFinanzas(viaje, req.usuario.rol), mensaje)
 }
 
 const listarPendientesLiquidacion = async (req, res) => {
@@ -122,13 +122,8 @@ module.exports = {
   listarArchivo,
   obtener,
   crear,
-  actualizar,
-  agregarTramo,
   actualizarParada,
-  eliminar,
   cerrar,
-  obtenerLiquidacion,
-  listarLiquidaciones,
   listarPendientesLiquidacion,
   actualizarHonorarios,
   recargarViaticos,

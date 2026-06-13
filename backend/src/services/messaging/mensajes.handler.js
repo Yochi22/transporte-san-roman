@@ -21,11 +21,25 @@ const TEXTO_COMANDO = {
   PERNOCTA: 'estoy en pernocta',
 }
 
-const vinculacionesPendientes = new Map()
 const reportesPendientes = new Map()
+const ventanasMensajes = new Map()
 
-const TIMEOUT_VINCULACION_MS = 5 * 60 * 1000
 const TIMEOUT_REPORTE_MS = 10 * 60 * 1000
+const VENTANA_MENSAJES_MS = 60 * 1000
+const MAX_MENSAJES_POR_VENTANA = 20
+const MAX_TEXTO_LENGTH = 2000
+
+const permitirMensaje = (remoteJid) => {
+  const ahora = Date.now()
+  const ventana = ventanasMensajes.get(remoteJid)
+  if (!ventana || ahora - ventana.inicio >= VENTANA_MENSAJES_MS) {
+    ventanasMensajes.set(remoteJid, { inicio: ahora, cantidad: 1 })
+    return true
+  }
+  if (ventana.cantidad >= MAX_MENSAJES_POR_VENTANA) return false
+  ventana.cantidad += 1
+  return true
+}
 
 const buscarChofer = async (remoteJid) => {
   let chofer = await prisma.chofer.findFirst({
@@ -48,7 +62,7 @@ const buscarChofer = async (remoteJid) => {
         where: { id: chofer.id },
         data: { whatsappChatId: remoteJid },
       })
-      console.log(`[Vinculacion] Auto-vinculado chofer "${chofer.nombre}" con JID ${remoteJid}`)
+      console.log('[Vinculacion] Chofer auto-vinculado')
     }
   }
 
@@ -68,41 +82,26 @@ const includeChoferConViajes = () => ({
 
 const procesarMensajeChofer = async ({ remoteJid, texto, socketIO, enviarMensaje }) => {
   try {
-    const textoLower = texto.toLowerCase().trim()
-
-    console.log(`[WhatsApp] JID: ${remoteJid} | Texto: "${texto}"`)
-
-    const vinculacion = vinculacionesPendientes.get(remoteJid)
-    if (vinculacion) {
-      if (Date.now() - vinculacion.timestamp > TIMEOUT_VINCULACION_MS) {
-        vinculacionesPendientes.delete(remoteJid)
-        await enviarMensaje(remoteJid, 'El tiempo para vincularte expiro. Escribe cualquier mensaje para intentar de nuevo.')
-        return
-      }
-
-      if (vinculacion.paso === 'ESPERANDO_TELEFONO') {
-        await procesarVinculacion(remoteJid, texto, enviarMensaje)
-        return
-      }
+    if (!permitirMensaje(remoteJid)) {
+      await enviarMensaje(remoteJid, 'Has enviado demasiados mensajes. Espera un minuto e intenta nuevamente.')
+      return
     }
+    if (typeof texto !== 'string' || texto.length > MAX_TEXTO_LENGTH) {
+      await enviarMensaje(remoteJid, 'El mensaje es demasiado largo. Envia un reporte mas breve.')
+      return
+    }
+
+    texto = texto.trim()
+    const textoLower = texto.toLowerCase().trim()
 
     const chofer = await buscarChofer(remoteJid)
 
     if (!chofer) {
-      vinculacionesPendientes.set(remoteJid, {
-        paso: 'ESPERANDO_TELEFONO',
-        timestamp: Date.now(),
-      })
-
       await enviarMensaje(
         remoteJid,
         [
-          'Hola. Soy el bot de Transporte San Roman.',
-          '',
-          'Para vincular tu WhatsApp, escribe tu numero de telefono tal cual:',
-          '04245244489',
-          '',
-          'Tienes 5 minutos para responder.',
+          'Este numero de WhatsApp no coincide con ningun chofer activo.',
+          'Contacta a operaciones para verificar el telefono registrado.',
         ].join('\n')
       )
       return
@@ -196,7 +195,11 @@ const procesarMensajeChofer = async ({ remoteJid, texto, socketIO, enviarMensaje
       enviarMensaje,
     })
   } catch (err) {
-    console.error('Error procesando mensaje de chofer:', err)
+    console.error('Error procesando mensaje de chofer:', {
+      name: err.name,
+      code: err.code,
+      message: process.env.NODE_ENV === 'production' ? undefined : err.message
+    })
   }
 }
 
@@ -430,50 +433,6 @@ const guardarGastoChofer = async ({ remoteJid, chofer, viaje, gasto, socketIO, e
       viaje: { id: viaje.id, codigo: viaje.codigo },
     })
   }
-}
-
-const procesarVinculacion = async (remoteJid, texto, enviarMensaje) => {
-  const telefonoIngresado = normalizarTelefono(texto.trim())
-
-  console.log(`[Vinculacion] Intento: JID ${remoteJid} -> telefono normalizado: "${telefonoIngresado}"`)
-
-  const chofer = await prisma.chofer.findUnique({
-    where: { telefono: telefonoIngresado },
-  })
-
-  if (!chofer?.activo) {
-    await enviarMensaje(
-      remoteJid,
-      [
-        'No encontre ese numero en el sistema.',
-        '',
-        'Verifica que es el numero con el que te registraron.',
-        'Ejemplo: 04245244489',
-        '',
-        'Si el problema persiste, contacta a operaciones.',
-      ].join('\n')
-    )
-    return
-  }
-
-  await prisma.chofer.update({
-    where: { id: chofer.id },
-    data: { whatsappChatId: remoteJid },
-  })
-
-  vinculacionesPendientes.delete(remoteJid)
-
-  console.log(`[Vinculacion] Chofer "${chofer.nombre}" vinculado con JID ${remoteJid}`)
-
-  await enviarMensaje(
-    remoteJid,
-    [
-      'Vinculacion exitosa.',
-      '',
-      `Bienvenido, ${chofer.nombre}.`,
-      'Tu WhatsApp ha sido vinculado al sistema de Transporte San Roman.',
-    ].join('\n')
-  )
 }
 
 const esComando = (texto, lista) => lista.some((cmd) => texto === cmd || texto.startsWith(cmd + ' '))
