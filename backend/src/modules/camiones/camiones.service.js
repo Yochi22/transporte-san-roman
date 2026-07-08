@@ -39,12 +39,16 @@ const normalizarDatosCamion = (datos) => {
   const placaChuto = tipoVehiculo === 'FURGON' ? datos.placaChuto?.trim().toUpperCase() : null
   const placa = tipoVehiculo === 'FURGON' ? placaChuto : datos.placa?.trim().toUpperCase()
   const marcaModelo = datos.marcaModelo?.trim() || tipoVehiculo
+  const gpsImei = datos.gpsImei?.trim() || null
 
   if (!placa) throw { status: 400, message: 'La placa es requerida' }
   if (placa.length > 20 || placaFurgon?.length > 20 || placaChuto?.length > 20) {
     throw { status: 400, message: 'La placa es invalida' }
   }
   if (marcaModelo.length > 100) throw { status: 400, message: 'Marca o modelo invalido' }
+  if (gpsImei && !/^\d{10,20}$/.test(gpsImei)) {
+    throw { status: 400, message: 'IMEI GPS invalido' }
+  }
   if (tipoVehiculo === 'FURGON' && (!placaFurgon || !placaChuto)) {
     throw { status: 400, message: 'El furgon requiere placa del furgon y placa del chuto' }
   }
@@ -52,6 +56,7 @@ const normalizarDatosCamion = (datos) => {
   return {
     tipoVehiculo,
     placa,
+    gpsImei,
     placaFurgon,
     placaChuto,
     marcaModelo,

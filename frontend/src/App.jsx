@@ -4,6 +4,7 @@ import { io } from 'socket.io-client'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
 import logo from './assets/logo.png'
+import GpsMap from './components/GpsMap.jsx'
 import {
   AlertTriangle,
   Banknote,
@@ -840,7 +841,7 @@ function ResourcePanel({ title, items, type, isAdmin, onDone }) {
   const [open, setOpen] = useState(false)
   const emptyForm = () => type === 'chofer'
     ? { nombre: '', cedula: '', telefono: '' }
-    : { tipoVehiculo: 'NPR', placa: '', placaFurgon: '', placaChuto: '', marcaModelo: '' }
+    : { tipoVehiculo: 'NPR', placa: '', placaFurgon: '', placaChuto: '', marcaModelo: '', gpsImei: '' }
   const [form, setForm] = useState(emptyForm)
   const [error, setError] = useState('')
   const [editingId, setEditingId] = useState(null)
@@ -881,6 +882,7 @@ function ResourcePanel({ title, items, type, isAdmin, onDone }) {
             placaFurgon: item.placaFurgon || '',
             placaChuto: item.placaChuto || '',
             marcaModelo: item.marcaModelo,
+            gpsImei: item.gpsImei || '',
           }
     )
     setOpen(true)
@@ -937,6 +939,7 @@ function ResourcePanel({ title, items, type, isAdmin, onDone }) {
                 <input required value={form.placa} onChange={(event) => setForm({ ...form, placa: event.target.value })} className="input md:col-span-2" placeholder="Placa" />
               )}
               <input value={form.marcaModelo} onChange={(event) => setForm({ ...form, marcaModelo: event.target.value })} className="input md:col-span-3" placeholder="Marca / modelo (opcional)" />
+              <input value={form.gpsImei} onChange={(event) => setForm({ ...form, gpsImei: event.target.value })} className="input md:col-span-3" placeholder="IMEI GPS Baanool / Coban (opcional)" />
             </>
           )}
           <button className="btn-primary md:col-span-3">
@@ -963,6 +966,9 @@ function ResourcePanel({ title, items, type, isAdmin, onDone }) {
                 <MapPin size={12} />
                 {item.ubicacionActual || 'Sin ubicacion reportada'}
               </p>
+              {type === 'camion' && item.gpsImei && (
+                <p className="mt-1 truncate text-xs text-neutral-400">GPS {item.gpsImei}</p>
+              )}
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <span className={`rounded-md px-2 py-1 text-xs font-medium ${item.estadoCalculado === 'DISPONIBLE' ? 'bg-emerald-50 text-emerald-700' : item.estadoCalculado === 'EN_TALLER' ? 'bg-red-50 text-red-700' : 'bg-neutral-100 text-neutral-700'}`}>
@@ -1497,6 +1503,8 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
           </section>
           {viaje.numeroGuia && <Banner tone="neutral" icon={FileCheck} text={`Guia entregada: ${viaje.numeroGuia}`} />}
 
+          <GpsMap truckId={viaje.camionId} />
+
           <section className="space-y-3">
             <SectionTitle title="Ruta" subtitle={formatRoute(viaje)} />
             <div className="space-y-3">
@@ -1866,6 +1874,7 @@ function buildOperationalData({ viajes, choferes, camiones, query }) {
       camion.placa,
       camion.placaFurgon,
       camion.placaChuto,
+      camion.gpsImei,
       camion.tipoVehiculo,
       camion.marcaModelo,
       camion.estado,

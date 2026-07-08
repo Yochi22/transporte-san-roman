@@ -93,6 +93,11 @@ enum EstadoMantenimiento {
   COMPLETADO
 }
 
+enum EstadoMotor {
+  ENCENDIDO
+  APAGADO
+}
+
 model Usuario {
   id           String   @id @default(uuid())
   nombre       String
@@ -132,6 +137,7 @@ model Chofer {
 model Camion {
   id               String      @id @default(uuid())
   placa            String      @unique
+  gpsImei          String?     @unique @map("gps_imei")
   tipoVehiculo     TipoVehiculo @default(NPR) @map("tipo_vehiculo")
   placaFurgon      String?      @unique @map("placa_furgon")
   placaChuto       String?      @unique @map("placa_chuto")
@@ -144,8 +150,24 @@ model Camion {
   updatedAt        DateTime    @updatedAt @map("updated_at")
   viajes           Viaje[]
   mantenimientos   MantenimientoVehiculo[]
+  posicionGps      TruckPosition?
 
   @@map("camiones")
+}
+
+model TruckPosition {
+  id           String       @id @default(uuid())
+  truckId      String       @unique @map("truck_id")
+  latitude     Float
+  longitude    Float
+  speed        Float        @default(0)
+  engineStatus EstadoMotor? @map("engine_status")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+
+  camion Camion @relation(fields: [truckId], references: [id])
+
+  @@map("truck_positions")
 }
 
 model MantenimientoVehiculo {

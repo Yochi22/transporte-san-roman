@@ -1,6 +1,6 @@
 const validarEntorno = () => {
   const requeridas = ['DATABASE_URL', 'DIRECT_URL', 'JWT_SECRET']
-  if (process.env.NODE_ENV === 'production') requeridas.push('FRONTEND_URL')
+  if (process.env.NODE_ENV === 'production') requeridas.push('FRONTEND_URL', 'GPS_WEBHOOK_TOKEN')
   const faltantes = requeridas.filter((nombre) => !process.env[nombre]?.trim())
 
   if (faltantes.length > 0) {

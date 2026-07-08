@@ -115,6 +115,28 @@ button:disabled {
   border-radius: 999px;
 }
 
+.leaflet-container {
+  font: inherit;
+}
+
+.gps-marker {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgb(23 23 23 / 16%);
+}
+
+.gps-marker > div {
+  width: 14px;
+  height: 14px;
+  border: 3px solid white;
+  border-radius: 999px;
+  background: #171717;
+  box-shadow: 0 10px 24px rgb(0 0 0 / 24%);
+}
+
 @layer components {
   .input {
     @apply h-10 w-full rounded-md border border-neutral-200 bg-white px-3 text-sm text-neutral-950 outline-none transition placeholder:text-neutral-400 focus:border-neutral-500;

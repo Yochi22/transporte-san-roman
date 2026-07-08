@@ -1,0 +1,26 @@
+services:
+  traccar:
+    image: traccar/traccar:latest
+    restart: unless-stopped
+    volumes:
+      - ./traccar/conf/traccar.xml:/opt/traccar/conf/traccar.xml:ro
+      - traccar_logs:/opt/traccar/logs
+      - traccar_data:/opt/traccar/data
+    ports:
+      - "5002:5002/tcp"
+    expose:
+      - "8082"
+
+  traccar-nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on:
+      - traccar
+    volumes:
+      - ./traccar/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "8088:80"
+
+volumes:
+  traccar_logs:
+  traccar_data:

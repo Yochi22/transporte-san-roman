@@ -15,6 +15,9 @@ ADMIN_EMAIL=admin@sanroman.com
 ADMIN_PASSWORD=una-clave-inicial-de-12-caracteres-o-mas
 WHATSAPP_AUTH_PATH=/app/backend/.whatsapp-auth
 DEMO_PUBLIC_WHATSAPP_QR=false
+GPS_WEBHOOK_TOKEN=una-cadena-aleatoria-larga-para-traccar
+VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
+VITE_SUPABASE_ANON_KEY=tu_anon_key
 ```
 
 `FRONTEND_URL` debe coincidir exactamente con el dominio del panel, sin barra final. `ADMIN_PASSWORD` puede retirarse del proveedor despues de crear el administrador. Para cambiar esa clave, definir temporalmente `ADMIN_RESET_PASSWORD=true`, desplegar una vez y eliminar ambas variables de reinicio.
@@ -24,6 +27,16 @@ DEMO_PUBLIC_WHATSAPP_QR=false
 La ruta `/whatsapp-qr` requiere una sesion de administrador. Durante una demo se puede definir `DEMO_PUBLIC_WHATSAPP_QR=true`; debe volver a `false` antes de operar con datos reales. No se imprime el QR ni la informacion de mensajes en los logs.
 
 El directorio configurado en `WHATSAPP_AUTH_PATH` debe montarse como volumen persistente y no debe publicarse ni copiarse fuera del proveedor.
+
+## GPS
+
+Traccar debe enviar el webhook a:
+
+```text
+https://tu-dominio.example/api/gps/positions?token=GPS_WEBHOOK_TOKEN
+```
+
+`GPS_WEBHOOK_TOKEN` es obligatorio en produccion. El frontend usa `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` para escuchar `truck_positions` en tiempo real.
 
 ## Base de datos
 

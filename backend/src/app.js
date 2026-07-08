@@ -20,6 +20,7 @@ const camionesRoutes = require('./modules/camiones/camiones.routes')
 const viajesRoutes = require('./modules/viajes/viajes.routes')
 const gastosRoutes = require('./modules/gastos/gastos.routes')
 const tallerRoutes = require('./modules/taller/taller.routes')
+const gpsRoutes = require('./modules/gps/gps.routes')
 const { obtenerEstadoWhatsApp } = require('./services/messaging/whatsapp')
 
 const app = express()
@@ -51,11 +52,13 @@ app.use(cors({
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'tiny' : 'dev'))
 app.use(express.json({ limit: '100kb', strict: true }))
 app.use(cookieParser())
-app.use('/api', apiLimiter, requerirJson, protegerCsrf)
+app.use('/api', apiLimiter, requerirJson)
 app.use('/api', (req, res, next) => {
   res.set('Cache-Control', 'no-store')
   next()
 })
+app.use('/api/gps', gpsRoutes)
+app.use('/api', protegerCsrf)
 
 app.get('/health', (req, res) => {
   res.json({ ok: true, servicio: 'Transporte San Román API', version: '1.0.0' })

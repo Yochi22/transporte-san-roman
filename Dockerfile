@@ -16,6 +16,10 @@ RUN cd frontend && npm ci
 COPY frontend/index.html frontend/vite.config.js frontend/eslint.config.js frontend/postcss.config.js frontend/tailwind.config.js ./frontend/
 COPY frontend/public ./frontend/public
 COPY frontend/src ./frontend/src
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
 RUN cd frontend && npm run build
 RUN cd backend && npm prune --omit=dev
 

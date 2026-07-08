@@ -14,6 +14,7 @@ const choferPanelSelect = {
 const camionPanelSelect = {
   id: true,
   placa: true,
+  gpsImei: true,
   tipoVehiculo: true,
   placaFurgon: true,
   placaChuto: true,
