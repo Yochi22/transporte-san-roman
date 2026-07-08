@@ -37,6 +37,11 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
 app.disable('x-powered-by')
 if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1)
 app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      imgSrc: ["'self'", 'data:', 'https://*.tile.openstreetmap.org'],
+    },
+  },
   crossOriginResourcePolicy: { policy: 'same-origin' },
   referrerPolicy: { policy: 'no-referrer' }
 }))
