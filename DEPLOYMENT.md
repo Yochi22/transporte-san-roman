@@ -18,6 +18,11 @@ DEMO_PUBLIC_WHATSAPP_QR=false
 GPS_WEBHOOK_TOKEN=una-cadena-aleatoria-larga-para-traccar
 VITE_SUPABASE_URL=https://tu-proyecto.supabase.co
 VITE_SUPABASE_ANON_KEY=tu_anon_key
+TRACCAR_SYNC_ENABLED=false
+TRACCAR_BASE_URL=https://demo4.traccar.org
+TRACCAR_EMAIL=correo-de-traccar
+TRACCAR_PASSWORD=clave-de-traccar
+TRACCAR_SYNC_INTERVAL_SECONDS=30
 ```
 
 `FRONTEND_URL` debe coincidir exactamente con el dominio del panel, sin barra final. `ADMIN_PASSWORD` puede retirarse del proveedor despues de crear el administrador. Para cambiar esa clave, definir temporalmente `ADMIN_RESET_PASSWORD=true`, desplegar una vez y eliminar ambas variables de reinicio.
@@ -37,6 +42,8 @@ https://tu-dominio.example/api/gps/positions?token=GPS_WEBHOOK_TOKEN
 ```
 
 `GPS_WEBHOOK_TOKEN` es obligatorio en produccion. El frontend usa `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY` para escuchar `truck_positions` en tiempo real.
+
+Si se usa un servidor demo de Traccar, activar `TRACCAR_SYNC_ENABLED=true`. El backend consultara la API de Traccar y actualizara `truck_positions` por IMEI.
 
 ## Base de datos
 

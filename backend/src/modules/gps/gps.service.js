@@ -60,8 +60,7 @@ const extraerPayloadTraccar = (body) => {
   return { imei, latitude, longitude, speed, engineStatus }
 }
 
-const registrarPosicion = async (body) => {
-  const data = extraerPayloadTraccar(body)
+const registrarPosicionPorImei = async (data) => {
   const camion = await prisma.camion.findFirst({
     where: { gpsImei: data.imei, activo: true },
     select: { id: true, placa: true }
@@ -95,4 +94,6 @@ const registrarPosicion = async (body) => {
   return { camion, position }
 }
 
-module.exports = { registrarPosicion, extraerPayloadTraccar }
+const registrarPosicion = async (body) => registrarPosicionPorImei(extraerPayloadTraccar(body))
+
+module.exports = { registrarPosicion, registrarPosicionPorImei, extraerPayloadTraccar }

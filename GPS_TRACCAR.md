@@ -73,6 +73,11 @@ Backend:
 
 ```env
 GPS_WEBHOOK_TOKEN=un_token_largo_privado
+TRACCAR_SYNC_ENABLED=true
+TRACCAR_BASE_URL=https://demo4.traccar.org
+TRACCAR_EMAIL=tu_correo_de_traccar
+TRACCAR_PASSWORD=tu_clave_de_traccar
+TRACCAR_SYNC_INTERVAL_SECONDS=30
 ```
 
 Frontend:
@@ -91,6 +96,26 @@ VITE_SUPABASE_ANON_KEY=tu_anon_key
 ```
 
 `GPS_WEBHOOK_TOKEN` lo usa el backend en runtime. Las variables `VITE_` se usan durante el build del panel, asi que despues de agregarlas debes hacer `Manual Deploy` en Render.
+
+## Traccar Demo sin VPS
+
+Si el GPS ya aparece en `demo4.traccar.org`, puedes usar ese servidor para la demo sin Docker, ngrok ni VPS:
+
+1. En Traccar Demo crea el dispositivo con el IMEI real.
+2. En el panel de Transporte San Roman registra el mismo IMEI en el camion.
+3. En Render agrega:
+
+```env
+TRACCAR_SYNC_ENABLED=true
+TRACCAR_BASE_URL=https://demo4.traccar.org
+TRACCAR_EMAIL=tu_correo_de_traccar
+TRACCAR_PASSWORD=tu_clave_de_traccar
+TRACCAR_SYNC_INTERVAL_SECONDS=30
+```
+
+El backend consultara `/api/devices` y `/api/positions` de Traccar cada 30 segundos y actualizara `truck_positions` en Supabase. El mapa del panel se actualiza por Supabase Realtime.
+
+Limitacion: el demo server de Traccar no garantiza disponibilidad ni historial. Sirve para demostraciones, no para operacion estable.
 
 ## Base de datos
 

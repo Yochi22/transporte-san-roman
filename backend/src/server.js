@@ -7,6 +7,7 @@ const app = require('./app')
 const { crearUsuarioInicial } = require('./modules/auth/auth.service')
 const { iniciarWhatsApp } = require('./services/messaging/whatsapp')
 const { depurarReportesCerrados } = require('./modules/reportes/reportes.service')
+const { iniciarSincronizacionTraccar } = require('./modules/gps/traccar-sync.service')
 const { verificarToken } = require('./config/jwt')
 const prisma = require('./config/database')
 const { SESSION_COOKIE_NAME } = require('./config/session')
@@ -89,6 +90,7 @@ server.listen(PORT, async () => {
     await crearUsuarioInicial()
     await ejecutarDepuracionReportes()
     setInterval(ejecutarDepuracionReportes, INTERVALO_DEPURACION).unref()
+    iniciarSincronizacionTraccar()
     await iniciarWhatsApp(io)
   } catch (error) {
     console.error('Error durante el arranque:', {
