@@ -29,6 +29,19 @@ const traccarFetch = async (path, config) => {
   return response.json()
 }
 
+const obtenerPosiciones = async (devices, config) => {
+  const positions = await traccarFetch('/api/positions', config)
+  if (positions.length > 0) return positions
+
+  const positionIds = devices
+    .map((device) => device.positionId)
+    .filter(Boolean)
+
+  if (positionIds.length === 0) return []
+
+  return traccarFetch(`/api/positions?${positionIds.map((id) => `id=${encodeURIComponent(id)}`).join('&')}`, config)
+}
+
 const normalizarEstadoMotor = (attributes = {}) => {
   const value = attributes.ignition ?? attributes.acc ?? attributes.ACC ?? attributes.motion
   if (value === undefined || value === null || value === '') return null
@@ -49,10 +62,8 @@ const sincronizarPosicionesTraccar = async () => {
 
   sincronizando = true
   try {
-    const [devices, positions] = await Promise.all([
-      traccarFetch('/api/devices', config),
-      traccarFetch('/api/positions', config),
-    ])
+    const devices = await traccarFetch('/api/devices', config)
+    const positions = await obtenerPosiciones(devices, config)
     const devicesById = new Map(devices.map((device) => [device.id, device]))
     let count = 0
     let ignored = 0
