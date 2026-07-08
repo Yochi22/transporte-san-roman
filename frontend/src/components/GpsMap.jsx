@@ -28,6 +28,26 @@ function FlyToPosition({ position }) {
   return null
 }
 
+function ResizeMap({ position }) {
+  const map = useMap()
+
+  useEffect(() => {
+    const invalidate = () => map.invalidateSize()
+    const timers = [120, 350, 800].map((delay) => setTimeout(invalidate, delay))
+    window.addEventListener('resize', invalidate)
+    return () => {
+      timers.forEach(clearTimeout)
+      window.removeEventListener('resize', invalidate)
+    }
+  }, [map])
+
+  useEffect(() => {
+    map.invalidateSize()
+  }, [map, position])
+
+  return null
+}
+
 const normalizePosition = (row) => {
   if (!row) return null
   return {
@@ -40,7 +60,7 @@ const normalizePosition = (row) => {
   }
 }
 
-export default function GpsMap({ truckId, height = 320 }) {
+export default function GpsMap({ truckId }) {
   const [position, setPosition] = useState(null)
   const [status, setStatus] = useState('idle')
   const currentPosition = position?.truckId === truckId ? position : null
@@ -129,8 +149,9 @@ export default function GpsMap({ truckId, height = 320 }) {
           {currentPosition && status === 'online' ? 'EN VIVO' : status === 'error' ? 'ERROR' : 'SIN SENAL'}
       </span>
       </div>
-      <div style={{ height }}>
-        <MapContainer center={center} zoom={currentPosition ? 14 : 7} scrollWheelZoom className="h-full w-full">
+      <div className="h-[260px] sm:h-[320px]">
+        <MapContainer key={truckId} center={center} zoom={currentPosition ? 14 : 7} scrollWheelZoom className="h-full w-full">
+          <ResizeMap position={currentPosition} />
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
