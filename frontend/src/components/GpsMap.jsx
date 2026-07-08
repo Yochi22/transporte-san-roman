@@ -79,14 +79,37 @@ const normalizePosition = (row) => {
   }
 }
 
+const isMobileViewport = () => {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia('(max-width: 767px), (pointer: coarse)').matches
+}
+
+const osmEmbedUrl = (position) => {
+  const delta = 0.006
+  const minLon = position.longitude - delta
+  const minLat = position.latitude - delta
+  const maxLon = position.longitude + delta
+  const maxLat = position.latitude + delta
+  const bbox = [minLon, minLat, maxLon, maxLat].map((value) => value.toFixed(6)).join('%2C')
+  return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${position.latitude.toFixed(6)}%2C${position.longitude.toFixed(6)}`
+}
+
 export default function GpsMap({ truckId }) {
   const [position, setPosition] = useState(null)
   const [status, setStatus] = useState('idle')
+  const [mobileMap, setMobileMap] = useState(() => isMobileViewport())
   const currentPosition = position?.truckId === truckId ? position : null
   const center = useMemo(
     () => (currentPosition ? [currentPosition.latitude, currentPosition.longitude] : defaultCenter),
     [currentPosition]
   )
+
+  useEffect(() => {
+    const updateMode = () => setMobileMap(isMobileViewport())
+    updateMode()
+    window.addEventListener('resize', updateMode)
+    return () => window.removeEventListener('resize', updateMode)
+  }, [])
 
   useEffect(() => {
     if (!truckId) return undefined
@@ -168,33 +191,58 @@ export default function GpsMap({ truckId }) {
           {currentPosition && status === 'online' ? 'EN VIVO' : status === 'error' ? 'ERROR' : 'SIN SENAL'}
       </span>
       </div>
-      <MapErrorBoundary fallback={<PositionFallback position={currentPosition} />}>
-        <div className="h-[260px] min-h-[260px] sm:h-[320px] sm:min-h-[320px]">
-          <MapContainer key={`${truckId}-${currentPosition?.updatedAt || 'empty'}`} center={center} zoom={currentPosition ? 14 : 7} scrollWheelZoom={false} className="h-full w-full">
-            <ResizeMap position={currentPosition} />
-            <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            />
-            {currentPosition && (
-              <>
-                <FlyToPosition position={currentPosition} />
-                <Marker position={[currentPosition.latitude, currentPosition.longitude]} icon={truckIcon}>
-                  <Popup>
-                    <div>
-                      <strong>Ultima posicion</strong>
-                      <br />
-                      Velocidad: {currentPosition.speed.toFixed(1)}
-                      <br />
-                      Motor: {currentPosition.engineStatus || 'Sin dato'}
-                    </div>
-                  </Popup>
-                </Marker>
-              </>
-            )}
-          </MapContainer>
-        </div>
-      </MapErrorBoundary>
+      {mobileMap ? (
+        <MobileMap position={currentPosition} />
+      ) : (
+        <MapErrorBoundary fallback={<PositionFallback position={currentPosition} />}>
+          <div className="h-[320px] min-h-[320px]">
+            <MapContainer key={`${truckId}-${currentPosition?.updatedAt || 'empty'}`} center={center} zoom={currentPosition ? 14 : 7} scrollWheelZoom={false} className="h-full w-full">
+              <ResizeMap position={currentPosition} />
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+              {currentPosition && (
+                <>
+                  <FlyToPosition position={currentPosition} />
+                  <Marker position={[currentPosition.latitude, currentPosition.longitude]} icon={truckIcon}>
+                    <Popup>
+                      <div>
+                        <strong>Ultima posicion</strong>
+                        <br />
+                        Velocidad: {currentPosition.speed.toFixed(1)}
+                        <br />
+                        Motor: {currentPosition.engineStatus || 'Sin dato'}
+                      </div>
+                    </Popup>
+                  </Marker>
+                </>
+              )}
+            </MapContainer>
+          </div>
+        </MapErrorBoundary>
+      )}
+    </div>
+  )
+}
+
+function MobileMap({ position }) {
+  if (!position) return <MapState text="Sin posicion recibida." />
+
+  return (
+    <div>
+      <iframe
+        title="Mapa GPS"
+        src={osmEmbedUrl(position)}
+        className="block h-[260px] min-h-[260px] w-full border-0"
+        loading="lazy"
+      />
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 px-4 py-3">
+        <span className="text-xs text-neutral-500">Motor: {position.engineStatus || 'Sin dato'} · Velocidad: {position.speed.toFixed(1)}</span>
+        <a href={`https://maps.apple.com/?ll=${position.latitude},${position.longitude}`} target="_blank" rel="noreferrer" className="rounded-md bg-neutral-950 px-3 py-2 text-xs font-medium text-white">
+          Abrir en Mapas
+        </a>
+      </div>
     </div>
   )
 }

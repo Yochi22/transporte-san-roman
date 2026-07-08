@@ -40,6 +40,7 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       imgSrc: ["'self'", 'data:', 'https://*.tile.openstreetmap.org'],
+      frameSrc: ["'self'", 'https://www.openstreetmap.org'],
     },
   },
   crossOriginResourcePolicy: { policy: 'same-origin' },
