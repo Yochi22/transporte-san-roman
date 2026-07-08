@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Component, useEffect, useMemo, useState } from 'react'
 import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -13,6 +13,22 @@ const truckIcon = L.divIcon({
   iconSize: [28, 28],
   iconAnchor: [14, 14],
 })
+
+class MapErrorBoundary extends Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false }
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+
+  render() {
+    if (this.state.hasError) return this.props.fallback
+    return this.props.children
+  }
+}
 
 function FlyToPosition({ position }) {
   const map = useMap()
@@ -50,10 +66,13 @@ function ResizeMap({ position }) {
 
 const normalizePosition = (row) => {
   if (!row) return null
+  const latitude = Number(row.latitude)
+  const longitude = Number(row.longitude)
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
   return {
     truckId: row.truck_id || row.truckId,
-    latitude: Number(row.latitude),
-    longitude: Number(row.longitude),
+    latitude,
+    longitude,
     speed: Number(row.speed || 0),
     engineStatus: row.engine_status || row.engineStatus || null,
     updatedAt: row.updated_at || row.updatedAt,
@@ -149,30 +168,49 @@ export default function GpsMap({ truckId }) {
           {currentPosition && status === 'online' ? 'EN VIVO' : status === 'error' ? 'ERROR' : 'SIN SENAL'}
       </span>
       </div>
-      <div className="h-[260px] sm:h-[320px]">
-        <MapContainer key={truckId} center={center} zoom={currentPosition ? 14 : 7} scrollWheelZoom className="h-full w-full">
-          <ResizeMap position={currentPosition} />
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
-          {currentPosition && (
-            <>
-              <FlyToPosition position={currentPosition} />
-              <Marker position={[currentPosition.latitude, currentPosition.longitude]} icon={truckIcon}>
-                <Popup>
-                  <div>
-                    <strong>Ultima posicion</strong>
-                    <br />
-                    Velocidad: {currentPosition.speed.toFixed(1)}
-                    <br />
-                    Motor: {currentPosition.engineStatus || 'Sin dato'}
-                  </div>
-                </Popup>
-              </Marker>
-            </>
-          )}
-        </MapContainer>
+      <MapErrorBoundary fallback={<PositionFallback position={currentPosition} />}>
+        <div className="h-[260px] min-h-[260px] sm:h-[320px] sm:min-h-[320px]">
+          <MapContainer key={`${truckId}-${currentPosition?.updatedAt || 'empty'}`} center={center} zoom={currentPosition ? 14 : 7} scrollWheelZoom={false} className="h-full w-full">
+            <ResizeMap position={currentPosition} />
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            {currentPosition && (
+              <>
+                <FlyToPosition position={currentPosition} />
+                <Marker position={[currentPosition.latitude, currentPosition.longitude]} icon={truckIcon}>
+                  <Popup>
+                    <div>
+                      <strong>Ultima posicion</strong>
+                      <br />
+                      Velocidad: {currentPosition.speed.toFixed(1)}
+                      <br />
+                      Motor: {currentPosition.engineStatus || 'Sin dato'}
+                    </div>
+                  </Popup>
+                </Marker>
+              </>
+            )}
+          </MapContainer>
+        </div>
+      </MapErrorBoundary>
+    </div>
+  )
+}
+
+function PositionFallback({ position }) {
+  if (!position) return <MapState text="Sin posicion recibida." />
+  const mapsUrl = `https://maps.apple.com/?ll=${position.latitude},${position.longitude}`
+
+  return (
+    <div className="grid min-h-[260px] place-items-center bg-neutral-50 px-4 text-center">
+      <div>
+        <p className="text-sm font-semibold">Ubicacion recibida</p>
+        <p className="mt-1 text-xs text-neutral-500">{position.latitude.toFixed(6)}, {position.longitude.toFixed(6)}</p>
+        <a href={mapsUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex h-9 items-center rounded-md bg-neutral-950 px-3 text-sm font-medium text-white">
+          Abrir en Mapas
+        </a>
       </div>
     </div>
   )

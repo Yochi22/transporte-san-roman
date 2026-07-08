@@ -1473,9 +1473,9 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex h-dvh justify-end">
+    <div className="fixed inset-0 z-50 flex h-screen min-h-[100svh] justify-end">
       <button className="absolute inset-0 bg-neutral-950/30" onClick={onClose} />
-      <aside className="relative h-dvh w-full max-w-3xl overflow-y-auto bg-white shadow-xl">
+      <aside className="relative h-screen min-h-[100svh] w-full max-w-3xl overflow-y-auto bg-white shadow-xl">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-4 sm:px-6">
           <div className="min-w-0">
             <p className="text-xs font-medium text-neutral-500">{viaje.estadoLogistico} · {viaje.estadoFinanciero}</p>
