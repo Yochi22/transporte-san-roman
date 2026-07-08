@@ -55,23 +55,32 @@ const sincronizarPosicionesTraccar = async () => {
     ])
     const devicesById = new Map(devices.map((device) => [device.id, device]))
     let count = 0
+    let ignored = 0
 
     for (const position of positions) {
       const device = devicesById.get(position.deviceId)
       const imei = String(device?.uniqueId || '').trim()
-      if (!/^\d{10,20}$/.test(imei)) continue
+      if (!/^\d{10,20}$/.test(imei)) {
+        ignored += 1
+        continue
+      }
 
-      await registrarPosicionPorImei({
-        imei,
-        latitude: Number(position.latitude),
-        longitude: Number(position.longitude),
-        speed: Number(position.speed || 0),
-        engineStatus: normalizarEstadoMotor(position.attributes || {}),
-      })
-      count += 1
+      try {
+        await registrarPosicionPorImei({
+          imei,
+          latitude: Number(position.latitude),
+          longitude: Number(position.longitude),
+          speed: Number(position.speed || 0),
+          engineStatus: normalizarEstadoMotor(position.attributes || {}),
+        })
+        count += 1
+      } catch (error) {
+        ignored += 1
+        if (error.status !== 404) throw error
+      }
     }
 
-    if (count > 0) console.log(`Posiciones sincronizadas desde Traccar: ${count}`)
+    console.log(`Traccar sync: ${devices.length} dispositivos, ${positions.length} posiciones, ${count} guardadas, ${ignored} ignoradas`)
     return { enabled: true, count }
   } finally {
     sincronizando = false
@@ -80,7 +89,13 @@ const sincronizarPosicionesTraccar = async () => {
 
 const iniciarSincronizacionTraccar = () => {
   const config = traccarConfig()
-  if (!config.enabled || intervalo) return
+  if (intervalo) return
+  if (!config.enabled) {
+    console.log('Traccar sync desactivado')
+    return
+  }
+
+  console.log(`Traccar sync activado: ${config.baseUrl || 'sin URL'} cada ${Math.round(config.intervalMs / 1000)}s`)
 
   sincronizarPosicionesTraccar().catch((error) => {
     console.error('No se pudo sincronizar Traccar:', error.message)
