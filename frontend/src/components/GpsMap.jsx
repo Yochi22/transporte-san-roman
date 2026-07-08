@@ -3,6 +3,7 @@ import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import { supabase, supabaseConfigured } from '../lib/supabase'
+import { api } from '../lib/api'
 
 const defaultCenter = [10.0678, -69.3474]
 
@@ -30,12 +31,12 @@ function FlyToPosition({ position }) {
 const normalizePosition = (row) => {
   if (!row) return null
   return {
-    truckId: row.truck_id,
+    truckId: row.truck_id || row.truckId,
     latitude: Number(row.latitude),
     longitude: Number(row.longitude),
     speed: Number(row.speed || 0),
-    engineStatus: row.engine_status || null,
-    updatedAt: row.updated_at,
+    engineStatus: row.engine_status || row.engineStatus || null,
+    updatedAt: row.updated_at || row.updatedAt,
   }
 }
 
@@ -49,23 +50,39 @@ export default function GpsMap({ truckId, height = 320 }) {
   )
 
   useEffect(() => {
-    if (!truckId || !supabaseConfigured) return undefined
+    if (!truckId) return undefined
     let active = true
 
-    supabase
-      .from('truck_positions')
-      .select('*')
-      .eq('truck_id', truckId)
-      .maybeSingle()
-      .then(({ data, error }) => {
+    api.get(`/gps/trucks/${truckId}/position`)
+      .then(({ data }) => {
         if (!active) return
-        if (error) {
-          setStatus('error')
-          return
-        }
-        setPosition(normalizePosition(data))
-        setStatus(data ? 'online' : 'empty')
+        const row = data?.data || null
+        setPosition(normalizePosition(row))
+        setStatus(row ? 'online' : 'empty')
       })
+      .catch(() => {
+        if (active) setStatus('error')
+      })
+
+    if (!supabaseConfigured) {
+      const interval = setInterval(() => {
+        api.get(`/gps/trucks/${truckId}/position`)
+          .then(({ data }) => {
+            if (!active) return
+            const row = data?.data || null
+            setPosition(normalizePosition(row))
+            setStatus(row ? 'online' : 'empty')
+          })
+          .catch(() => {
+            if (active) setStatus('error')
+          })
+      }, 30000)
+
+      return () => {
+        active = false
+        clearInterval(interval)
+      }
+    }
 
     const channel = supabase
       .channel(`truck-position-${truckId}`)
@@ -98,7 +115,6 @@ export default function GpsMap({ truckId, height = 320 }) {
   }, [truckId])
 
   if (!truckId) return <MapState text="Unidad no asignada." />
-  if (!supabaseConfigured) return <MapState text="Configura VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY para activar el mapa GPS." />
 
   return (
     <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">

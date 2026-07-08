@@ -6,4 +6,9 @@ const recibirPosicion = async (req, res) => {
   return ok(res, result, 'Posicion GPS actualizada')
 }
 
-module.exports = { recibirPosicion }
+const obtenerPosicionCamion = async (req, res) => {
+  const result = await service.obtenerPosicionCamion(req.params.truckId)
+  return ok(res, result, 'Posicion GPS consultada')
+}
+
+module.exports = { recibirPosicion, obtenerPosicionCamion }

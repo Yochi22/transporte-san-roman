@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import axios from 'axios'
 import { io } from 'socket.io-client'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
 import logo from './assets/logo.png'
 import GpsMap from './components/GpsMap.jsx'
+import { api, SOCKET_URL } from './lib/api'
 import {
   AlertTriangle,
   Banknote,
@@ -34,14 +34,6 @@ import {
   X,
 } from 'lucide-react'
 
-const API_BASE = import.meta.env.VITE_API_BASE || '/api'
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || window.location.origin
-
-const api = axios.create({
-  baseURL: API_BASE,
-  withCredentials: true,
-  headers: { 'X-Requested-With': 'XMLHttpRequest' },
-})
 const socket = io(SOCKET_URL, { autoConnect: false, withCredentials: true })
 
 const alertOptions = {

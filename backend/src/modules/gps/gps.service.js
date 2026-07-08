@@ -96,4 +96,11 @@ const registrarPosicionPorImei = async (data) => {
 
 const registrarPosicion = async (body) => registrarPosicionPorImei(extraerPayloadTraccar(body))
 
-module.exports = { registrarPosicion, registrarPosicionPorImei, extraerPayloadTraccar }
+const obtenerPosicionCamion = async (truckId) => {
+  const position = await prisma.truckPosition.findUnique({
+    where: { truckId },
+  })
+  return position
+}
+
+module.exports = { registrarPosicion, registrarPosicionPorImei, obtenerPosicionCamion, extraerPayloadTraccar }
