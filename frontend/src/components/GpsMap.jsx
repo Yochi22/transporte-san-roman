@@ -1,18 +1,8 @@
-import { Component, useEffect, useMemo, useState } from 'react'
-import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet'
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+import { Component, Suspense, lazy, useEffect, useState } from 'react'
 import { supabase, supabaseConfigured } from '../lib/supabase'
 import { api } from '../lib/api'
 
-const defaultCenter = [10.0678, -69.3474]
-
-const truckIcon = L.divIcon({
-  className: '',
-  html: '<div class="gps-marker"><div></div></div>',
-  iconSize: [28, 28],
-  iconAnchor: [14, 14],
-})
+const DesktopLeafletMap = lazy(() => import('./DesktopLeafletMap.jsx'))
 
 class MapErrorBoundary extends Component {
   constructor(props) {
@@ -28,40 +18,6 @@ class MapErrorBoundary extends Component {
     if (this.state.hasError) return this.props.fallback
     return this.props.children
   }
-}
-
-function FlyToPosition({ position }) {
-  const map = useMap()
-
-  useEffect(() => {
-    if (!position) return
-    map.flyTo([position.latitude, position.longitude], Math.max(map.getZoom(), 13), {
-      animate: true,
-      duration: 0.8,
-    })
-  }, [map, position])
-
-  return null
-}
-
-function ResizeMap({ position }) {
-  const map = useMap()
-
-  useEffect(() => {
-    const invalidate = () => map.invalidateSize()
-    const timers = [120, 350, 800].map((delay) => setTimeout(invalidate, delay))
-    window.addEventListener('resize', invalidate)
-    return () => {
-      timers.forEach(clearTimeout)
-      window.removeEventListener('resize', invalidate)
-    }
-  }, [map])
-
-  useEffect(() => {
-    map.invalidateSize()
-  }, [map, position])
-
-  return null
 }
 
 const normalizePosition = (row) => {
@@ -99,10 +55,6 @@ export default function GpsMap({ truckId }) {
   const [status, setStatus] = useState('idle')
   const [mobileMap, setMobileMap] = useState(() => isMobileViewport())
   const currentPosition = position?.truckId === truckId ? position : null
-  const center = useMemo(
-    () => (currentPosition ? [currentPosition.latitude, currentPosition.longitude] : defaultCenter),
-    [currentPosition]
-  )
 
   useEffect(() => {
     const updateMode = () => setMobileMap(isMobileViewport())
@@ -195,31 +147,9 @@ export default function GpsMap({ truckId }) {
         <MobileMap position={currentPosition} />
       ) : (
         <MapErrorBoundary fallback={<PositionFallback position={currentPosition} />}>
-          <div className="h-[320px] min-h-[320px]">
-            <MapContainer key={`${truckId}-${currentPosition?.updatedAt || 'empty'}`} center={center} zoom={currentPosition ? 14 : 7} scrollWheelZoom={false} className="h-full w-full">
-              <ResizeMap position={currentPosition} />
-              <TileLayer
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              {currentPosition && (
-                <>
-                  <FlyToPosition position={currentPosition} />
-                  <Marker position={[currentPosition.latitude, currentPosition.longitude]} icon={truckIcon}>
-                    <Popup>
-                      <div>
-                        <strong>Ultima posicion</strong>
-                        <br />
-                        Velocidad: {currentPosition.speed.toFixed(1)}
-                        <br />
-                        Motor: {currentPosition.engineStatus || 'Sin dato'}
-                      </div>
-                    </Popup>
-                  </Marker>
-                </>
-              )}
-            </MapContainer>
-          </div>
+          <Suspense fallback={<MapState text="Cargando mapa." />}>
+            <DesktopLeafletMap position={currentPosition} truckId={truckId} />
+          </Suspense>
         </MapErrorBoundary>
       )}
     </div>
