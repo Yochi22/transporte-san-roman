@@ -50,6 +50,7 @@ services:
       PRIMARY_PORT: "5002"
       MIRROR_HOST: "tracker.baanooliot.com"
       MIRROR_PORT: "8090"
+      RESPONSE_SOURCE: "mirror"
     volumes:
       - ./traccar/tcp-tee-proxy.js:/app/tcp-tee-proxy.js:ro
     ports:
@@ -64,6 +65,7 @@ const primaryHost = process.env.PRIMARY_HOST || 'traccar'
 const primaryPort = Number(process.env.PRIMARY_PORT || 5002)
 const mirrorHost = process.env.MIRROR_HOST || 'tracker.baanooliot.com'
 const mirrorPort = Number(process.env.MIRROR_PORT || 8090)
+const responseSource = process.env.RESPONSE_SOURCE || 'mirror'
 
 const server = net.createServer((client) => {
   const primary = net.createConnection({ host: primaryHost, port: primaryPort })
@@ -81,18 +83,23 @@ const server = net.createServer((client) => {
   })
 
   primary.on('data', (chunk) => {
-    if (!client.destroyed) client.write(chunk)
+    if (responseSource === 'primary' && !client.destroyed) client.write(chunk)
   })
 
-  primary.on('error', closeAll)
+  mirror.on('data', (chunk) => {
+    if (responseSource === 'mirror' && !client.destroyed) client.write(chunk)
+  })
+
+  primary.on('error', () => primary.destroy())
   mirror.on('error', () => mirror.destroy())
   client.on('error', closeAll)
   client.on('close', closeAll)
-  primary.on('close', closeAll)
+  primary.on('close', () => primary.destroy())
+  mirror.on('close', () => mirror.destroy())
 })
 
 server.listen(listenPort, '0.0.0.0', () => {
-  console.log(`TCP tee escuchando ${listenPort}. Primario ${primaryHost}:${primaryPort}. Espejo ${mirrorHost}:${mirrorPort}`)
+  console.log(`TCP tee escuchando ${listenPort}. Primario ${primaryHost}:${primaryPort}. Espejo ${mirrorHost}:${mirrorPort}. Respuesta: ${responseSource}`)
 })
 EOF
 
@@ -138,7 +145,7 @@ fix030s060m***n123456
 check123456
 ```
 
-El proxy reenvia el paquete crudo a Traccar interno `traccar:5002` y a `tracker.baanooliot.com:8090`.
+El proxy reenvia el paquete crudo a Traccar interno `traccar:5002` y a `tracker.baanooliot.com:8090`. La respuesta hacia el GPS sale desde Baanool (`RESPONSE_SOURCE=mirror`) para que comandos como apagado/reinicio de motor puedan volver al equipo.
 
 ## Variables en Render mientras la app siga alli
 
