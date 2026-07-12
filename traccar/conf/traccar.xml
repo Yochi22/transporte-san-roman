@@ -18,7 +18,4 @@
     <entry key="forward.enable">true</entry>
     <entry key="forward.type">json</entry>
     <entry key="forward.url">https://TU_BACKEND/api/gps/positions?token=TU_GPS_WEBHOOK_TOKEN</entry>
-
-    <!-- Reenvio del paquete original a la plataforma oficial Baanool -->
-    <entry key="forward.link">tracker.baanooliot.com:8090</entry>
 </properties>

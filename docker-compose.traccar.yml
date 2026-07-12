@@ -8,8 +8,25 @@ services:
       - traccar_data:/opt/traccar/data
     ports:
       - "5001:5001/tcp"
-      - "5002:5002/tcp"
       - "8082:8082"
+
+  tcp-tee-baanool:
+    image: node:20-alpine
+    restart: unless-stopped
+    depends_on:
+      - traccar
+    working_dir: /app
+    command: ["node", "tcp-tee-proxy.js"]
+    environment:
+      LISTEN_PORT: "5002"
+      PRIMARY_HOST: "traccar"
+      PRIMARY_PORT: "5002"
+      MIRROR_HOST: "tracker.baanooliot.com"
+      MIRROR_PORT: "8090"
+    volumes:
+      - ./traccar/tcp-tee-proxy.js:/app/tcp-tee-proxy.js:ro
+    ports:
+      - "5002:5002/tcp"
 
   traccar-nginx:
     image: nginx:1.27-alpine

@@ -31,11 +31,69 @@ services:
     ports:
       - "8082:8082"
       - "5001:5001/tcp"
-      - "5002:5002/tcp"
     volumes:
       - ./traccar/conf/traccar.xml:/opt/traccar/conf/traccar.xml:ro
       - ./traccar/logs:/opt/traccar/logs
       - ./traccar/data:/opt/traccar/data
+
+  tcp-tee-baanool:
+    image: node:20-alpine
+    container_name: sanroman-tcp-tee-baanool
+    restart: unless-stopped
+    depends_on:
+      - traccar
+    working_dir: /app
+    command: ["node", "tcp-tee-proxy.js"]
+    environment:
+      LISTEN_PORT: "5002"
+      PRIMARY_HOST: "traccar"
+      PRIMARY_PORT: "5002"
+      MIRROR_HOST: "tracker.baanooliot.com"
+      MIRROR_PORT: "8090"
+    volumes:
+      - ./traccar/tcp-tee-proxy.js:/app/tcp-tee-proxy.js:ro
+    ports:
+      - "5002:5002/tcp"
+EOF
+
+cat > traccar/tcp-tee-proxy.js <<'EOF'
+const net = require('net')
+
+const listenPort = Number(process.env.LISTEN_PORT || 5002)
+const primaryHost = process.env.PRIMARY_HOST || 'traccar'
+const primaryPort = Number(process.env.PRIMARY_PORT || 5002)
+const mirrorHost = process.env.MIRROR_HOST || 'tracker.baanooliot.com'
+const mirrorPort = Number(process.env.MIRROR_PORT || 8090)
+
+const server = net.createServer((client) => {
+  const primary = net.createConnection({ host: primaryHost, port: primaryPort })
+  const mirror = net.createConnection({ host: mirrorHost, port: mirrorPort })
+
+  const closeAll = () => {
+    client.destroy()
+    primary.destroy()
+    mirror.destroy()
+  }
+
+  client.on('data', (chunk) => {
+    if (!primary.destroyed) primary.write(chunk)
+    if (!mirror.destroyed) mirror.write(chunk)
+  })
+
+  primary.on('data', (chunk) => {
+    if (!client.destroyed) client.write(chunk)
+  })
+
+  primary.on('error', closeAll)
+  mirror.on('error', () => mirror.destroy())
+  client.on('error', closeAll)
+  client.on('close', closeAll)
+  primary.on('close', closeAll)
+})
+
+server.listen(listenPort, '0.0.0.0', () => {
+  console.log(`TCP tee escuchando ${listenPort}. Primario ${primaryHost}:${primaryPort}. Espejo ${mirrorHost}:${mirrorPort}`)
+})
 EOF
 
 cat > traccar/conf/traccar.xml <<'EOF'
@@ -56,7 +114,6 @@ cat > traccar/conf/traccar.xml <<'EOF'
     <entry key="forward.enable">true</entry>
     <entry key="forward.type">json</entry>
     <entry key="forward.url">https://transporte-san-roman-1.onrender.com/api/gps/positions?token=TU_GPS_WEBHOOK_TOKEN</entry>
-    <entry key="forward.link">tracker.baanooliot.com:8090</entry>
 </properties>
 EOF
 
@@ -72,7 +129,7 @@ Reemplazar `TU_GPS_WEBHOOK_TOKEN` por el valor real configurado en Render.
 
 ## SMS para el GPS actual
 
-Si funciono con puerto `5002`, dejar:
+Para duplicar hacia Traccar y Baanool, dejar el GPS apuntando al proxy en `5002`:
 
 ```text
 dns123456 104.251.219.40 5002
@@ -81,14 +138,7 @@ fix030s060m***n123456
 check123456
 ```
 
-Si funciono con puerto `5001`, dejar:
-
-```text
-dns123456 104.251.219.40 5001
-gprs123456
-fix030s060m***n123456
-check123456
-```
+El proxy reenvia el paquete crudo a Traccar interno `traccar:5002` y a `tracker.baanooliot.com:8090`.
 
 ## Variables en Render mientras la app siga alli
 

@@ -131,8 +131,16 @@ Configuracion principal:
 <entry key="gps103.port">5001</entry>
 <entry key="coban.port">5002</entry>
 <entry key="forward.url">https://transporte-san-roman-1.onrender.com/api/gps/positions?token=TU_GPS_WEBHOOK_TOKEN</entry>
-<entry key="forward.link">tracker.baanooliot.com:8090</entry>
 ```
+
+Para mantener Baanool en paralelo se usa un duplicador TCP delante de Traccar:
+
+```text
+GPS -> tcp-tee-baanool:5002 -> Traccar:5002
+                           -> tracker.baanooliot.com:8090
+```
+
+Esto reemplaza `forward.link`, porque en la prueba no mantuvo el vehiculo activo en Baanool.
 
 Los comandos completos estan en `VPS_TRACCAR_SETUP.md`.
 
@@ -156,19 +164,17 @@ Si aplicaste la migracion manual, no borres los archivos de `backend/prisma/migr
 
 ## Forward a Baanool oficial
 
-El archivo local donde se configura es:
+El metodo recomendado para Baanool es el duplicador TCP en `VPS_TRACCAR_SETUP.md`.
 
-```text
-traccar/conf/traccar.xml
-```
-
-La entrada actual es:
+El intento con `forward.link` fue:
 
 ```xml
 <entry key="forward.link">tracker.baanooliot.com:8090</entry>
 ```
 
-Despues de cambiar ese archivo, reinicia Traccar:
+Pero no mantuvo el vehiculo online en Baanool durante la prueba. Por eso el puerto publico `5002` debe quedar en el proxy, que clona el paquete crudo antes de entregarlo a Traccar.
+
+Despues de cambiar configuracion, reinicia:
 
 ```bash
 docker compose -f docker-compose.traccar.yml restart traccar
