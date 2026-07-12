@@ -47,19 +47,22 @@ const notificarAgendamiento = async (viaje) => {
     select: { whatsappChatId: true }
   })
   if (!chofer?.whatsappChatId) return
-  const paradas = viaje.paradas.map((parada, index) => {
+  const cargas = viaje.paradas.filter((parada) => parada.tipo === 'CARGA')
+  const paradas = cargas.map((parada, index) => {
     const hora = parada.fechaProgramada
       ? ` - ${new Date(parada.fechaProgramada).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Caracas' })}`
       : parada.cargarAlDescargar
         ? ' - AL DESCARGAR el viaje anterior'
         : ''
-    return `${index + 1}. ${parada.tipo}: ${parada.lugar}, ${parada.ciudad}${hora}`
+    return `${index + 1}. Carga: ${parada.lugar}, ${parada.ciudad}${hora}`
   })
+  if (paradas.length === 0) paradas.push('Carga: por confirmar')
 
   const mensaje = [
     `Nuevo viaje agendado: ${viaje.codigo}`,
     `Unidad: ${viaje.camion?.placa || 'Por confirmar'}`,
     '',
+    'Lugar de carga:',
     ...paradas,
     '',
     'Opciones de reporte:',
