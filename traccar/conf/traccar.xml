@@ -10,12 +10,15 @@
     <entry key="database.user">sa</entry>
     <entry key="database.password"></entry>
 
-    <!-- Puerto TCP que el GPS usara para enviar posiciones -->
-    <!-- Protocolo Coban/Baanool -->
+    <!-- Puertos TCP de protocolos GPS usados en pruebas -->
+    <entry key="gps103.port">5001</entry>
     <entry key="coban.port">5002</entry>
 
-    <!-- Reenvio de posiciones al backend en Render si controlas esta instancia local -->
+    <!-- Reenvio JSON al backend si controlas esta instancia -->
     <entry key="forward.enable">true</entry>
     <entry key="forward.type">json</entry>
     <entry key="forward.url">https://TU_BACKEND/api/gps/positions?token=TU_GPS_WEBHOOK_TOKEN</entry>
+
+    <!-- Reenvio del paquete original a la plataforma oficial Baanool -->
+    <entry key="forward.link">tracker.baanooliot.com:8090</entry>
 </properties>

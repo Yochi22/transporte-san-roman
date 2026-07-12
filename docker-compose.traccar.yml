@@ -7,9 +7,9 @@ services:
       - traccar_logs:/opt/traccar/logs
       - traccar_data:/opt/traccar/data
     ports:
+      - "5001:5001/tcp"
       - "5002:5002/tcp"
-    expose:
-      - "8082"
+      - "8082:8082"
 
   traccar-nginx:
     image: nginx:1.27-alpine

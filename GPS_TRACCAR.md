@@ -74,9 +74,9 @@ Backend:
 ```env
 GPS_WEBHOOK_TOKEN=un_token_largo_privado
 TRACCAR_SYNC_ENABLED=true
-TRACCAR_BASE_URL=https://demo4.traccar.org
-TRACCAR_EMAIL=tu_correo_de_traccar
-TRACCAR_PASSWORD=tu_clave_de_traccar
+TRACCAR_BASE_URL=http://104.251.219.40:8082
+TRACCAR_EMAIL=tu_correo_de_traccar_del_vps
+TRACCAR_PASSWORD=tu_clave_de_traccar_del_vps
 TRACCAR_SYNC_INTERVAL_SECONDS=30
 ```
 
@@ -116,6 +116,25 @@ TRACCAR_SYNC_INTERVAL_SECONDS=30
 El backend consultara `/api/devices` y `/api/positions` de Traccar cada 30 segundos y actualizara `truck_positions` en Supabase. El mapa del panel se actualiza por Supabase Realtime.
 
 Limitacion: el demo server de Traccar no garantiza disponibilidad ni historial. Sirve para demostraciones, no para operacion estable.
+
+## Traccar propio en VPS
+
+Para pruebas reales con reenvio a Baanool, usar el VPS:
+
+```text
+http://104.251.219.40:8082
+```
+
+Configuracion principal:
+
+```xml
+<entry key="gps103.port">5001</entry>
+<entry key="coban.port">5002</entry>
+<entry key="forward.url">https://transporte-san-roman-1.onrender.com/api/gps/positions?token=TU_GPS_WEBHOOK_TOKEN</entry>
+<entry key="forward.link">tracker.baanooliot.com:8090</entry>
+```
+
+Los comandos completos estan en `VPS_TRACCAR_SETUP.md`.
 
 ## Base de datos
 
