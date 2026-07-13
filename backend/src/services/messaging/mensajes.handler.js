@@ -1,22 +1,22 @@
 const prisma = require('../../config/database')
 const { parsearReporteChofer } = require('./ia.parser')
 const { normalizarTelefono } = require('../../utils/normalizarTelefono')
-const gastosService = require('../../modules/gastos/gastos.service')
 
 const COMANDOS = {
-  MENU: ['menu', 'menú', 'ayuda', 'help', '0'],
-  CARGANDO: ['1', 'cargando', 'cargue', 'cargué'],
-  EN_RUTA: ['2', 'en ruta', 'saliendo', 'sali', 'salí', 'viajando'],
-  DESCARGADO: ['3', 'descargando', 'descargue', 'descargué', 'descargado', 'entregue', 'entregué'],
-  ESPERANDO: ['4', 'esperando', 'espero', 'listo'],
-  PERNOCTA: ['5', 'pernocta', 'descansando', 'pare', 'paré'],
-  GASTO: ['6', 'gasto', 'gaste', 'gasté', 'pague', 'pagué'],
+  MENU: ['menu', 'ayuda', 'help', '0'],
+  CARGANDO: ['1', 'cargando', 'cargue'],
+  CARGA_LISTA: ['2', 'lista la carga', 'carga lista', 'listo la carga', 'listo cargado', 'ya cargue', 'cargado'],
+  DESCARGANDO: ['3', 'descargando'],
+  DESCARGA_LISTA: ['4', 'lista la descarga', 'descarga lista', 'listo la descarga', 'ya descargue', 'descargado', 'entregue'],
+  PERNOCTA: ['5', 'pernocta', 'descansando', 'pare'],
+  ESPERANDO: ['6', 'esperando', 'espero', 'listo', 'esperando instrucciones'],
 }
 
 const TEXTO_COMANDO = {
   CARGANDO: 'estoy cargando',
-  EN_RUTA: 'estoy en ruta',
-  DESCARGADO: 'ya descargue',
+  CARGA_LISTA: 'lista la carga',
+  DESCARGANDO: 'estoy descargando',
+  DESCARGA_LISTA: 'lista la descarga',
   ESPERANDO: 'estoy esperando instrucciones',
   PERNOCTA: 'estoy en pernocta',
 }
@@ -155,35 +155,6 @@ const procesarMensajeChofer = async ({ remoteJid, texto, socketIO, enviarMensaje
       return
     }
 
-    if (esComando(textoLower, COMANDOS.GASTO)) {
-      const gasto = parsearGasto(texto)
-      if (!gasto) {
-        await enviarInstruccionesGasto(remoteJid, enviarMensaje)
-        return
-      }
-
-      if (chofer.viajes.length > 1) {
-        reportesPendientes.set(remoteJid, {
-          tipoPendiente: 'GASTO',
-          gasto,
-          viajes: chofer.viajes.map((viaje) => viaje.id),
-          timestamp: Date.now(),
-        })
-        await enviarMensaje(remoteJid, construirPreguntaViaje(chofer.viajes))
-        return
-      }
-
-      await guardarGastoChofer({
-        remoteJid,
-        chofer,
-        viaje: chofer.viajes[0],
-        gasto,
-        socketIO,
-        enviarMensaje,
-      })
-      return
-    }
-
     const textoParaIa = textoSemantico(textoLower) || texto
 
     await procesarReporte({
@@ -236,7 +207,7 @@ const procesarReporte = async ({
   const paradaInferida = inferirParadaOperativa(resultado, viaje, textoOriginal)
   const paradaValida = viaje.paradas.find((p) => p.id === (resultado.paradaId || paradaInferida?.id))
   const paradaId = paradaValida ? paradaValida.id : null
-  const estadoParada = paradaId ? (resultado.estadoParada || paradaInferida?.estadoParada) : null
+  const estadoParada = paradaId ? (paradaInferida?.estadoParada || resultado.estadoParada) : null
   const ubicacion = normalizarUbicacionEspecial(resultado.tipo, resultado.ubicacion)
 
   const { reporte, viajesCompletados, viajesPendientesLiquidacion } = await prisma.$transaction(async (tx) => {
@@ -389,18 +360,6 @@ const confirmarReportePendiente = async ({ remoteJid, opcion, chofer, socketIO, 
     return
   }
 
-  if (pendiente.tipoPendiente === 'GASTO') {
-    await guardarGastoChofer({
-      remoteJid,
-      chofer,
-      viaje,
-      gasto: pendiente.gasto,
-      socketIO,
-      enviarMensaje,
-    })
-    return
-  }
-
   await procesarReporte({
     remoteJid,
     chofer,
@@ -412,39 +371,26 @@ const confirmarReportePendiente = async ({ remoteJid, opcion, chofer, socketIO, 
   })
 }
 
-const guardarGastoChofer = async ({ remoteJid, chofer, viaje, gasto, socketIO, enviarMensaje }) => {
-  const creado = await gastosService.crear(
-    {
-      viajeId: viaje.id,
-      tipo: gasto.tipo,
-      monto: gasto.monto,
-      descripcion: gasto.descripcion,
-    },
-    'CHOFER'
-  )
+const normalizarComando = (texto = '') =>
+  texto
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
 
-  reportesPendientes.delete(remoteJid)
-  await enviarMensaje(remoteJid, `Gasto registrado: ${gasto.tipo} $${gasto.monto}\nViaje: ${viaje.codigo}`)
-
-  if (socketIO) {
-    socketIO.emit('gasto:nuevo', {
-      gasto: creado,
-      chofer: { id: chofer.id, nombre: chofer.nombre },
-      viaje: { id: viaje.id, codigo: viaje.codigo },
-    })
-  }
+const esComando = (texto, lista) => {
+  const normalizado = normalizarComando(texto)
+  return lista.some((cmd) => normalizado === cmd || normalizado.startsWith(`${cmd} `))
 }
-
-const esComando = (texto, lista) => lista.some((cmd) => texto === cmd || texto.startsWith(cmd + ' '))
 
 const textoSemantico = (textoLower) => {
   if (esReporteSede(textoLower)) return 'estoy libre en sede Barquisimeto Transporte San Roman'
   if (esComando(textoLower, COMANDOS.CARGANDO)) return TEXTO_COMANDO.CARGANDO
-  if (esComando(textoLower, COMANDOS.EN_RUTA)) return TEXTO_COMANDO.EN_RUTA
-  if (textoLower === 'descargando' || textoLower.startsWith('descargando ')) return textoLower
-  if (esComando(textoLower, COMANDOS.DESCARGADO)) return TEXTO_COMANDO.DESCARGADO
-  if (esComando(textoLower, COMANDOS.ESPERANDO)) return TEXTO_COMANDO.ESPERANDO
+  if (esComando(textoLower, COMANDOS.CARGA_LISTA)) return TEXTO_COMANDO.CARGA_LISTA
+  if (esComando(textoLower, COMANDOS.DESCARGANDO)) return TEXTO_COMANDO.DESCARGANDO
+  if (esComando(textoLower, COMANDOS.DESCARGA_LISTA)) return TEXTO_COMANDO.DESCARGA_LISTA
   if (esComando(textoLower, COMANDOS.PERNOCTA)) return TEXTO_COMANDO.PERNOCTA
+  if (esComando(textoLower, COMANDOS.ESPERANDO)) return TEXTO_COMANDO.ESPERANDO
   return null
 }
 
@@ -461,37 +407,14 @@ const esReporteSede = (texto) => {
   )
 }
 
-const parsearGasto = (texto) => {
-  const partes = texto.trim().split(/\s+/)
-  if (partes.length < 3 || partes[0].toLowerCase() !== 'gasto') return null
-
-  const tipos = {
-    gasolina: 'COMBUSTIBLE',
-    combustible: 'COMBUSTIBLE',
-    peaje: 'PEAJE',
-    comida: 'COMIDA',
-    hospedaje: 'HOSPEDAJE',
-    hotel: 'HOSPEDAJE',
-    reparacion: 'REPARACION',
-    reparación: 'REPARACION',
-    otro: 'OTRO',
-  }
-  const tipo = tipos[partes[1].toLowerCase()]
-  const monto = Number(partes[2].replace(',', '.'))
-  if (!tipo || !Number.isFinite(monto) || monto <= 0) return null
-
-  return {
-    tipo,
-    monto,
-    descripcion: partes.slice(3).join(' ') || null,
-  }
-}
-
 const inferirParadaOperativa = (resultado, viaje, texto) => {
   const normalizado = texto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   if (resultado.tipo === 'CARGANDO') {
     const parada = viaje.paradas.find((p) => p.tipo === 'CARGA' && p.estado !== 'COMPLETADA')
-    return parada ? { ...parada, estadoParada: 'EN_CURSO' } : null
+    const estadoParada = /\b(lista la carga|carga lista|ya cargue|cargado|listo cargado)\b/.test(normalizado)
+      ? 'COMPLETADA'
+      : 'EN_CURSO'
+    return parada ? { ...parada, estadoParada } : null
   }
   if (resultado.tipo === 'DESCARGADO') {
     const parada = viaje.paradas.find((p) => p.tipo === 'DESCARGA' && p.estado !== 'COMPLETADA')
@@ -542,34 +465,16 @@ const enviarMenu = async (remoteJid, nombre, viajesActivos, enviarMensaje) => {
     '',
     'Reportes rapidos:',
     '1 - Cargando',
-    '2 - En ruta',
-    '3 - Descargado',
-    '4 - Esperando instrucciones',
+    '2 - Lista la carga',
+    '3 - Descargando',
+    '4 - Lista la descarga',
     '5 - En pernocta',
-    '6 - Registrar gasto',
+    '6 - Esperando instrucciones',
     '',
     'Tambien puedes escribir tu reporte libremente y lo procesamos automaticamente.',
   ].join('\n')
 
   await enviarMensaje(remoteJid, menu)
-}
-
-const enviarInstruccionesGasto = async (remoteJid, enviarMensaje) => {
-  const instrucciones = [
-    'Registrar gasto',
-    '',
-    'Escribe tu gasto asi:',
-    'gasto [tipo] [monto] [descripcion]',
-    '',
-    'Ejemplos:',
-    'gasto peaje 5 peaje autopista regional',
-    'gasto gasolina 50 llene en Valencia',
-    'gasto comida 10 almuerzo en Maracay',
-    '',
-    'Tipos validos: gasolina, peaje, comida, hospedaje, otro',
-  ].join('\n')
-
-  await enviarMensaje(remoteJid, instrucciones)
 }
 
 module.exports = { procesarMensajeChofer }

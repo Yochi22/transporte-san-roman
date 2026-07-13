@@ -116,8 +116,9 @@ Reglas de asociacion:
 
 Reglas de parada:
 - "estoy cargando en X" implica parada tipo CARGA en esa ciudad/lugar con estadoParada EN_CURSO.
+- "lista la carga" o "ya cargue" implica parada tipo CARGA con estadoParada COMPLETADA.
 - "estoy descargando en X" implica parada tipo DESCARGA en esa ciudad/lugar con estadoParada EN_CURSO.
-- "ya descargue en X" implica parada tipo DESCARGA en esa ciudad/lugar con estadoParada COMPLETADA.
+- "lista la descarga" o "ya descargue en X" implica parada tipo DESCARGA en esa ciudad/lugar con estadoParada COMPLETADA.
 - No inventes ids. paradaId debe existir en la lista o ser null.`
 
   try {
@@ -172,7 +173,7 @@ const inferirTipo = (texto) => {
   const regla = buscarReglaOperativa(t)
   if (regla) return regla.tipo
 
-  if (/\b(cargando|cargue|cargué|carga)\b/.test(t)) return 'CARGANDO'
+  if (/\b(cargando|cargue|carga|cargado)\b/.test(t) || t.includes('lista la carga') || t.includes('carga lista')) return 'CARGANDO'
   if (/\b(descargando|descargue|descargué|descargado|entregue|entregué|entregado)\b/.test(t)) return 'DESCARGADO'
   if (/\b(esperando|instrucciones|listo)\b/.test(t)) return 'ESPERANDO_INSTRUCCIONES'
   if (/\b(pernocta|descansando|posada|hotel|pare|paré)\b/.test(t)) return 'EN_PERNOCTA'
@@ -215,7 +216,10 @@ const inferirParadaFallback = (texto, viaje, tipo) => {
     const parada =
       buscarParadaPorTexto(viaje, t, 'CARGA') ||
       viaje.paradas.find((p) => p.tipo === 'CARGA' && p.estado === 'PENDIENTE')
-    return parada ? { ...parada, estadoParada: 'EN_CURSO' } : null
+    const estadoParada = regla?.estadoParada || (/\b(cargado|ya cargue)\b/.test(t) || t.includes('lista la carga') || t.includes('carga lista')
+      ? 'COMPLETADA'
+      : 'EN_CURSO')
+    return parada ? { ...parada, estadoParada } : null
   }
 
   if (tipo === 'DESCARGADO') {

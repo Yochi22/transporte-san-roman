@@ -4,6 +4,11 @@ const REGLAS_OPERATIVAS = [
     frases: ['montando carga', 'metiendo carga', 'en el cargadero', 'me estan cargando', 'agarrando carga'],
   },
   {
+    tipo: 'CARGANDO',
+    estadoParada: 'COMPLETADA',
+    frases: ['lista la carga', 'carga lista', 'ya cargue', 'quede cargado', 'listo cargado'],
+  },
+  {
     tipo: 'DESCARGADO',
     estadoParada: 'EN_CURSO',
     frases: ['bajando carga', 'sacando carga', 'me estan descargando', 'en descarga'],
@@ -11,7 +16,7 @@ const REGLAS_OPERATIVAS = [
   {
     tipo: 'DESCARGADO',
     estadoParada: 'COMPLETADA',
-    frases: ['quede vacio', 'quede vacío', 'ya quede vacio', 'termine descarga', 'solte la carga', 'entrega lista'],
+    frases: ['quede vacio', 'quede vacío', 'ya quede vacio', 'termine descarga', 'solte la carga', 'lista la descarga', 'descarga lista', 'entrega lista'],
   },
   {
     tipo: 'EN_RUTA',
