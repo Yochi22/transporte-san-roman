@@ -64,7 +64,6 @@ app.use('/api', (req, res, next) => {
   next()
 })
 app.use('/api/gps', gpsRoutes)
-app.use('/api', protegerCsrf)
 
 app.get('/health', (req, res) => {
   res.json({ ok: true, servicio: 'Transporte San Román API', version: '1.0.0' })
@@ -117,6 +116,7 @@ app.get('/whatsapp-qr', ...(demoPublicQr ? [] : [autenticar, soloAdmin]), (req, 
 })
 
 app.use('/api/auth', authRoutes)
+app.use('/api', protegerCsrf)
 app.use('/api/usuarios', usuariosRoutes)
 app.use('/api/choferes', choferesRoutes)
 app.use('/api/camiones', camionesRoutes)
