@@ -20,7 +20,7 @@ services:
     environment:
       LISTEN_PORT: "5002"
       PRIMARY_HOST: "traccar"
-      PRIMARY_PORT: "5002"
+      PRIMARY_PORT: "5001"
       MIRROR_HOST: "tracker.baanooliot.com"
       MIRROR_PORT: "8090"
       RESPONSE_SOURCE: "mirror"

@@ -47,7 +47,7 @@ services:
     environment:
       LISTEN_PORT: "5002"
       PRIMARY_HOST: "traccar"
-      PRIMARY_PORT: "5002"
+      PRIMARY_PORT: "5001"
       MIRROR_HOST: "tracker.baanooliot.com"
       MIRROR_PORT: "8090"
       RESPONSE_SOURCE: "mirror"
@@ -145,7 +145,7 @@ fix030s060m***n123456
 check123456
 ```
 
-El proxy reenvia el paquete crudo a Traccar interno `traccar:5002` y a `tracker.baanooliot.com:8090`. La respuesta hacia el GPS sale desde Baanool (`RESPONSE_SOURCE=mirror`) para que comandos como apagado/reinicio de motor puedan volver al equipo.
+El proxy reenvia el paquete crudo a Traccar interno `traccar:5001` y a `tracker.baanooliot.com:8090`. La respuesta hacia el GPS sale desde Baanool (`RESPONSE_SOURCE=mirror`) para que comandos como apagado/reinicio de motor puedan volver al equipo.
 
 ## Variables en Render mientras la app siga alli
 
