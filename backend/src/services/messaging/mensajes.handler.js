@@ -10,6 +10,7 @@ const COMANDOS = {
   DESCARGA_LISTA: ['4', 'lista la descarga', 'descarga lista', 'listo la descarga', 'ya descargue', 'descargado', 'entregue'],
   PERNOCTA: ['5', 'pernocta', 'descansando', 'pare'],
   ESPERANDO: ['6', 'esperando', 'espero', 'listo', 'esperando instrucciones'],
+  NOVEDAD: ['7', 'novedad', 'nov', 'incidencia', 'problema', 'retraso', 'falla'],
 }
 
 const TEXTO_COMANDO = {
@@ -19,6 +20,7 @@ const TEXTO_COMANDO = {
   DESCARGA_LISTA: 'lista la descarga',
   ESPERANDO: 'estoy esperando instrucciones',
   PERNOCTA: 'estoy en pernocta',
+  NOVEDAD: 'novedad operativa',
 }
 
 const reportesPendientes = new Map()
@@ -190,6 +192,11 @@ const procesarReporte = async ({
     resultado.ubicacion = 'Sede Barquisimeto'
     resultado.resumen = 'Chofer disponible en sede Barquisimeto'
   }
+  if (resultado.tipo === 'NOVEDAD') {
+    resultado.paradaId = null
+    resultado.estadoParada = null
+    resultado.resumen = resultado.resumen || 'Novedad operativa reportada'
+  }
   const viajeId = viajeForzadoId || resultado.viajeId
   const viaje = chofer.viajes.find((v) => v.id === viajeId)
 
@@ -342,6 +349,16 @@ const procesarReporte = async ({
       })
     }
 
+    if (resultado.tipo === 'NOVEDAD') {
+      socketIO.emit('operaciones:alerta', {
+        tipo: 'NOVEDAD_VIAJE',
+        mensaje: `Novedad de ${chofer.nombre} en ${viaje.codigo}: ${textoOriginal}`,
+        chofer: { id: chofer.id, nombre: chofer.nombre },
+        viaje: { id: viaje.id, codigo: viaje.codigo },
+        ubicacion,
+      })
+    }
+
     if (resultado.tipo === 'LIBRE') {
       socketIO.emit('operaciones:alerta', {
         tipo: 'CHOFER_LIBRE',
@@ -394,6 +411,7 @@ const textoSemantico = (textoLower) => {
   if (esComando(textoLower, COMANDOS.DESCARGA_LISTA)) return TEXTO_COMANDO.DESCARGA_LISTA
   if (esComando(textoLower, COMANDOS.PERNOCTA)) return TEXTO_COMANDO.PERNOCTA
   if (esComando(textoLower, COMANDOS.ESPERANDO)) return TEXTO_COMANDO.ESPERANDO
+  if (esComando(textoLower, COMANDOS.NOVEDAD)) return `novedad operativa: ${textoLower.replace(/^(7|novedad|nov|incidencia|problema|retraso|falla)\s*[:.-]?\s*/i, '') || 'sin detalle'}`
   return null
 }
 
@@ -495,7 +513,9 @@ const enviarMenu = async (remoteJid, nombre, viajesActivos, enviarMensaje) => {
     '4 - Lista la descarga',
     '5 - En pernocta',
     '6 - Esperando instrucciones',
+    '7 - Reportar novedad',
     '',
+    'Para novedades puedes escribir: 7 demora por cola en la entrada, o enviar una foto con descripcion.',
     'Tambien puedes escribir tu reporte libremente y lo procesamos automaticamente.',
   ].join('\n')
 

@@ -12,6 +12,7 @@ const TIPOS_REPORTE = new Set([
   'ESPERANDO_INSTRUCCIONES',
   'EN_PERNOCTA',
   'LIBRE',
+  'NOVEDAD',
   'OTRO',
 ])
 
@@ -99,7 +100,7 @@ ${serializarViajes(viajes)}
 Responde UNICAMENTE con un JSON valido, sin texto adicional, sin backticks, sin markdown:
 {
   "viajeId": "uuid del viaje al que pertenece este reporte, null si no se puede inferir con certeza",
-  "tipo": "CARGANDO|EN_RUTA|DESCARGADO|ESPERANDO_INSTRUCCIONES|EN_PERNOCTA|LIBRE|OTRO",
+  "tipo": "CARGANDO|EN_RUTA|DESCARGADO|ESPERANDO_INSTRUCCIONES|EN_PERNOCTA|LIBRE|NOVEDAD|OTRO",
   "ubicacion": "ciudad o lugar especifico, null si no se menciona",
   "resumen": "maximo 10 palabras de que reporto",
   "paradaId": "uuid de la parada que se esta completando o iniciando, null si no aplica",
@@ -173,6 +174,7 @@ const inferirTipo = (texto) => {
   const regla = buscarReglaOperativa(t)
   if (regla) return regla.tipo
 
+  if (/\b(novedad|incidencia|problema|retraso|demora|accidente|falla|averia|tranca|cola|foto)\b/.test(t)) return 'NOVEDAD'
   if (/\b(cargando|cargue|carga|cargado)\b/.test(t) || t.includes('lista la carga') || t.includes('carga lista')) return 'CARGANDO'
   if (/\b(descargando|descargue|descargué|descargado|entregue|entregué|entregado)\b/.test(t)) return 'DESCARGADO'
   if (/\b(esperando|instrucciones|listo)\b/.test(t)) return 'ESPERANDO_INSTRUCCIONES'

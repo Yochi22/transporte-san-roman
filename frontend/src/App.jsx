@@ -117,6 +117,7 @@ const reporteStyles = {
   ESPERANDO_INSTRUCCIONES: 'bg-amber-50 text-amber-700',
   EN_PERNOCTA: 'bg-indigo-50 text-indigo-700',
   LIBRE: 'bg-emerald-50 text-emerald-700',
+  NOVEDAD: 'bg-amber-100 text-amber-800',
   OTRO: 'bg-neutral-100 text-neutral-600',
 }
 
@@ -1528,6 +1529,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   const [gastoForm, setGastoForm] = useState({ tipo: 'PEAJE', monto: '', descripcion: '' })
   const [showGastoForm, setShowGastoForm] = useState(false)
   const [reportPage, setReportPage] = useState(1)
+  const [noveltyPage, setNoveltyPage] = useState(1)
   const [expensePage, setExpensePage] = useState(1)
   const [showLiquidarModal, setShowLiquidarModal] = useState(false)
   const [numeroGuia, setNumeroGuia] = useState(viaje.numeroGuia || '')
@@ -1536,7 +1538,10 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   const tramos = groupByTramo(viaje.paradas || [])
   const totalGastado = (viaje.gastos || []).reduce((total, gasto) => total + Number(gasto.monto), 0)
   const ultimaUbicacion = getCurrentLocationDetails(viaje)
-  useClampPage(reportPage, viaje.reportes?.length || 0, detailPageSize, setReportPage)
+  const novedades = (viaje.reportes || []).filter((reporte) => reporte.tipoReporte === 'NOVEDAD')
+  const reportesOperativos = (viaje.reportes || []).filter((reporte) => reporte.tipoReporte !== 'NOVEDAD')
+  useClampPage(reportPage, reportesOperativos.length, detailPageSize, setReportPage)
+  useClampPage(noveltyPage, novedades.length, detailPageSize, setNoveltyPage)
   useClampPage(expensePage, viaje.gastos?.length || 0, detailPageSize, setExpensePage)
 
   const recargar = async () => {
@@ -1720,12 +1725,19 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
 
           <section className={`grid gap-5 ${isAdmin ? 'xl:grid-cols-2' : ''}`}>
             {isAdmin && <div className="space-y-3">
-              <SectionTitle title="Reportes" subtitle={`${viaje.reportes?.length || 0} mensajes`} />
-              <div className="rounded-md border border-neutral-200">
-                {paginate(viaje.reportes || [], reportPage, detailPageSize).map((reporte) => <ReportRow key={reporte.id} reporte={reporte} />)}
-                {(viaje.reportes?.length || 0) === 0 && <Empty text="Sin reportes." />}
+              <SectionTitle title="Novedades" subtitle={`${novedades.length} registros`} />
+              <div className="rounded-md border border-amber-200 bg-amber-50/40">
+                {paginate(novedades, noveltyPage, detailPageSize).map((reporte) => <ReportRow key={reporte.id} reporte={reporte} />)}
+                {novedades.length === 0 && <Empty text="Sin novedades registradas." />}
               </div>
-              <Pagination page={reportPage} total={viaje.reportes?.length || 0} pageSize={detailPageSize} onChange={setReportPage} />
+              <Pagination page={noveltyPage} total={novedades.length} pageSize={detailPageSize} onChange={setNoveltyPage} />
+
+              <SectionTitle title="Reportes" subtitle={`${reportesOperativos.length} mensajes`} />
+              <div className="rounded-md border border-neutral-200">
+                {paginate(reportesOperativos, reportPage, detailPageSize).map((reporte) => <ReportRow key={reporte.id} reporte={reporte} />)}
+                {reportesOperativos.length === 0 && <Empty text="Sin reportes." />}
+              </div>
+              <Pagination page={reportPage} total={reportesOperativos.length} pageSize={detailPageSize} onChange={setReportPage} />
             </div>}
 
             <div className="space-y-3">
@@ -2209,6 +2221,7 @@ function labelReporte(tipo) {
     ESPERANDO_INSTRUCCIONES: 'Esperando',
     EN_PERNOCTA: 'Pernocta',
     EN_RUTA: 'En ruta',
+    NOVEDAD: 'Novedad',
   }
   return labels[tipo] || formatStatus(tipo)
 }
@@ -2240,7 +2253,7 @@ function labelMantenimiento(tipo) {
 
 function Pagination({ page, total, pageSize, onChange }) {
   const pages = Math.max(1, Math.ceil(total / pageSize))
-  if (total <= pageSize) return null
+  if (total === 0) return null
   const safePage = Math.min(Math.max(1, page), pages)
   const from = (safePage - 1) * pageSize + 1
   const to = Math.min(total, safePage * pageSize)

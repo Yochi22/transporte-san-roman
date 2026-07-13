@@ -108,6 +108,10 @@ const iniciarWhatsApp = async (io) => {
         contenido?.buttonsResponseMessage?.selectedDisplayText ||
         contenido?.listResponseMessage?.title ||
         null
+      if (contenido?.imageMessage) {
+        const caption = contenido.imageMessage.caption?.trim()
+        texto = caption ? `novedad con foto: ${caption}` : 'novedad con foto enviada por WhatsApp'
+      }
 
       const audioMsg = contenido?.audioMessage
 

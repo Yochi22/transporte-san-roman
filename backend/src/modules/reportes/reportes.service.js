@@ -13,7 +13,8 @@ const depurarReportesAntiguos = async (diasRetencion = 3) => {
 
   return prisma.reporteChofer.deleteMany({
     where: {
-      createdAt: { lte: limite }
+      createdAt: { lte: limite },
+      tipoReporte: { not: 'NOVEDAD' }
     }
   })
 }

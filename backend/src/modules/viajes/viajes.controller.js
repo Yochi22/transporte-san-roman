@@ -72,8 +72,9 @@ const notificarAgendamiento = async (viaje) => {
     '4 - Lista la descarga',
     '5 - En pernocta',
     '6 - Esperando instrucciones',
+    '7 - Reportar novedad',
     '',
-    'Tambien puedes escribir o enviar una nota de voz con tu reporte.'
+    'Tambien puedes escribir, enviar una nota de voz o una foto con descripcion.'
   ].join('\n')
 
   try {
