@@ -171,6 +171,7 @@ model ChoferUnidad {
   camion Camion @relation(fields: [camionId], references: [id])
 
   @@unique([choferId, camionId])
+  @@unique([camionId])
   @@index([camionId])
   @@map("choferes_unidades")
 }

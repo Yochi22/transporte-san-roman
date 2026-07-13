@@ -35,6 +35,16 @@ const camionPanelSelect = {
   estado: true,
   ubicacionActual: true,
   posicionGps: true,
+  choferesAsignados: {
+    select: {
+      chofer: {
+        select: {
+          id: true,
+          nombre: true
+        }
+      }
+    }
+  },
   motivoTaller: true,
   activo: true,
   createdAt: true,

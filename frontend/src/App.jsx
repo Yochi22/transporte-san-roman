@@ -860,6 +860,7 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
   const pageSize = 8
   const pageItems = paginate(items, page, pageSize)
   useClampPage(page, items.length, pageSize, setPage)
+  const assignedUnits = type === 'chofer' ? buildAssignedUnitsMap(items) : new Map()
 
   const submit = async (event) => {
     event.preventDefault()
@@ -883,8 +884,16 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
     }
   }
 
+  const crearNuevo = () => {
+    setEditingId(null)
+    setForm(emptyForm())
+    setError('')
+    setOpen(true)
+  }
+
   const editar = (item) => {
     setEditingId(item.id)
+    setError('')
     setForm(
       type === 'chofer'
         ? { nombre: item.nombre, cedula: item.cedula, telefono: item.telefono, unidadIds: (item.unidadesAsignadas || []).map((asignacion) => asignacion.camion?.id).filter(Boolean) }
@@ -896,6 +905,22 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
           }
     )
     setOpen(true)
+  }
+
+  const cerrarModal = () => {
+    setOpen(false)
+    setEditingId(null)
+    setForm(emptyForm())
+    setError('')
+  }
+
+  const toggleUnidad = (camionId) => {
+    setForm((current) => {
+      const selected = new Set(current.unidadIds || [])
+      if (selected.has(camionId)) selected.delete(camionId)
+      else selected.add(camionId)
+      return { ...current, unidadIds: Array.from(selected) }
+    })
   }
 
   const eliminar = async (item) => {
@@ -918,14 +943,14 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
       <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
         <SectionTitle title={title} subtitle={`${items.length} registros`} />
         {isAdmin && (
-          <button onClick={() => { setEditingId(null); setForm(emptyForm()); setOpen((value) => !value) }} className="btn-secondary">
+          <button onClick={crearNuevo} className="btn-secondary">
             <Plus size={16} />
             Nuevo
           </button>
         )}
       </div>
 
-      {open && (
+      {false && (
         <form onSubmit={submit} className="grid gap-3 border-b border-neutral-100 bg-neutral-50 px-4 py-4 md:grid-cols-3">
           {type === 'chofer' ? (
             <>
@@ -972,6 +997,9 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
               {type === 'chofer' && (
                 <p className="mt-1 truncate text-xs text-neutral-400">A cargo: {formatAssignedUnits(item)}</p>
               )}
+              {type === 'camion' && (
+                <p className="mt-1 truncate text-xs text-neutral-400">A cargo: {formatUnitDrivers(item)}</p>
+              )}
               <p className="mt-1 flex items-center gap-1 truncate text-xs text-neutral-400">
                 <MapPin size={12} />
                 {item.ubicacionActual || 'Sin ubicacion reportada'}
@@ -1001,7 +1029,120 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
       <div className="px-4 py-3">
         <Pagination page={page} total={items.length} pageSize={pageSize} onChange={setPage} />
       </div>
+
+      {open && (
+        <ResourceModal
+          title={type === 'chofer' ? (editingId ? 'Editar chofer' : 'Nuevo chofer') : (editingId ? 'Editar unidad' : 'Nueva unidad')}
+          type={type}
+          form={form}
+          setForm={setForm}
+          error={error}
+          editingId={editingId}
+          camiones={camiones}
+          assignedUnits={assignedUnits}
+          onSubmit={submit}
+          onClose={cerrarModal}
+          onToggleUnidad={toggleUnidad}
+        />
+      )}
     </section>
+  )
+}
+
+function ResourceModal({ title, type, form, setForm, error, editingId, camiones, assignedUnits, onSubmit, onClose, onToggleUnidad }) {
+  return (
+    <div className="fixed inset-0 z-50 grid min-h-[100svh] place-items-center bg-neutral-950/40 p-4">
+      <form onSubmit={onSubmit} className="max-h-[92svh] w-full max-w-2xl overflow-y-auto rounded-md border border-neutral-200 bg-white shadow-xl">
+        <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-4">
+          <SectionTitle title={title} subtitle={type === 'chofer' ? 'Datos y unidades a cargo' : 'Datos de la unidad'} />
+          <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="grid gap-4 p-5 md:grid-cols-3">
+          {type === 'chofer' ? (
+            <>
+              <Field label="Nombre">
+                <input required value={form.nombre} onChange={(event) => setForm({ ...form, nombre: event.target.value })} className="input" placeholder="Nombre" />
+              </Field>
+              <Field label="Cedula">
+                <input required value={form.cedula} onChange={(event) => setForm({ ...form, cedula: event.target.value })} className="input" placeholder="Cedula" />
+              </Field>
+              <Field label="Telefono">
+                <input required value={form.telefono} onChange={(event) => setForm({ ...form, telefono: event.target.value })} className="input" placeholder="Telefono" />
+              </Field>
+              <div className="md:col-span-3">
+                <Field label="Unidades asignadas">
+                  <div className="max-h-72 overflow-y-auto rounded-md border border-neutral-200 bg-white">
+                    {camiones.map((camion) => {
+                      const owner = assignedUnits.get(camion.id)
+                      const assignedToOther = owner && owner.choferId !== editingId
+                      const checked = (form.unidadIds || []).includes(camion.id)
+                      return (
+                        <label key={camion.id} className={`flex items-start gap-3 border-b border-neutral-100 px-3 py-3 last:border-b-0 ${assignedToOther ? 'bg-neutral-50 text-neutral-400' : 'hover:bg-neutral-50'}`}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={assignedToOther}
+                            onChange={() => onToggleUnidad(camion.id)}
+                            className="mt-1 h-4 w-4 accent-neutral-950"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-semibold text-neutral-900">{vehicleLabel(camion)}</span>
+                            <span className="block truncate text-xs text-neutral-500">
+                              {assignedToOther ? `Asignada a ${owner.nombre}. Primero liberala para reasignarla.` : formatStatus(camion.estadoCalculado || camion.estado)}
+                            </span>
+                          </span>
+                        </label>
+                      )
+                    })}
+                    {camiones.length === 0 && <Empty text="No hay unidades registradas." />}
+                  </div>
+                </Field>
+              </div>
+            </>
+          ) : (
+            <>
+              <Field label="Tipo de vehiculo">
+                <select value={form.tipoVehiculo} onChange={(event) => setForm({ ...form, tipoVehiculo: event.target.value })} className="input">
+                  <option value="NPR">NPR</option>
+                  <option value="TORONTO">Toronto</option>
+                  <option value="FURGON">Furgon</option>
+                  <option value="CHUTO">Chuto</option>
+                  <option value="CORTINERO">Cortinero</option>
+                  <option value="BATEA">Batea</option>
+                </select>
+              </Field>
+              <div className="md:col-span-2">
+                <Field label="Placa">
+                  <input required value={form.placa} onChange={(event) => setForm({ ...form, placa: event.target.value })} className="input" placeholder="Placa" />
+                </Field>
+              </div>
+              <div className="md:col-span-3">
+                <Field label="Marca / modelo">
+                  <input value={form.marcaModelo} onChange={(event) => setForm({ ...form, marcaModelo: event.target.value })} className="input" placeholder="Opcional" />
+                </Field>
+              </div>
+              <div className="md:col-span-3">
+                <Field label="IMEI GPS">
+                  <input value={form.gpsImei} onChange={(event) => setForm({ ...form, gpsImei: event.target.value })} className="input" placeholder="Opcional" />
+                </Field>
+              </div>
+            </>
+          )}
+          {error && <p className="text-sm text-red-600 md:col-span-3">{error}</p>}
+        </div>
+
+        <div className="flex flex-col-reverse gap-2 border-t border-neutral-100 px-5 py-4 sm:flex-row sm:justify-end">
+          <button type="button" onClick={onClose} className="btn-secondary justify-center">Cancelar</button>
+          <button className="btn-primary justify-center">
+            <Check size={16} />
+            {editingId ? 'Actualizar' : 'Guardar'}
+          </button>
+        </div>
+      </form>
+    </div>
   )
 }
 
@@ -2009,6 +2150,23 @@ function vehicleLabel(camion) {
 function formatAssignedUnits(chofer) {
   const unidades = (chofer.unidadesAsignadas || []).map((asignacion) => vehicleLabel(asignacion.camion)).filter(Boolean)
   return unidades.length > 0 ? unidades.join(' / ') : 'Sin unidades asignadas'
+}
+
+function buildAssignedUnitsMap(choferes) {
+  const map = new Map()
+  choferes.forEach((chofer) => {
+    ;(chofer.unidadesAsignadas || []).forEach((asignacion) => {
+      if (asignacion.camion?.id) {
+        map.set(asignacion.camion.id, { choferId: chofer.id, nombre: chofer.nombre })
+      }
+    })
+  })
+  return map
+}
+
+function formatUnitDrivers(camion) {
+  const choferes = (camion.choferesAsignados || []).map((asignacion) => asignacion.chofer?.nombre).filter(Boolean)
+  return choferes.length > 0 ? choferes.join(' / ') : 'Sin chofer asignado'
 }
 
 function groupByTramo(paradas) {

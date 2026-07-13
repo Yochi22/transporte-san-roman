@@ -90,6 +90,22 @@ const guardarAsignaciones = async (tx, choferId, unidadIds) => {
   if (unidadesActivas.length !== unidadIds.length) {
     throw { status: 400, message: 'Una o mas unidades asignadas no existen o no estan activas' }
   }
+  const asignacionesExistentes = await tx.choferUnidad.findMany({
+    where: {
+      camionId: { in: unidadIds },
+      choferId: { not: choferId }
+    },
+    select: {
+      camion: { select: { placa: true } },
+      chofer: { select: { nombre: true } }
+    }
+  })
+  if (asignacionesExistentes.length > 0) {
+    const detalle = asignacionesExistentes
+      .map((asignacion) => `${asignacion.camion.placa} esta asignada a ${asignacion.chofer.nombre}`)
+      .join(', ')
+    throw { status: 409, message: `Primero libera la unidad: ${detalle}` }
+  }
   await tx.choferUnidad.createMany({
     data: unidadIds.map((camionId) => ({ choferId, camionId })),
     skipDuplicates: true
