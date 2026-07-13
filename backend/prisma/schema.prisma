@@ -23,6 +23,9 @@ enum TipoVehiculo {
   NPR
   TORONTO
   FURGON
+  CHUTO
+  CORTINERO
+  BATEA
 }
 
 enum EstadoChofer {
@@ -115,45 +118,61 @@ model Usuario {
 }
 
 model Chofer {
-  id              String          @id @default(uuid())
-  nombre          String
-  cedula          String          @unique
-  telefono        String          @unique
-  whatsappChatId  String?         @unique @map("whatsapp_chat_id")
-  estado          EstadoChofer    @default(DISPONIBLE)
-  ubicacionActual String?         @default("Sede") @map("ubicacion_actual")
-  ultimoReporteAt DateTime?       @map("ultimo_reporte_at")
-  activo          Boolean         @default(true)
-  createdAt       DateTime        @default(now()) @map("created_at")
-  updatedAt       DateTime        @updatedAt @map("updated_at")
-  viajes          Viaje[]
-  reportes        ReporteChofer[]
-  gastos          Gasto[]
+  id                String          @id @default(uuid())
+  nombre            String
+  cedula            String          @unique
+  telefono          String          @unique
+  whatsappChatId    String?         @unique @map("whatsapp_chat_id")
+  estado            EstadoChofer    @default(DISPONIBLE)
+  ubicacionActual   String?         @default("Sede") @map("ubicacion_actual")
+  ultimoReporteAt   DateTime?       @map("ultimo_reporte_at")
+  activo            Boolean         @default(true)
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  viajes            Viaje[]
+  reportes          ReporteChofer[]
+  gastos            Gasto[]
+  unidadesAsignadas ChoferUnidad[]
 
   @@index([estado, activo])
   @@map("choferes")
 }
 
 model Camion {
-  id              String                  @id @default(uuid())
-  placa           String                  @unique
-  gpsImei         String?                 @unique @map("gps_imei")
-  tipoVehiculo    TipoVehiculo            @default(NPR) @map("tipo_vehiculo")
-  placaFurgon     String?                 @unique @map("placa_furgon")
-  placaChuto      String?                 @unique @map("placa_chuto")
-  marcaModelo     String                  @map("marca_modelo")
-  estado          EstadoCamion            @default(DISPONIBLE)
-  ubicacionActual String?                 @default("Sede") @map("ubicacion_actual")
-  motivoTaller    String?                 @map("motivo_taller")
-  activo          Boolean                 @default(true)
-  createdAt       DateTime                @default(now()) @map("created_at")
-  updatedAt       DateTime                @updatedAt @map("updated_at")
-  viajes          Viaje[]
-  mantenimientos  MantenimientoVehiculo[]
-  posicionGps     TruckPosition?
+  id                String                  @id @default(uuid())
+  placa             String                  @unique
+  gpsImei           String?                 @unique @map("gps_imei")
+  tipoVehiculo      TipoVehiculo            @default(NPR) @map("tipo_vehiculo")
+  placaFurgon       String?                 @unique @map("placa_furgon")
+  placaChuto        String?                 @unique @map("placa_chuto")
+  marcaModelo       String                  @map("marca_modelo")
+  estado            EstadoCamion            @default(DISPONIBLE)
+  ubicacionActual   String?                 @default("Sede") @map("ubicacion_actual")
+  motivoTaller      String?                 @map("motivo_taller")
+  activo            Boolean                 @default(true)
+  createdAt         DateTime                @default(now()) @map("created_at")
+  updatedAt         DateTime                @updatedAt @map("updated_at")
+  viajes            Viaje[]
+  mantenimientos    MantenimientoVehiculo[]
+  posicionGps       TruckPosition?
+  choferesAsignados ChoferUnidad[]
 
   @@index([estado, activo])
   @@map("camiones")
+}
+
+model ChoferUnidad {
+  id        String   @id @default(uuid())
+  choferId  String   @map("chofer_id")
+  camionId  String   @map("camion_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  chofer Chofer @relation(fields: [choferId], references: [id])
+  camion Camion @relation(fields: [camionId], references: [id])
+
+  @@unique([choferId, camionId])
+  @@index([camionId])
+  @@map("choferes_unidades")
 }
 
 model TruckPosition {
@@ -206,6 +225,10 @@ model Viaje {
   viaticosDepositados   Decimal          @default(0) @map("viaticos_depositados")
   viaticosGastados      Decimal          @default(0) @map("viaticos_gastados")
   honorariosChofer      Decimal          @default(0) @map("honorarios_chofer")
+  odometroInicial       Int?             @map("odometro_inicial")
+  odometroFinal         Int?             @map("odometro_final")
+  combustibleInicial    Decimal?         @map("combustible_inicial")
+  combustibleFinal      Decimal?         @map("combustible_final")
   fechaLiquidacion      DateTime?        @map("fecha_liquidacion")
   observaciones         String?
   fechaInicio           DateTime?        @map("fecha_inicio")

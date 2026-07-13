@@ -23,6 +23,11 @@ const validarDatos = (datos, parcial = false) => {
   return { nombre, cedula, telefono }
 }
 
+const normalizarUnidadIds = (datos) => {
+  const ids = Array.isArray(datos.unidadIds) ? datos.unidadIds : []
+  return [...new Set(ids.filter((id) => typeof id === 'string' && id.trim()).map((id) => id.trim()))]
+}
+
 const listar = async () => {
   return prisma.chofer.findMany({
     where: { activo: true },
@@ -41,28 +46,53 @@ const obtener = async (id) => {
 
 const crear = async (datos) => {
   const { nombre, cedula, telefono } = validarDatos(datos)
-  return prisma.chofer.create({
-    data: { nombre, cedula, telefono: normalizarTelefono(telefono) },
-    select: choferPanelSelect
+  const unidadIds = normalizarUnidadIds(datos)
+  return prisma.$transaction(async (tx) => {
+    const chofer = await tx.chofer.create({
+      data: { nombre, cedula, telefono: normalizarTelefono(telefono) },
+      select: { id: true }
+    })
+    await guardarAsignaciones(tx, chofer.id, unidadIds)
+    return tx.chofer.findUniqueOrThrow({ where: { id: chofer.id }, select: choferPanelSelect })
   })
 }
 
 const actualizar = async (id, datos) => {
   const { nombre, cedula, telefono } = validarDatos(datos, true)
+  const unidadIds = normalizarUnidadIds(datos)
   const actual = await prisma.chofer.findUniqueOrThrow({
     where: { id },
     select: { telefono: true }
   })
   const telefonoNormalizado = telefono ? normalizarTelefono(telefono) : undefined
-  return prisma.chofer.update({
-    where: { id },
-    data: {
-      nombre,
-      cedula,
-      telefono: telefonoNormalizado,
-      whatsappChatId: telefonoNormalizado && telefonoNormalizado !== actual.telefono ? null : undefined
-    },
-    select: choferPanelSelect
+  return prisma.$transaction(async (tx) => {
+    await tx.chofer.update({
+      where: { id },
+      data: {
+        nombre,
+        cedula,
+        telefono: telefonoNormalizado,
+        whatsappChatId: telefonoNormalizado && telefonoNormalizado !== actual.telefono ? null : undefined
+      }
+    })
+    await guardarAsignaciones(tx, id, unidadIds)
+    return tx.chofer.findUniqueOrThrow({ where: { id }, select: choferPanelSelect })
+  })
+}
+
+const guardarAsignaciones = async (tx, choferId, unidadIds) => {
+  await tx.choferUnidad.deleteMany({ where: { choferId } })
+  if (unidadIds.length === 0) return
+  const unidadesActivas = await tx.camion.findMany({
+    where: { id: { in: unidadIds }, activo: true },
+    select: { id: true }
+  })
+  if (unidadesActivas.length !== unidadIds.length) {
+    throw { status: 400, message: 'Una o mas unidades asignadas no existen o no estan activas' }
+  }
+  await tx.choferUnidad.createMany({
+    data: unidadIds.map((camionId) => ({ choferId, camionId })),
+    skipDuplicates: true
   })
 }
 

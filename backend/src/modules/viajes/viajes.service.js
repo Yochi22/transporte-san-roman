@@ -18,6 +18,15 @@ const validarMonto = (valor, campo) => {
   return numero
 }
 
+const validarNumeroOpcional = (valor, campo, { entero = false } = {}) => {
+  if (valor === undefined || valor === null || valor === '') return null
+  const numero = Number(valor)
+  if (!Number.isFinite(numero) || numero < 0 || numero > 10_000_000) {
+    throw { status: 400, message: `${campo} invalido` }
+  }
+  return entero ? Math.round(numero) : numero
+}
+
 const validarParadas = (paradas) => {
   if (!Array.isArray(paradas) || paradas.length < 2 || paradas.length > 50) {
     throw { status: 400, message: 'El viaje debe tener entre 2 y 50 paradas' }
@@ -122,6 +131,8 @@ const crear = async (datos, creadoPorId) => {
   }
   const paradas = validarParadas(datos.paradas)
   const viaticosDepositados = validarMonto(datos.viaticosDepositados, 'Monto de viaticos')
+  const odometroInicial = validarNumeroOpcional(datos.odometroInicial, 'Odometro inicial', { entero: true })
+  const combustibleInicial = validarNumeroOpcional(datos.combustibleInicial, 'Combustible inicial')
   const [camion, chofer] = await Promise.all([
     prisma.camion.findUniqueOrThrow({ where: { id: camionId } }),
     prisma.chofer.findUniqueOrThrow({ where: { id: choferId } })
@@ -166,6 +177,8 @@ const crear = async (datos, creadoPorId) => {
       choferId,
       creadoPorId,
       viaticosDepositados,
+      odometroInicial,
+      combustibleInicial,
       estadoLogistico: 'EN_CURSO',
       fechaInicio: primeraCarga ? new Date(primeraCarga.fechaProgramada) : null,
       paradas: {
@@ -302,7 +315,7 @@ const actualizarHonorarios = async (id, honorariosChofer) => {
   })
 }
 
-const cerrar = async (id, soloLogistica = false, numeroGuia = null) => {
+const cerrar = async (id, soloLogistica = false, numeroGuia = null, control = {}) => {
   if (numeroGuia !== null && (typeof numeroGuia !== 'string' || numeroGuia.trim().length > 100)) {
     throw { status: 400, message: 'Numero de guia invalido' }
   }
@@ -319,6 +332,8 @@ const cerrar = async (id, soloLogistica = false, numeroGuia = null) => {
 
   const totalGastado = viaje.gastos.reduce((acc, g) => acc + Number(g.monto), 0)
   const guia = numeroGuia?.trim() || viaje.numeroGuia
+  const odometroFinal = validarNumeroOpcional(control.odometroFinal, 'Odometro final', { entero: true })
+  const combustibleFinal = validarNumeroOpcional(control.combustibleFinal, 'Combustible final')
 
   return prisma.$transaction(async (tx) => {
     await tx.parada.updateMany({
@@ -334,7 +349,9 @@ const cerrar = async (id, soloLogistica = false, numeroGuia = null) => {
         viaticosGastados: totalGastado,
         estadoFinanciero: soloLogistica ? 'PENDIENTE' : 'LIQUIDADO',
         fechaLiquidacion: soloLogistica ? null : new Date(),
-        fechaCierre: new Date()
+        fechaCierre: new Date(),
+        odometroFinal: odometroFinal ?? viaje.odometroFinal,
+        combustibleFinal: combustibleFinal ?? viaje.combustibleFinal
       }
     })
 

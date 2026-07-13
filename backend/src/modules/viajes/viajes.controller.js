@@ -100,12 +100,12 @@ const confirmarDocumentacion = async (req, res) => {
 }
 
 const cerrar = async (req, res) => {
-  const { numeroGuia } = req.body
+  const { numeroGuia, odometroFinal, combustibleFinal } = req.body
   const soloLogistica = req.body.soloLogistica === true
   if (!soloLogistica && req.usuario.rol !== 'ADMIN') {
     return error(res, 'Solo un administrador puede liquidar viajes', 403)
   }
-  const viaje = await service.cerrar(req.params.id, soloLogistica, numeroGuia)
+  const viaje = await service.cerrar(req.params.id, soloLogistica, numeroGuia, { odometroFinal, combustibleFinal })
   const mensaje = soloLogistica ? 'Viaje completado logísticamente' : 'Viaje cerrado y liquidado completamente'
   return ok(res, filtrarFinanzas(viaje, req.usuario.rol), mensaje)
 }

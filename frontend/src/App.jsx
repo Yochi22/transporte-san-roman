@@ -685,7 +685,7 @@ function TripCard({ viaje, onSelect }) {
 }
 
 function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
-  const [form, setForm] = useState({ choferId: '', camionId: '', viaticosDepositados: '' })
+  const [form, setForm] = useState({ choferId: '', camionId: '', viaticosDepositados: '', odometroInicial: '', combustibleInicial: '' })
   const [paradas, setParadas] = useState([
     { id: createClientId(), tipo: 'CARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
     { id: createClientId(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
@@ -718,6 +718,8 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
         camionId: form.camionId,
         choferId: form.choferId,
         viaticosDepositados: Number(form.viaticosDepositados) || 0,
+        odometroInicial: form.odometroInicial || null,
+        combustibleInicial: form.combustibleInicial || null,
         paradas: paradas.map(({ tipo, lugar, ciudad, fechaProgramada, programacion }) => ({
           tipo,
           lugar,
@@ -726,7 +728,7 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
           cargarAlDescargar: tipo === 'CARGA' && programacion === 'AL_DESCARGAR',
         })),
       })
-      setForm({ choferId: '', camionId: '', viaticosDepositados: '' })
+      setForm({ choferId: '', camionId: '', viaticosDepositados: '', odometroInicial: '', combustibleInicial: '' })
       setParadas([
         { id: createClientId(), tipo: 'CARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
         { id: createClientId(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
@@ -770,6 +772,12 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
           </Field>
           <Field label="Viaticos (opcional)">
             <input type="number" min="0" step="0.01" value={form.viaticosDepositados} onChange={(event) => setForm({ ...form, viaticosDepositados: event.target.value })} className="input" placeholder="Sin viaticos" />
+          </Field>
+          <Field label="Km inicial (opcional)">
+            <input type="number" min="0" step="1" value={form.odometroInicial} onChange={(event) => setForm({ ...form, odometroInicial: event.target.value })} className="input" placeholder="Odometro" />
+          </Field>
+          <Field label="Combustible inicial (opcional)">
+            <input type="number" min="0" step="0.01" value={form.combustibleInicial} onChange={(event) => setForm({ ...form, combustibleInicial: event.target.value })} className="input" placeholder="Litros o nivel" />
           </Field>
         </div>
       </section>
@@ -829,17 +837,17 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
 function RecursosView({ data, isAdmin, onDone }) {
   return (
     <div className="grid gap-5 xl:grid-cols-2">
-      <ResourcePanel title="Choferes" items={data.choferesOperativos} type="chofer" isAdmin={isAdmin} onDone={onDone} />
+      <ResourcePanel title="Choferes" items={data.choferesOperativos} type="chofer" isAdmin={isAdmin} onDone={onDone} camiones={data.camionesOperativos} />
       <ResourcePanel title="Camiones" items={data.camionesOperativos} type="camion" isAdmin={isAdmin} onDone={onDone} />
     </div>
   )
 }
 
-function ResourcePanel({ title, items, type, isAdmin, onDone }) {
+function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
   const [open, setOpen] = useState(false)
   const emptyForm = () => type === 'chofer'
-    ? { nombre: '', cedula: '', telefono: '' }
-    : { tipoVehiculo: 'NPR', placa: '', placaFurgon: '', placaChuto: '', marcaModelo: '', gpsImei: '' }
+    ? { nombre: '', cedula: '', telefono: '', unidadIds: [] }
+    : { tipoVehiculo: 'NPR', placa: '', marcaModelo: '', gpsImei: '' }
   const [form, setForm] = useState(emptyForm)
   const [error, setError] = useState('')
   const [editingId, setEditingId] = useState(null)
@@ -873,12 +881,10 @@ function ResourcePanel({ title, items, type, isAdmin, onDone }) {
     setEditingId(item.id)
     setForm(
       type === 'chofer'
-        ? { nombre: item.nombre, cedula: item.cedula, telefono: item.telefono }
+        ? { nombre: item.nombre, cedula: item.cedula, telefono: item.telefono, unidadIds: (item.unidadesAsignadas || []).map((asignacion) => asignacion.camion?.id).filter(Boolean) }
         : {
             tipoVehiculo: item.tipoVehiculo || 'NPR',
             placa: item.placa,
-            placaFurgon: item.placaFurgon || '',
-            placaChuto: item.placaChuto || '',
             marcaModelo: item.marcaModelo,
             gpsImei: item.gpsImei || '',
           }
@@ -920,6 +926,9 @@ function ResourcePanel({ title, items, type, isAdmin, onDone }) {
               <input required value={form.nombre} onChange={(event) => setForm({ ...form, nombre: event.target.value })} className="input" placeholder="Nombre" />
               <input required value={form.cedula} onChange={(event) => setForm({ ...form, cedula: event.target.value })} className="input" placeholder="Cedula" />
               <input required value={form.telefono} onChange={(event) => setForm({ ...form, telefono: event.target.value })} className="input" placeholder="Telefono" />
+              <select multiple value={form.unidadIds} onChange={(event) => setForm({ ...form, unidadIds: Array.from(event.target.selectedOptions).map((option) => option.value) })} className="input md:col-span-3 min-h-28">
+                {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)} · {formatStatus(camion.estadoCalculado)}</option>)}
+              </select>
             </>
           ) : (
             <>
@@ -927,15 +936,11 @@ function ResourcePanel({ title, items, type, isAdmin, onDone }) {
                 <option value="NPR">NPR</option>
                 <option value="TORONTO">Toronto</option>
                 <option value="FURGON">Furgon</option>
+                <option value="CHUTO">Chuto</option>
+                <option value="CORTINERO">Cortinero</option>
+                <option value="BATEA">Batea</option>
               </select>
-              {form.tipoVehiculo === 'FURGON' ? (
-                <>
-                  <input required value={form.placaFurgon} onChange={(event) => setForm({ ...form, placaFurgon: event.target.value })} className="input" placeholder="Placa del furgon" />
-                  <input required value={form.placaChuto} onChange={(event) => setForm({ ...form, placaChuto: event.target.value })} className="input" placeholder="Placa del chuto" />
-                </>
-              ) : (
-                <input required value={form.placa} onChange={(event) => setForm({ ...form, placa: event.target.value })} className="input md:col-span-2" placeholder="Placa" />
-              )}
+              <input required value={form.placa} onChange={(event) => setForm({ ...form, placa: event.target.value })} className="input md:col-span-2" placeholder="Placa" />
               <input value={form.marcaModelo} onChange={(event) => setForm({ ...form, marcaModelo: event.target.value })} className="input md:col-span-3" placeholder="Marca / modelo (opcional)" />
               <input value={form.gpsImei} onChange={(event) => setForm({ ...form, gpsImei: event.target.value })} className="input md:col-span-3" placeholder="IMEI GPS Baanool / Coban (opcional)" />
             </>
@@ -956,10 +961,11 @@ function ResourcePanel({ title, items, type, isAdmin, onDone }) {
               <p className="truncate text-xs text-neutral-500">
                 {type === 'chofer'
                   ? item.telefono
-                  : item.tipoVehiculo === 'FURGON'
-                    ? `Furgon ${item.placaFurgon} · Chuto ${item.placaChuto}`
-                    : `${item.tipoVehiculo || 'NPR'} · ${item.marcaModelo}`}
+                  : `${formatStatus(item.tipoVehiculo || 'NPR')} - ${item.marcaModelo || item.placa}`}
               </p>
+              {type === 'chofer' && (
+                <p className="mt-1 truncate text-xs text-neutral-400">A cargo: {formatAssignedUnits(item)}</p>
+              )}
               <p className="mt-1 flex items-center gap-1 truncate text-xs text-neutral-400">
                 <MapPin size={12} />
                 {item.ubicacionActual || 'Sin ubicacion reportada'}
@@ -1376,6 +1382,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   const [expensePage, setExpensePage] = useState(1)
   const [showLiquidarModal, setShowLiquidarModal] = useState(false)
   const [numeroGuia, setNumeroGuia] = useState(viaje.numeroGuia || '')
+  const [cierreForm, setCierreForm] = useState({ odometroFinal: viaje.odometroFinal || '', combustibleFinal: viaje.combustibleFinal || '' })
   const detailPageSize = 8
   const tramos = groupByTramo(viaje.paradas || [])
   const totalGastado = (viaje.gastos || []).reduce((total, gasto) => total + Number(gasto.monto), 0)
@@ -1399,7 +1406,12 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   const ejecutarCierre = async (soloLogistica, guia = viaje.numeroGuia) => {
     setSaving(soloLogistica ? 'cerrar' : 'liquidar')
     try {
-      const response = await api.post(`/viajes/${viaje.id}/cerrar`, { soloLogistica, numeroGuia: guia?.trim() || null })
+      const response = await api.post(`/viajes/${viaje.id}/cerrar`, {
+        soloLogistica,
+        numeroGuia: guia?.trim() || null,
+        odometroFinal: cierreForm.odometroFinal || null,
+        combustibleFinal: cierreForm.combustibleFinal || null,
+      })
       const actualizado = response.data?.data
       if (!soloLogistica && actualizado?.estadoFinanciero !== 'LIQUIDADO') {
         throw new Error('El viaje no cambio a estado liquidado.')
@@ -1549,6 +1561,9 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
               <Fact icon={Wallet} label="Viaticos depositados" value={money(viaje.viaticosDepositados)} />
               <Fact icon={Banknote} label="Gastos acumulados" value={money(totalGastado)} />
               <Fact icon={Check} label="Disponible" value={money(balance(viaje))} />
+              <Fact icon={Truck} label="Km inicial" value={viaje.odometroInicial ?? 'Sin registro'} />
+              <Fact icon={Truck} label="Km final" value={viaje.odometroFinal ?? 'Sin registro'} />
+              <Fact icon={Wallet} label="Combustible" value={`${viaje.combustibleInicial ?? 'S/R'} -> ${viaje.combustibleFinal ?? 'S/R'}`} />
             </section>
           )}
 
@@ -1655,6 +1670,30 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
                 placeholder="Ej. GUIA-2026-001"
               />
             </Field>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Field label="Km final (opcional)">
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  value={cierreForm.odometroFinal}
+                  onChange={(event) => setCierreForm({ ...cierreForm, odometroFinal: event.target.value })}
+                  className="input"
+                  placeholder="Odometro final"
+                />
+              </Field>
+              <Field label="Combustible final (opcional)">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={cierreForm.combustibleFinal}
+                  onChange={(event) => setCierreForm({ ...cierreForm, combustibleFinal: event.target.value })}
+                  className="input"
+                  placeholder="Litros o nivel"
+                />
+              </Field>
+            </div>
             <div className="mt-5 grid gap-2 sm:grid-cols-2">
               <button onClick={() => ejecutarCierre(false, numeroGuia)} disabled={Boolean(saving)} className="btn-primary">
                 <Check size={16} />
@@ -1954,8 +1993,12 @@ function formatRoute(viaje) {
 }
 
 function vehicleLabel(camion) {
-  if (camion.tipoVehiculo === 'FURGON') return `Furgon ${camion.placaFurgon} / Chuto ${camion.placaChuto}`
-  return `${camion.tipoVehiculo || 'NPR'} ${camion.placa}`
+  return `${formatStatus(camion.tipoVehiculo || 'NPR')} ${camion.placa || ''}`.trim()
+}
+
+function formatAssignedUnits(chofer) {
+  const unidades = (chofer.unidadesAsignadas || []).map((asignacion) => vehicleLabel(asignacion.camion)).filter(Boolean)
+  return unidades.length > 0 ? unidades.join(' / ') : 'Sin unidades asignadas'
 }
 
 function groupByTramo(paradas) {

@@ -32,27 +32,23 @@ const actualizar = async (id, datos) => {
 
 const normalizarDatosCamion = (datos) => {
   const tipoVehiculo = datos.tipoVehiculo || 'NPR'
-  if (!['NPR', 'TORONTO', 'FURGON'].includes(tipoVehiculo)) {
+  if (!['NPR', 'TORONTO', 'FURGON', 'CHUTO', 'CORTINERO', 'BATEA'].includes(tipoVehiculo)) {
     throw { status: 400, message: 'Tipo de vehiculo invalido' }
   }
-  const placaFurgon = tipoVehiculo === 'FURGON' ? datos.placaFurgon?.trim().toUpperCase() : null
-  const placaChuto = tipoVehiculo === 'FURGON' ? datos.placaChuto?.trim().toUpperCase() : null
-  const placa = tipoVehiculo === 'FURGON' ? placaChuto : datos.placa?.trim().toUpperCase()
+  const placaFurgon = null
+  const placaChuto = null
+  const placa = datos.placa?.trim().toUpperCase()
   const marcaModelo = datos.marcaModelo?.trim() || tipoVehiculo
   const gpsImei = datos.gpsImei?.trim() || null
 
   if (!placa) throw { status: 400, message: 'La placa es requerida' }
-  if (placa.length > 20 || placaFurgon?.length > 20 || placaChuto?.length > 20) {
+  if (placa.length > 20) {
     throw { status: 400, message: 'La placa es invalida' }
   }
   if (marcaModelo.length > 100) throw { status: 400, message: 'Marca o modelo invalido' }
   if (gpsImei && !/^\d{10,20}$/.test(gpsImei)) {
     throw { status: 400, message: 'IMEI GPS invalido' }
   }
-  if (tipoVehiculo === 'FURGON' && (!placaFurgon || !placaChuto)) {
-    throw { status: 400, message: 'El furgon requiere placa del furgon y placa del chuto' }
-  }
-
   return {
     tipoVehiculo,
     placa,

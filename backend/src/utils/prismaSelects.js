@@ -7,6 +7,19 @@ const choferPanelSelect = {
   ubicacionActual: true,
   ultimoReporteAt: true,
   activo: true,
+  unidadesAsignadas: {
+    select: {
+      camion: {
+        select: {
+          id: true,
+          placa: true,
+          tipoVehiculo: true,
+          marcaModelo: true,
+          estado: true
+        }
+      }
+    }
+  },
   createdAt: true,
   updatedAt: true
 }
