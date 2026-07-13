@@ -392,6 +392,8 @@ function Monitor({ data, alertas, onSelect }) {
   const reportPageSize = 6
   const activeTrips = paginate(data.activos, tripPage, tripPageSize)
   const latestReports = paginate(data.reportes, reportPage, reportPageSize)
+  useClampPage(tripPage, data.activos.length, tripPageSize, setTripPage)
+  useClampPage(reportPage, data.reportes.length, reportPageSize, setReportPage)
 
   return (
     <div className="space-y-5">
@@ -467,6 +469,7 @@ function PendientesLiquidacion({ onSelect }) {
   const [page, setPage] = useState(1)
   const [data, setData] = useState({ items: [], total: 0, pageSize: 10 })
   const [loading, setLoading] = useState(false)
+  useClampPage(page, data.total, data.pageSize, setPage)
 
   useEffect(() => {
     let active = true
@@ -526,6 +529,7 @@ function ArchivoLogistico({ onSelect }) {
   const [page, setPage] = useState(1)
   const [archivo, setArchivo] = useState({ items: [], total: 0, pageSize: 10 })
   const [loading, setLoading] = useState(false)
+  useClampPage(page, archivo.total, archivo.pageSize, setPage)
 
   useEffect(() => {
     let active = true
@@ -613,6 +617,7 @@ function TripList({ title, viajes, onSelect }) {
   const [page, setPage] = useState(1)
   const pageSize = 8
   const pageItems = paginate(viajes, page, pageSize)
+  useClampPage(page, viajes.length, pageSize, setPage)
 
   return (
     <section className="space-y-3">
@@ -854,6 +859,7 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
   const [page, setPage] = useState(1)
   const pageSize = 8
   const pageItems = paginate(items, page, pageSize)
+  useClampPage(page, items.length, pageSize, setPage)
 
   const submit = async (event) => {
     event.preventDefault()
@@ -1018,6 +1024,7 @@ function TallerView({ camiones, onDone }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
+  useClampPage(page, data.total, data.pageSize, setPage)
 
   useEffect(() => {
     let active = true
@@ -1218,6 +1225,7 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
   const totalHonorarios = filtrados.reduce((total, viaje) => total + Number(viaje.honorariosChofer || 0), 0)
   const totalGastos = filtrados.reduce((total, viaje) => total + Number(viaje.viaticosGastados || 0), 0)
   const totalDepositado = filtrados.reduce((total, viaje) => total + Number(viaje.viaticosDepositados || 0), 0)
+  useClampPage(page, filtrados.length, pageSize, setPage)
 
   const editarHonorarios = async (viaje) => {
     const result = await requestNumber(`Honorarios para ${viaje.chofer?.nombre}`, Number(viaje.honorariosChofer || 0))
@@ -1387,6 +1395,8 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   const tramos = groupByTramo(viaje.paradas || [])
   const totalGastado = (viaje.gastos || []).reduce((total, gasto) => total + Number(gasto.monto), 0)
   const ultimaUbicacion = getCurrentLocationDetails(viaje)
+  useClampPage(reportPage, viaje.reportes?.length || 0, detailPageSize, setReportPage)
+  useClampPage(expensePage, viaje.gastos?.length || 0, detailPageSize, setExpensePage)
 
   const recargar = async () => {
     const result = await requestNumber('Recargar viaticos')
@@ -2073,16 +2083,29 @@ function labelMantenimiento(tipo) {
 function Pagination({ page, total, pageSize, onChange }) {
   const pages = Math.max(1, Math.ceil(total / pageSize))
   if (total <= pageSize) return null
+  const safePage = Math.min(Math.max(1, page), pages)
+  const from = (safePage - 1) * pageSize + 1
+  const to = Math.min(total, safePage * pageSize)
 
   return (
-    <div className="flex items-center justify-between gap-3 text-xs text-neutral-500">
-      <span>Pagina {page} de {pages}</span>
-      <div className="flex gap-2">
-        <button disabled={page <= 1} onClick={() => onChange(page - 1)} className="btn-secondary h-8 px-3">Anterior</button>
-        <button disabled={page >= pages} onClick={() => onChange(page + 1)} className="btn-secondary h-8 px-3">Siguiente</button>
+    <div className="flex flex-col gap-3 text-xs text-neutral-500 sm:flex-row sm:items-center sm:justify-between">
+      <span>Mostrando {from}-{to} de {total} registros · Pagina {safePage} de {pages}</span>
+      <div className="flex flex-wrap gap-2">
+        <button disabled={safePage <= 1} onClick={() => onChange(1)} className="btn-secondary h-8 px-3">Primera</button>
+        <button disabled={safePage <= 1} onClick={() => onChange(safePage - 1)} className="btn-secondary h-8 px-3">Anterior</button>
+        <button disabled={safePage >= pages} onClick={() => onChange(safePage + 1)} className="btn-secondary h-8 px-3">Siguiente</button>
+        <button disabled={safePage >= pages} onClick={() => onChange(pages)} className="btn-secondary h-8 px-3">Ultima</button>
       </div>
     </div>
   )
+}
+
+function useClampPage(page, total, pageSize, setPage) {
+  useEffect(() => {
+    const pages = Math.max(1, Math.ceil(total / pageSize))
+    if (page > pages) setPage(pages)
+    if (page < 1) setPage(1)
+  }, [page, total, pageSize, setPage])
 }
 
 function paginate(items, page, pageSize) {
