@@ -36,6 +36,12 @@ import {
 
 const socket = io(SOCKET_URL, { autoConnect: false, withCredentials: true })
 
+const createClientId = () => {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
+  const randomPart = Math.random().toString(36).slice(2)
+  return `tmp-${Date.now().toString(36)}-${randomPart}`
+}
+
 const alertOptions = {
   customClass: {
     popup: 'sanroman-alert',
@@ -215,14 +221,14 @@ export default function App() {
       playAlertSound()
       setAlertas((prev) => [{
         ...payload,
-        id: crypto.randomUUID(),
+        id: createClientId(),
         at: new Date(),
         mensaje: payload?.mensaje || `Nuevo reporte de ${payload?.chofer?.nombre || 'chofer'}`,
       }, ...prev].slice(0, 8))
       refresh()
     }
     const pushAlerta = (alerta) => {
-      setAlertas((prev) => [{ ...alerta, id: crypto.randomUUID(), at: new Date() }, ...prev].slice(0, 5))
+      setAlertas((prev) => [{ ...alerta, id: createClientId(), at: new Date() }, ...prev].slice(0, 5))
       refresh()
     }
 
@@ -681,8 +687,8 @@ function TripCard({ viaje, onSelect }) {
 function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
   const [form, setForm] = useState({ choferId: '', camionId: '', viaticosDepositados: '' })
   const [paradas, setParadas] = useState([
-    { id: crypto.randomUUID(), tipo: 'CARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
-    { id: crypto.randomUUID(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
+    { id: createClientId(), tipo: 'CARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
+    { id: createClientId(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
   ])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -695,7 +701,7 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
   }
 
   const addParada = () => {
-    setParadas((prev) => [...prev, { id: crypto.randomUUID(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' }])
+    setParadas((prev) => [...prev, { id: createClientId(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' }])
   }
 
   const removeParada = (id) => {
@@ -722,8 +728,8 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
       })
       setForm({ choferId: '', camionId: '', viaticosDepositados: '' })
       setParadas([
-        { id: crypto.randomUUID(), tipo: 'CARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
-        { id: crypto.randomUUID(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
+        { id: createClientId(), tipo: 'CARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
+        { id: createClientId(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
       ])
       await notifySuccess(viajeExistente ? 'Tramo agregado' : 'Viaje agendado', 'El chofer recibira el detalle por WhatsApp.')
       onDone()
