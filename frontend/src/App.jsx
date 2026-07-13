@@ -1373,7 +1373,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   const detailPageSize = 8
   const tramos = groupByTramo(viaje.paradas || [])
   const totalGastado = (viaje.gastos || []).reduce((total, gasto) => total + Number(gasto.monto), 0)
-  const ultimaUbicacion = viaje.chofer?.ubicacionActual || viaje.reportes?.find((reporte) => reporte.ubicacion)?.ubicacion || 'Sin ubicacion'
+  const ultimaUbicacion = getCurrentLocation(viaje)
 
   const recargar = async () => {
     const result = await requestNumber('Recargar viaticos')
@@ -1832,6 +1832,8 @@ function buildOperationalData({ viajes, choferes, camiones, query }) {
       viaje.camion?.placa,
       viaje.camion?.placaFurgon,
       viaje.camion?.placaChuto,
+      viaje.camion?.ubicacionActual,
+      formatGpsLocation(viaje.camion?.posicionGps),
       formatRoute(viaje),
       ...(viaje.reportes || []).map((reporte) => reporte.mensajeOriginal),
     ]
@@ -1859,6 +1861,7 @@ function buildOperationalData({ viajes, choferes, camiones, query }) {
     ...camion,
     estadoCalculado: camion.estado,
     ubicacionActual:
+      formatGpsLocation(camion.posicionGps) ||
       activos.find((viaje) => viaje.camionId === camion.id)?.chofer?.ubicacionActual ||
       camion.ubicacionActual,
   })).filter((camion) =>
@@ -1889,6 +1892,21 @@ function buildOperationalData({ viajes, choferes, camiones, query }) {
       .flatMap((viaje) => (viaje.reportes || []).map((reporte) => ({ ...reporte, viaje })))
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
   }
+}
+
+function getCurrentLocation(viaje) {
+  return (
+    formatGpsLocation(viaje.camion?.posicionGps) ||
+    viaje.camion?.ubicacionActual ||
+    viaje.chofer?.ubicacionActual ||
+    viaje.reportes?.find((reporte) => reporte.ubicacion)?.ubicacion ||
+    'Sin ubicacion'
+  )
+}
+
+function formatGpsLocation(position) {
+  if (position?.latitude === undefined || position?.latitude === null || position?.longitude === undefined || position?.longitude === null) return ''
+  return `${Number(position.latitude).toFixed(6)}, ${Number(position.longitude).toFixed(6)}`
 }
 
 function getProgress(viaje) {

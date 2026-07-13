@@ -99,59 +99,60 @@ enum EstadoMotor {
 }
 
 model Usuario {
-  id           String   @id @default(uuid())
-  nombre       String
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  rol          Rol      @default(OPERACIONES)
-  activo       Boolean  @default(true)
-  sessionVersion Int    @default(0) @map("session_version")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id             String   @id @default(uuid())
+  nombre         String
+  email          String   @unique
+  passwordHash   String   @map("password_hash")
+  rol            Rol      @default(OPERACIONES)
+  activo         Boolean  @default(true)
+  sessionVersion Int      @default(0) @map("session_version")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
-  viajesCreados Viaje[]  @relation("ViajeCreador")
-
+  viajesCreados Viaje[] @relation("ViajeCreador")
 
   @@map("usuarios")
 }
 
 model Chofer {
-  id               String       @id @default(uuid())
-  nombre           String
-  cedula           String       @unique
-  telefono         String       @unique
-  whatsappChatId   String?      @unique @map("whatsapp_chat_id")
-  estado           EstadoChofer @default(DISPONIBLE)
-  ubicacionActual  String?      @default("Sede") @map("ubicacion_actual")
-  ultimoReporteAt  DateTime?    @map("ultimo_reporte_at")
-  activo           Boolean      @default(true)
-  createdAt        DateTime     @default(now()) @map("created_at")
-  updatedAt        DateTime     @updatedAt @map("updated_at")
-  viajes           Viaje[]
-  reportes         ReporteChofer[]
-  gastos           Gasto[]
+  id              String          @id @default(uuid())
+  nombre          String
+  cedula          String          @unique
+  telefono        String          @unique
+  whatsappChatId  String?         @unique @map("whatsapp_chat_id")
+  estado          EstadoChofer    @default(DISPONIBLE)
+  ubicacionActual String?         @default("Sede") @map("ubicacion_actual")
+  ultimoReporteAt DateTime?       @map("ultimo_reporte_at")
+  activo          Boolean         @default(true)
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  viajes          Viaje[]
+  reportes        ReporteChofer[]
+  gastos          Gasto[]
 
+  @@index([estado, activo])
   @@map("choferes")
 }
 
 model Camion {
-  id               String      @id @default(uuid())
-  placa            String      @unique
-  gpsImei          String?     @unique @map("gps_imei")
-  tipoVehiculo     TipoVehiculo @default(NPR) @map("tipo_vehiculo")
-  placaFurgon      String?      @unique @map("placa_furgon")
-  placaChuto       String?      @unique @map("placa_chuto")
-  marcaModelo      String      @map("marca_modelo")
-  estado           EstadoCamion @default(DISPONIBLE)
-  ubicacionActual  String?      @default("Sede") @map("ubicacion_actual")
-  motivoTaller     String?     @map("motivo_taller")
-  activo           Boolean     @default(true)
-  createdAt        DateTime    @default(now()) @map("created_at")
-  updatedAt        DateTime    @updatedAt @map("updated_at")
-  viajes           Viaje[]
-  mantenimientos   MantenimientoVehiculo[]
-  posicionGps      TruckPosition?
+  id              String                  @id @default(uuid())
+  placa           String                  @unique
+  gpsImei         String?                 @unique @map("gps_imei")
+  tipoVehiculo    TipoVehiculo            @default(NPR) @map("tipo_vehiculo")
+  placaFurgon     String?                 @unique @map("placa_furgon")
+  placaChuto      String?                 @unique @map("placa_chuto")
+  marcaModelo     String                  @map("marca_modelo")
+  estado          EstadoCamion            @default(DISPONIBLE)
+  ubicacionActual String?                 @default("Sede") @map("ubicacion_actual")
+  motivoTaller    String?                 @map("motivo_taller")
+  activo          Boolean                 @default(true)
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+  viajes          Viaje[]
+  mantenimientos  MantenimientoVehiculo[]
+  posicionGps     TruckPosition?
 
+  @@index([estado, activo])
   @@map("camiones")
 }
 
@@ -167,47 +168,50 @@ model TruckPosition {
 
   camion Camion @relation(fields: [truckId], references: [id])
 
+  @@index([updatedAt])
   @@map("truck_positions")
 }
 
 model MantenimientoVehiculo {
-  id                String              @id @default(uuid())
-  camionId          String              @map("camion_id")
-  tipo              TipoMantenimiento
-  estado            EstadoMantenimiento @default(EN_PROCESO)
-  falla             String
-  descripcion       String?
-  kilometraje       Int?
-  costo             Decimal             @default(0)
-  fechaIngreso      DateTime            @default(now()) @map("fecha_ingreso")
-  fechaSalida       DateTime?           @map("fecha_salida")
-  createdAt         DateTime            @default(now()) @map("created_at")
-  updatedAt         DateTime            @updatedAt @map("updated_at")
+  id           String              @id @default(uuid())
+  camionId     String              @map("camion_id")
+  tipo         TipoMantenimiento
+  estado       EstadoMantenimiento @default(EN_PROCESO)
+  falla        String
+  descripcion  String?
+  kilometraje  Int?
+  costo        Decimal             @default(0)
+  fechaIngreso DateTime            @default(now()) @map("fecha_ingreso")
+  fechaSalida  DateTime?           @map("fecha_salida")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
 
   camion Camion @relation(fields: [camionId], references: [id])
 
+  @@index([camionId, fechaIngreso])
+  @@index([estado])
   @@map("mantenimientos_vehiculos")
 }
 
 model Viaje {
-  id                   String           @id @default(uuid())
-  codigo               String           @unique
-  camionId             String           @map("camion_id")
-  choferId             String           @map("chofer_id")
-  creadoPorId          String           @map("creado_por_id")
-  estadoLogistico      EstadoLogistico  @default(PENDIENTE) @map("estado_logistico")
-  estadoFinanciero     EstadoFinanciero @default(PENDIENTE) @map("estado_financiero")
-  documentacionRecibida Boolean         @default(false) @map("documentacion_recibida")
-  numeroGuia            String?         @unique @map("numero_guia")
-  viaticosDepositados  Decimal          @default(0) @map("viaticos_depositados")
-  viaticosGastados     Decimal          @default(0) @map("viaticos_gastados")
-  honorariosChofer     Decimal          @default(0) @map("honorarios_chofer")
-  fechaLiquidacion     DateTime?        @map("fecha_liquidacion")
-  observaciones        String?
-  fechaInicio          DateTime?        @map("fecha_inicio")
-  fechaCierre          DateTime?        @map("fecha_cierre")
-  createdAt            DateTime         @default(now()) @map("created_at")
-  updatedAt            DateTime         @updatedAt @map("updated_at")
+  id                    String           @id @default(uuid())
+  codigo                String           @unique
+  camionId              String           @map("camion_id")
+  choferId              String           @map("chofer_id")
+  creadoPorId           String           @map("creado_por_id")
+  estadoLogistico       EstadoLogistico  @default(PENDIENTE) @map("estado_logistico")
+  estadoFinanciero      EstadoFinanciero @default(PENDIENTE) @map("estado_financiero")
+  documentacionRecibida Boolean          @default(false) @map("documentacion_recibida")
+  numeroGuia            String?          @unique @map("numero_guia")
+  viaticosDepositados   Decimal          @default(0) @map("viaticos_depositados")
+  viaticosGastados      Decimal          @default(0) @map("viaticos_gastados")
+  honorariosChofer      Decimal          @default(0) @map("honorarios_chofer")
+  fechaLiquidacion      DateTime?        @map("fecha_liquidacion")
+  observaciones         String?
+  fechaInicio           DateTime?        @map("fecha_inicio")
+  fechaCierre           DateTime?        @map("fecha_cierre")
+  createdAt             DateTime         @default(now()) @map("created_at")
+  updatedAt             DateTime         @updatedAt @map("updated_at")
 
   camion    Camion          @relation(fields: [camionId], references: [id])
   chofer    Chofer          @relation(fields: [choferId], references: [id])
@@ -216,28 +220,34 @@ model Viaje {
   reportes  ReporteChofer[]
   gastos    Gasto[]
 
+  @@index([estadoLogistico, estadoFinanciero])
+  @@index([camionId, estadoLogistico])
+  @@index([choferId, estadoLogistico])
+  @@index([createdAt])
   @@map("viajes")
 }
 
 model Parada {
-  id               String       @id @default(uuid())
-  viajeId          String       @map("viaje_id")
-  orden            Int
-  tramo            Int          @default(1)
-  tipo             TipoParada
-  lugar            String
-  ciudad           String
-  descripcionCarga String?      @map("descripcion_carga")
-  fechaProgramada  DateTime?    @map("fecha_programada")
-  cargarAlDescargar Boolean     @default(false) @map("cargar_al_descargar")
-  estado           EstadoParada @default(PENDIENTE)
-  comprobanteUrl   String?      @map("comprobante_url")
-  completadaAt     DateTime?    @map("completada_at")
-  createdAt        DateTime     @default(now()) @map("created_at")
+  id                String       @id @default(uuid())
+  viajeId           String       @map("viaje_id")
+  orden             Int
+  tramo             Int          @default(1)
+  tipo              TipoParada
+  lugar             String
+  ciudad            String
+  descripcionCarga  String?      @map("descripcion_carga")
+  fechaProgramada   DateTime?    @map("fecha_programada")
+  cargarAlDescargar Boolean      @default(false) @map("cargar_al_descargar")
+  estado            EstadoParada @default(PENDIENTE)
+  comprobanteUrl    String?      @map("comprobante_url")
+  completadaAt      DateTime?    @map("completada_at")
+  createdAt         DateTime     @default(now()) @map("created_at")
 
-  viaje Viaje @relation(fields: [viajeId], references: [id])
+  viaje    Viaje           @relation(fields: [viajeId], references: [id])
   reportes ReporteChofer[]
 
+  @@index([viajeId, orden])
+  @@index([estado])
   @@map("paradas")
 }
 
@@ -252,26 +262,31 @@ model ReporteChofer {
   procesadoPorIa  String?     @map("procesado_por_ia")
   createdAt       DateTime    @default(now()) @map("created_at")
 
-  viaje  Viaje  @relation(fields: [viajeId], references: [id])
-  chofer Chofer @relation(fields: [choferId], references: [id])
+  viaje  Viaje   @relation(fields: [viajeId], references: [id])
+  chofer Chofer  @relation(fields: [choferId], references: [id])
   parada Parada? @relation(fields: [paradaId], references: [id], onDelete: SetNull)
 
+  @@index([createdAt])
+  @@index([viajeId, createdAt])
+  @@index([choferId, createdAt])
   @@map("reportes_chofer")
 }
 
 model Gasto {
-  id             String    @id @default(uuid())
-  viajeId        String    @map("viaje_id")
-  choferId       String    @map("chofer_id")
+  id             String      @id @default(uuid())
+  viajeId        String      @map("viaje_id")
+  choferId       String      @map("chofer_id")
   tipo           TipoGasto
   origen         OrigenGasto @default(ADMIN)
   monto          Decimal
   descripcion    String?
-  comprobanteUrl String?   @map("comprobante_url")
-  createdAt      DateTime  @default(now()) @map("created_at")
+  comprobanteUrl String?     @map("comprobante_url")
+  createdAt      DateTime    @default(now()) @map("created_at")
 
   viaje  Viaje  @relation(fields: [viajeId], references: [id])
   chofer Chofer @relation(fields: [choferId], references: [id])
 
+  @@index([viajeId, createdAt])
+  @@index([choferId, createdAt])
   @@map("gastos")
 }

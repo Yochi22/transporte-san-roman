@@ -6,7 +6,7 @@ const { Server } = require('socket.io')
 const app = require('./app')
 const { crearUsuarioInicial } = require('./modules/auth/auth.service')
 const { iniciarWhatsApp } = require('./services/messaging/whatsapp')
-const { depurarReportesCerrados } = require('./modules/reportes/reportes.service')
+const { depurarReportesAntiguos } = require('./modules/reportes/reportes.service')
 const { iniciarSincronizacionTraccar } = require('./modules/gps/traccar-sync.service')
 const { verificarToken } = require('./config/jwt')
 const prisma = require('./config/database')
@@ -22,12 +22,12 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
   : [...new Set([...configuredOrigins, 'http://localhost:5173', 'http://127.0.0.1:5173'])]
 
 const server = http.createServer(app)
-const DIAS_RETENCION_REPORTES = Math.max(1, Number(process.env.DIAS_RETENCION_REPORTES) || 7)
+const DIAS_RETENCION_REPORTES = Math.max(1, Number(process.env.DIAS_RETENCION_REPORTES) || 3)
 const INTERVALO_DEPURACION = 24 * 60 * 60 * 1000
 
 const ejecutarDepuracionReportes = async () => {
   try {
-    const resultado = await depurarReportesCerrados(DIAS_RETENCION_REPORTES)
+    const resultado = await depurarReportesAntiguos(DIAS_RETENCION_REPORTES)
     if (resultado.count > 0) console.log(`Reportes antiguos eliminados: ${resultado.count}`)
   } catch (error) {
     console.error('No se pudieron depurar los reportes antiguos:', error.message)

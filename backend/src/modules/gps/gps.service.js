@@ -68,30 +68,48 @@ const registrarPosicionPorImei = async (data) => {
 
   if (!camion) throw { status: 404, message: 'No existe camion activo asociado a ese IMEI GPS' }
 
-  const position = await prisma.truckPosition.upsert({
-    where: { truckId: camion.id },
-    update: {
-      latitude: data.latitude,
-      longitude: data.longitude,
-      speed: data.speed,
-      engineStatus: data.engineStatus,
-      updatedAt: new Date()
-    },
-    create: {
-      truckId: camion.id,
-      latitude: data.latitude,
-      longitude: data.longitude,
-      speed: data.speed,
-      engineStatus: data.engineStatus
-    }
-  })
+  const ubicacionActual = `${data.latitude.toFixed(6)}, ${data.longitude.toFixed(6)}`
 
-  await prisma.camion.update({
-    where: { id: camion.id },
-    data: { ubicacionActual: `${data.latitude.toFixed(6)}, ${data.longitude.toFixed(6)}` }
-  })
+  const [position, viajesActivos] = await prisma.$transaction([
+    prisma.truckPosition.upsert({
+      where: { truckId: camion.id },
+      update: {
+        latitude: data.latitude,
+        longitude: data.longitude,
+        speed: data.speed,
+        engineStatus: data.engineStatus,
+        updatedAt: new Date()
+      },
+      create: {
+        truckId: camion.id,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        speed: data.speed,
+        engineStatus: data.engineStatus
+      }
+    }),
+    prisma.viaje.findMany({
+      where: { camionId: camion.id, estadoLogistico: 'EN_CURSO' },
+      select: { choferId: true }
+    }),
+    prisma.camion.update({
+      where: { id: camion.id },
+      data: { ubicacionActual }
+    })
+  ])
 
-  return { camion, position }
+  const choferIds = [...new Set(viajesActivos.map((viaje) => viaje.choferId).filter(Boolean))]
+  if (choferIds.length > 0) {
+    await prisma.chofer.updateMany({
+      where: { id: { in: choferIds } },
+      data: { ubicacionActual }
+    })
+  }
+
+  return {
+    camion: { ...camion, ubicacionActual },
+    position
+  }
 }
 
 const registrarPosicion = async (body) => registrarPosicionPorImei(extraerPayloadTraccar(body))

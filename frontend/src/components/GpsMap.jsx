@@ -1,5 +1,4 @@
 import { Component, Suspense, lazy, useEffect, useState } from 'react'
-import { supabase, supabaseConfigured } from '../lib/supabase'
 import { api } from '../lib/api'
 
 const DesktopLeafletMap = lazy(() => import('./DesktopLeafletMap.jsx'))
@@ -66,65 +65,25 @@ export default function GpsMap({ truckId }) {
   useEffect(() => {
     if (!truckId) return undefined
     let active = true
-
-    api.get(`/gps/trucks/${truckId}/position`)
-      .then(({ data }) => {
-        if (!active) return
-        const row = data?.data || null
-        setPosition(normalizePosition(row))
-        setStatus(row ? 'online' : 'empty')
-      })
-      .catch(() => {
-        if (active) setStatus('error')
-      })
-
-    if (!supabaseConfigured) {
-      const interval = setInterval(() => {
-        api.get(`/gps/trucks/${truckId}/position`)
-          .then(({ data }) => {
-            if (!active) return
-            const row = data?.data || null
-            setPosition(normalizePosition(row))
-            setStatus(row ? 'online' : 'empty')
-          })
-          .catch(() => {
-            if (active) setStatus('error')
-          })
-      }, 30000)
-
-      return () => {
-        active = false
-        clearInterval(interval)
-      }
+    const loadPosition = () => {
+      api.get(`/gps/trucks/${truckId}/position`)
+        .then(({ data }) => {
+          if (!active) return
+          const row = data?.data || null
+          setPosition(normalizePosition(row))
+          setStatus(row ? 'online' : 'empty')
+        })
+        .catch(() => {
+          if (active) setStatus('error')
+        })
     }
 
-    const channel = supabase
-      .channel(`truck-position-${truckId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'truck_positions',
-          filter: `truck_id=eq.${truckId}`,
-        },
-        (payload) => {
-          if (payload.eventType === 'DELETE') {
-            setPosition(null)
-            setStatus('empty')
-            return
-          }
-          setPosition(normalizePosition(payload.new))
-          setStatus('online')
-        }
-      )
-      .subscribe((subscriptionStatus) => {
-        if (subscriptionStatus === 'CHANNEL_ERROR') setStatus('error')
-      })
+    loadPosition()
+    const interval = setInterval(loadPosition, 15000)
 
     return () => {
       active = false
-      supabase.removeChannel(channel)
+      clearInterval(interval)
     }
   }, [truckId])
 

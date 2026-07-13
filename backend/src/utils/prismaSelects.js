@@ -21,6 +21,7 @@ const camionPanelSelect = {
   marcaModelo: true,
   estado: true,
   ubicacionActual: true,
+  posicionGps: true,
   motivoTaller: true,
   activo: true,
   createdAt: true,
