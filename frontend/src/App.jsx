@@ -596,7 +596,7 @@ function ArchivoLogistico({ onSelect }) {
             </div>
             <div className="hidden text-right sm:block">
               <p className="text-sm font-semibold">{formatDate(viaje.fechaCierre)}</p>
-              <p className="text-xs text-neutral-500">{viaje.estadoFinanciero}</p>
+              <p className="text-xs text-neutral-500">{formatStatus(viaje.estadoFinanciero)}</p>
             </div>
             <ChevronRight className="text-neutral-400" size={18} />
           </button>
@@ -627,7 +627,7 @@ function TripList({ title, viajes, onSelect }) {
             </div>
             <div className="hidden text-right sm:block">
               <p className="text-sm font-semibold">{money(balance(viaje))}</p>
-              <p className="text-xs text-neutral-500">{viaje.estadoFinanciero}</p>
+              <p className="text-xs text-neutral-500">{formatStatus(viaje.estadoFinanciero)}</p>
             </div>
             <ChevronRight className="text-neutral-400" size={18} />
           </button>
@@ -651,7 +651,7 @@ function TripCard({ viaje, onSelect }) {
           <h3 className="mt-1 truncate text-lg font-semibold">{viaje.codigo}</h3>
           <p className="mt-1 truncate text-sm text-neutral-600">{viaje.chofer?.nombre || 'Sin chofer'}</p>
         </div>
-        <span className="rounded-md bg-neutral-950 px-2 py-1 text-xs font-medium text-white">{viaje.estadoLogistico}</span>
+        <span className="rounded-md bg-neutral-950 px-2 py-1 text-xs font-medium text-white">{formatStatus(viaje.estadoLogistico)}</span>
       </div>
 
       <div className="mt-4">
@@ -677,7 +677,7 @@ function TripCard({ viaje, onSelect }) {
 
       {ultimoReporte && (
         <div className="mt-4 border-t border-neutral-100 pt-3 text-xs text-neutral-500">
-          {ultimoReporte.tipoReporte}: {ultimoReporte.ubicacion || ultimoReporte.mensajeOriginal}
+          {labelReporte(ultimoReporte.tipoReporte)}: {ultimoReporte.ubicacion || ultimoReporte.mensajeOriginal}
         </div>
       )}
     </button>
@@ -759,13 +759,13 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
           <Field label="Chofer">
             <select required value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value })} className="input">
               <option value="">Seleccionar</option>
-              {choferes.map((chofer) => <option key={chofer.id} value={chofer.id}>{chofer.nombre} · {chofer.estadoCalculado}</option>)}
+              {choferes.map((chofer) => <option key={chofer.id} value={chofer.id}>{chofer.nombre} · {formatStatus(chofer.estadoCalculado)}</option>)}
             </select>
           </Field>
           <Field label="Camion">
             <select required value={form.camionId} onChange={(event) => setForm({ ...form, camionId: event.target.value })} className="input">
               <option value="">Seleccionar</option>
-              {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)} · {camion.estadoCalculado}</option>)}
+              {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)} · {formatStatus(camion.estadoCalculado)}</option>)}
             </select>
           </Field>
           <Field label="Viaticos (opcional)">
@@ -970,7 +970,7 @@ function ResourcePanel({ title, items, type, isAdmin, onDone }) {
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <span className={`rounded-md px-2 py-1 text-xs font-medium ${item.estadoCalculado === 'DISPONIBLE' ? 'bg-emerald-50 text-emerald-700' : item.estadoCalculado === 'EN_TALLER' ? 'bg-red-50 text-red-700' : 'bg-neutral-100 text-neutral-700'}`}>
-                {item.estadoCalculado}
+                {formatStatus(item.estadoCalculado)}
               </span>
               {isAdmin && (
                 <button onClick={() => editar(item)} title="Editar" className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100">
@@ -1379,7 +1379,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   const detailPageSize = 8
   const tramos = groupByTramo(viaje.paradas || [])
   const totalGastado = (viaje.gastos || []).reduce((total, gasto) => total + Number(gasto.monto), 0)
-  const ultimaUbicacion = getCurrentLocation(viaje)
+  const ultimaUbicacion = getCurrentLocationDetails(viaje)
 
   const recargar = async () => {
     const result = await requestNumber('Recargar viaticos')
@@ -1484,7 +1484,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
       <aside className="relative h-screen min-h-[100svh] w-full max-w-3xl overflow-y-auto bg-white shadow-xl">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-4 sm:px-6">
           <div className="min-w-0">
-            <p className="text-xs font-medium text-neutral-500">{viaje.estadoLogistico} · {viaje.estadoFinanciero}</p>
+            <p className="text-xs font-medium text-neutral-500">{formatStatus(viaje.estadoLogistico)} · {formatStatus(viaje.estadoFinanciero)}</p>
             <h2 className="truncate text-xl font-semibold">{viaje.codigo}</h2>
           </div>
           <button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-md hover:bg-neutral-100">
@@ -1496,7 +1496,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Fact icon={User} label="Chofer" value={viaje.chofer?.nombre || 'Sin chofer'} />
             <Fact icon={Truck} label="Camion" value={viaje.camion?.placa || 'Sin camion'} />
-            <Fact icon={MapPin} label="Ultima ubicacion" value={ultimaUbicacion} />
+            <Fact icon={MapPin} label="Ultima ubicacion" value={<LocationValue data={ultimaUbicacion} />} />
             <Fact icon={Banknote} label="Disponible" value={money(balance(viaje))} />
           </section>
           {viaje.numeroGuia && <Banner tone="neutral" icon={FileCheck} text={`Guia entregada: ${viaje.numeroGuia}`} />}
@@ -1533,7 +1533,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
                             disabled={Boolean(saving) || parada.estado === estado}
                             className={`rounded-md border px-2 py-1 text-xs font-medium ${parada.estado === estado ? paradaStyles[estado] : 'border-neutral-200 bg-white text-neutral-500 hover:bg-neutral-50'}`}
                           >
-                            {estado}
+                            {formatStatus(estado)}
                           </button>
                         ))}
                       </div>
@@ -1779,7 +1779,20 @@ function Fact({ icon: Icon, label, value }) {
         <Icon size={15} />
         {label}
       </div>
-      <p className="truncate text-sm font-semibold">{value}</p>
+      <div className="min-w-0 text-sm font-semibold">{value}</div>
+    </div>
+  )
+}
+
+function LocationValue({ data }) {
+  const gps = data?.gps || ''
+  const reporte = data?.reporte || ''
+  const fallback = data?.fallback || 'Sin ubicacion'
+
+  return (
+    <div className="space-y-1">
+      <p className="truncate">{gps || fallback}</p>
+      {reporte && <p className="truncate text-xs font-medium text-neutral-500">{reporte}</p>}
     </div>
   )
 }
@@ -1900,14 +1913,25 @@ function buildOperationalData({ viajes, choferes, camiones, query }) {
   }
 }
 
-function getCurrentLocation(viaje) {
-  return (
-    formatGpsLocation(viaje.camion?.posicionGps) ||
-    viaje.camion?.ubicacionActual ||
-    viaje.chofer?.ubicacionActual ||
-    viaje.reportes?.find((reporte) => reporte.ubicacion)?.ubicacion ||
-    'Sin ubicacion'
-  )
+function getCurrentLocationDetails(viaje) {
+  const ultimoReporte = viaje.reportes?.[0] || null
+  return {
+    gps: formatGpsLocation(viaje.camion?.posicionGps) || coordsFromText(viaje.camion?.ubicacionActual),
+    reporte: ultimoReporte ? formatLastReportLocation(ultimoReporte) : '',
+    fallback: viaje.chofer?.ubicacionActual || viaje.camion?.ubicacionActual || 'Sin ubicacion',
+  }
+}
+
+function formatLastReportLocation(reporte) {
+  const ubicacion = reporte.ubicacion || ''
+  const texto = reporte.mensajeOriginal || ''
+  if (ubicacion) return `${labelReporte(reporte.tipoReporte)} · ${ubicacion}`
+  return `${labelReporte(reporte.tipoReporte)} · ${texto || 'Sin detalle'}`
+}
+
+function coordsFromText(value = '') {
+  const match = String(value).match(/-?\d+(?:\.\d+)?,\s*-?\d+(?:\.\d+)?/)
+  return match ? match[0] : ''
 }
 
 function formatGpsLocation(position) {
@@ -1965,13 +1989,17 @@ function formatDate(value) {
   return new Date(value).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' })
 }
 
+function formatStatus(value) {
+  return value ? String(value).replace(/_/g, ' ') : ''
+}
+
 function labelReporte(tipo) {
   const labels = {
     ESPERANDO_INSTRUCCIONES: 'Esperando',
     EN_PERNOCTA: 'Pernocta',
     EN_RUTA: 'En ruta',
   }
-  return labels[tipo] || tipo
+  return labels[tipo] || formatStatus(tipo)
 }
 
 function pageTitle(tab) {

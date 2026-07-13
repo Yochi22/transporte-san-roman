@@ -208,7 +208,10 @@ const procesarReporte = async ({
   const paradaValida = viaje.paradas.find((p) => p.id === (resultado.paradaId || paradaInferida?.id))
   const paradaId = paradaValida ? paradaValida.id : null
   const estadoParada = paradaId ? (paradaInferida?.estadoParada || resultado.estadoParada) : null
-  const ubicacion = normalizarUbicacionEspecial(resultado.tipo, resultado.ubicacion)
+  const ubicacion = normalizarUbicacionEspecial(
+    resultado.tipo,
+    inferirUbicacionOperativa(resultado, viaje, paradaInferida, resultado.ubicacion)
+  )
 
   const { reporte, viajesCompletados, viajesPendientesLiquidacion } = await prisma.$transaction(async (tx) => {
     if (paradaId && estadoParada) {
@@ -421,6 +424,28 @@ const inferirParadaOperativa = (resultado, viaje, texto) => {
     const estadoParada = normalizado.includes('descargando') ? 'EN_CURSO' : 'COMPLETADA'
     return parada ? { ...parada, estadoParada } : null
   }
+  return null
+}
+
+const nombreParada = (parada) => {
+  if (!parada) return null
+  const partes = [parada.lugar, parada.ciudad].filter(Boolean)
+  return partes.length > 0 ? partes.join(', ') : null
+}
+
+const inferirUbicacionOperativa = (resultado, viaje, paradaInferida, ubicacion) => {
+  if (ubicacion) return ubicacion
+  if (paradaInferida) return nombreParada(paradaInferida)
+
+  if (resultado.tipo === 'CARGANDO') {
+    return nombreParada(viaje.paradas.find((p) => p.tipo === 'CARGA'))
+  }
+
+  if (resultado.tipo === 'DESCARGADO' || resultado.tipo === 'ESPERANDO_INSTRUCCIONES') {
+    const descargas = viaje.paradas.filter((p) => p.tipo === 'DESCARGA')
+    return nombreParada(descargas[descargas.length - 1] || viaje.paradas[viaje.paradas.length - 1])
+  }
+
   return null
 }
 
