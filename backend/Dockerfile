@@ -22,6 +22,7 @@ COPY --chown=node:node --from=build /app/package*.json ./
 COPY --chown=node:node --from=build /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/prisma ./prisma
 COPY --chown=node:node src ./src
+COPY --chown=node:node scripts ./scripts
 
 RUN mkdir -p /app/.whatsapp-auth && chown -R node:node /app
 
