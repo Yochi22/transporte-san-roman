@@ -362,7 +362,7 @@ export default function App() {
                       setActiveTab(tab.id)
                       setMenuOpen(false)
                     }}
-                    className={`flex h-11 w-full items-center gap-3 rounded-md px-3 text-sm font-medium transition ${active ? 'bg-neutral-950 text-white' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950'}`}
+                    className={`flex h-10 w-full items-center gap-3 rounded-md px-3 text-[13px] font-medium transition ${active ? 'bg-neutral-950 text-white' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950'}`}
                   >
                     <Icon size={18} />
                     {tab.label}
@@ -372,11 +372,11 @@ export default function App() {
             </nav>
 
             <div className="mt-auto space-y-3">
-              <button onClick={() => fetchData({ refreshSelected: true })} className="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-neutral-200 text-sm font-medium text-neutral-700 hover:bg-neutral-50">
+              <button onClick={() => fetchData({ refreshSelected: true })} className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-neutral-200 text-[13px] font-medium text-neutral-700 hover:bg-neutral-50">
                 <RefreshCw size={16} />
                 Actualizar
               </button>
-              <button onClick={confirmLogout} className="flex h-10 w-full items-center justify-center gap-2 rounded-md text-sm font-medium text-red-600 hover:bg-red-50">
+              <button onClick={confirmLogout} className="flex h-9 w-full items-center justify-center gap-2 rounded-md text-[13px] font-medium text-red-600 hover:bg-red-50">
                 <LogOut size={16} />
                 Salir
               </button>
@@ -393,8 +393,8 @@ export default function App() {
                 <Menu size={18} />
               </button>
               <div className="min-w-0 flex-1">
-                <h1 className="truncate text-lg font-semibold">{pageTitle(activeTab)}</h1>
-                <p className="hidden text-sm text-neutral-500 sm:block">{data.activos.length} viajes en curso · {data.pendientesLiquidacion.length} por liquidar</p>
+                <h1 className="truncate text-base font-semibold">{pageTitle(activeTab)}</h1>
+                <p className="hidden text-xs text-neutral-500 sm:block">{data.activos.length} viajes en curso · {data.pendientesLiquidacion.length} por liquidar</p>
               </div>
               <div className="relative hidden w-full max-w-sm md:block">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={16} />
@@ -402,7 +402,7 @@ export default function App() {
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Buscar viaje, chofer o placa"
-                  className="h-10 w-full rounded-md border border-neutral-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-neutral-400"
+                  className="h-9 w-full rounded-md border border-neutral-200 bg-white pl-9 pr-3 text-[13px] outline-none focus:border-neutral-400"
                 />
               </div>
             </div>
@@ -415,7 +415,7 @@ export default function App() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Buscar en el modulo"
-                className="h-10 w-full rounded-md border border-neutral-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-neutral-400"
+                className="h-9 w-full rounded-md border border-neutral-200 bg-white pl-9 pr-3 text-[13px] outline-none focus:border-neutral-400"
               />
             </div>
             {error && <Banner tone="danger" icon={AlertTriangle} text={error} />}
@@ -515,7 +515,7 @@ function Monitor({
       {alertas.length > 0 && (
         <section className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+            <div className="flex items-center gap-2 text-[13px] font-medium text-amber-900">
               <Bell size={16} />
               Alertas recientes
             </div>
@@ -523,7 +523,7 @@ function Monitor({
           </div>
           <div className="mt-2 grid gap-2 lg:grid-cols-2">
             {alertas.map((alerta) => (
-              <div key={alerta.id} className="truncate rounded-md border border-amber-200 bg-white px-3 py-2 text-sm text-amber-900">
+              <div key={alerta.id} className="truncate rounded-md border border-amber-200 bg-white px-3 py-2 text-[13px] text-amber-900">
                 {alerta.mensaje || alerta.tipo || 'Alerta operativa'}
               </div>
             ))}
@@ -567,8 +567,8 @@ function WhatsAppStatusCard({ status, onOpenQr, onReset, onRefresh }) {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="text-sm font-semibold">WhatsApp del bot</p>
-            <span className={`rounded px-2 py-1 text-xs font-semibold ${conectado ? 'bg-emerald-50 text-emerald-700' : qrDisponible ? 'bg-amber-50 text-amber-700' : 'bg-neutral-100 text-neutral-600'}`}>
+            <p className="text-sm font-medium">WhatsApp del bot</p>
+            <span className={`rounded px-2 py-1 text-xs font-medium ${conectado ? 'bg-emerald-50 text-emerald-700' : qrDisponible ? 'bg-amber-50 text-amber-700' : 'bg-neutral-100 text-neutral-600'}`}>
               {conectado ? 'Conectado' : qrDisponible ? 'QR listo' : 'Esperando QR'}
             </span>
           </div>
@@ -584,7 +584,7 @@ function WhatsAppStatusCard({ status, onOpenQr, onReset, onRefresh }) {
             type="button"
             onClick={onRefresh}
             disabled={status?.loading}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-neutral-200 bg-white px-3 text-[13px] font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <RefreshCw className={status?.loading ? 'animate-spin' : ''} size={16} />
             Actualizar
@@ -592,7 +592,7 @@ function WhatsAppStatusCard({ status, onOpenQr, onReset, onRefresh }) {
           <button
             type="button"
             onClick={onOpenQr}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-neutral-200 bg-white px-3 text-[13px] font-medium text-neutral-700 hover:bg-neutral-50"
           >
             <Send size={16} />
             Ver QR
@@ -601,7 +601,7 @@ function WhatsAppStatusCard({ status, onOpenQr, onReset, onRefresh }) {
             type="button"
             onClick={onReset}
             disabled={status?.loading}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-neutral-950 px-3 text-sm font-medium text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-neutral-950 px-3 text-[13px] font-medium text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <RefreshCw size={16} />
             Reiniciar vinculacion
@@ -829,7 +829,7 @@ function PendientesLiquidacion({ onSelect }) {
         {data.items.map((viaje) => (
           <button key={viaje.id} onClick={() => onSelect(viaje)} className="grid w-full gap-2 border-b border-neutral-100 px-4 py-3 text-left last:border-b-0 hover:bg-neutral-50 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_140px_120px_24px] sm:items-center">
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">{viaje.codigo}</p>
+              <p className="truncate text-sm font-medium">{viaje.codigo}</p>
               <p className="truncate text-xs text-neutral-500">{formatRoute(viaje)}</p>
             </div>
             <div className="min-w-0">
@@ -837,7 +837,7 @@ function PendientesLiquidacion({ onSelect }) {
               <p className="truncate text-xs text-neutral-500">{formatTripUnits(viaje)}</p>
             </div>
             <div>
-              <p className="text-sm font-semibold">{money(balance(viaje))}</p>
+              <p className="text-sm font-medium">{money(balance(viaje))}</p>
               <p className="text-xs text-neutral-500">Balance</p>
             </div>
             <div>
@@ -927,11 +927,11 @@ function ArchivoLogistico({ onSelect }) {
           <button key={viaje.id} onClick={() => onSelect(viaje)} className="flex w-full items-center gap-3 border-b border-neutral-100 px-4 py-3 text-left last:border-b-0 hover:bg-neutral-50">
             <StatusDot estado={viaje.estadoLogistico} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">{viaje.codigo}</p>
+              <p className="truncate text-sm font-medium">{viaje.codigo}</p>
               <p className="truncate text-xs text-neutral-500">{viaje.chofer?.nombre || 'Sin chofer'} · {formatRoute(viaje)}</p>
             </div>
             <div className="hidden text-right sm:block">
-              <p className="text-sm font-semibold">{formatDate(viaje.fechaCierre)}</p>
+              <p className="text-sm font-medium">{formatDate(viaje.fechaCierre)}</p>
               <p className="text-xs text-neutral-500">{formatStatus(viaje.estadoFinanciero)}</p>
             </div>
             <ChevronRight className="text-neutral-400" size={18} />
@@ -959,11 +959,11 @@ function TripList({ title, viajes, onSelect }) {
           <button key={viaje.id} onClick={() => onSelect(viaje)} className="flex w-full items-center gap-3 border-b border-neutral-100 px-4 py-3 text-left last:border-b-0 hover:bg-neutral-50">
             <StatusDot estado={viaje.estadoLogistico} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold">{viaje.codigo}</p>
+              <p className="truncate text-sm font-medium">{viaje.codigo}</p>
               <p className="truncate text-xs text-neutral-500">{viaje.chofer?.nombre || 'Sin chofer'} · {formatRoute(viaje)}</p>
             </div>
             <div className="hidden text-right sm:block">
-              <p className="text-sm font-semibold">{money(balance(viaje))}</p>
+              <p className="text-sm font-medium">{money(balance(viaje))}</p>
               <p className="text-xs text-neutral-500">{formatStatus(viaje.estadoFinanciero)}</p>
             </div>
             <ChevronRight className="text-neutral-400" size={18} />
@@ -985,7 +985,7 @@ function TripCard({ viaje, onSelect }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-xs font-medium text-neutral-500">{formatTripUnits(viaje) || 'Sin placa'}</p>
-          <h3 className="mt-1 truncate text-lg font-semibold">{viaje.codigo}</h3>
+          <h3 className="mt-1 truncate text-base font-semibold">{viaje.codigo}</h3>
           <p className="mt-1 truncate text-sm text-neutral-600">{viaje.chofer?.nombre || 'Sin chofer'}</p>
         </div>
         <span className="rounded-md bg-neutral-950 px-2 py-1 text-xs font-medium text-white">{formatStatus(viaje.estadoLogistico)}</span>
@@ -1139,7 +1139,7 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
                 <label key={camion.id} className="flex items-center gap-3 border-b border-neutral-100 px-3 py-2 last:border-b-0 hover:bg-neutral-50">
                   <input type="checkbox" checked={form.camionIds.includes(camion.id)} onChange={() => toggleUnidadViaje(camion.id)} className="h-4 w-4 accent-neutral-950" />
                   <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold">{camion.placa}</span>
+                    <span className="block truncate text-sm font-medium">{camion.placa}</span>
                     <span className="block truncate text-xs text-neutral-500">{formatStatus(camion.tipoVehiculo)} - {formatStatus(camion.estadoCalculado || camion.estado)}</span>
                   </span>
                 </label>
@@ -1170,7 +1170,7 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
         <div className="mt-4 space-y-3">
           {paradas.map((parada, index) => (
             <div key={parada.id} className="grid gap-3 rounded-md border border-neutral-200 p-3 md:grid-cols-[52px_130px_1fr_1fr_220px_40px]">
-              <div className="flex h-10 items-center text-sm font-semibold text-neutral-500">#{index + 1}</div>
+              <div className="flex h-9 items-center text-[13px] font-medium text-neutral-500">#{index + 1}</div>
               <select value={parada.tipo} onChange={(event) => updateParada(parada.id, { tipo: event.target.value, fechaProgramada: event.target.value === 'CARGA' ? parada.fechaProgramada : '', programacion: 'SIN_PROGRAMAR' })} className="input">
                 <option value="CARGA">Carga</option>
                 <option value="DESCARGA">Descarga</option>
@@ -1405,7 +1405,7 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
         {pageItems.map((item) => (
           <div key={item.id} className="flex items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3 last:border-b-0">
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">{type === 'chofer' ? item.nombre : item.placa}</p>
+              <p className="truncate text-sm font-medium text-neutral-950">{type === 'chofer' ? item.nombre : item.placa}</p>
               <p className="truncate text-xs text-neutral-500">
                 {type === 'chofer'
                   ? item.telefono
@@ -1512,7 +1512,7 @@ function ResourceModal({ title, type, form, setForm, error, editingId, camiones,
                             className="mt-1 h-4 w-4 accent-neutral-950"
                           />
                           <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-semibold text-neutral-900">{vehicleLabel(camion)}</span>
+                            <span className="block truncate text-sm font-medium text-neutral-900">{vehicleLabel(camion)}</span>
                             <span className="block truncate text-xs text-neutral-500">
                               {assignedToOther ? `Asignada a ${owner.nombre}. Primero liberala para reasignarla.` : formatStatus(camion.estadoCalculado || camion.estado)}
                             </span>
@@ -1740,7 +1740,7 @@ function TallerView({ camiones, onDone }) {
           {data.items.map((item) => (
             <div key={item.id} className="grid gap-3 border-b border-neutral-100 px-4 py-4 last:border-b-0 md:grid-cols-[minmax(0,1fr)_150px_150px_130px_auto] md:items-center">
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">{vehicleLabel(item.camion)}</p>
+                <p className="truncate text-sm font-medium text-neutral-950">{vehicleLabel(item.camion)}</p>
                 <p className="truncate text-sm text-neutral-700">{labelMantenimiento(item.tipo)}: {item.falla}</p>
                 <p className="mt-1 truncate text-xs text-neutral-500">{item.descripcion || 'Sin detalles adicionales'}</p>
               </div>
@@ -1753,7 +1753,7 @@ function TallerView({ camiones, onDone }) {
                 <p className="text-xs text-neutral-500">Kilometraje</p>
               </div>
               <div>
-                <p className="text-sm font-semibold">{money(item.costo)}</p>
+                <p className="text-sm font-medium">{money(item.costo)}</p>
                 <p className="text-xs text-neutral-500">{item.estado === 'EN_PROCESO' ? 'Estimado' : 'Costo final'}</p>
               </div>
               {item.estado === 'EN_PROCESO' ? (
@@ -1920,12 +1920,12 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
             <tbody>
               {pageItems.map((viaje) => (
                 <tr key={viaje.id} className="border-t border-neutral-100">
-                  <td className="px-4 py-3 font-semibold">{viaje.codigo}</td>
+                  <td className="px-4 py-3 font-medium">{viaje.codigo}</td>
                   <td className="px-4 py-3">{viaje.chofer?.nombre}</td>
                   <td className="px-4 py-3">{viaje.numeroGuia || 'Sin guia'}</td>
                   <td className="px-4 py-3 text-neutral-500">{formatDate(viaje.fechaLiquidacion || viaje.fechaCierre)}</td>
                   <td className="px-4 py-3">{money(viaje.viaticosGastados)}</td>
-                  <td className="px-4 py-3 font-semibold">{money(viaje.honorariosChofer)}</td>
+                  <td className="px-4 py-3 font-medium">{money(viaje.honorariosChofer)}</td>
                   <td className="px-4 py-3 text-right">
                     <button onClick={() => editarHonorarios(viaje)} className="btn-secondary">
                       <Edit3 size={14} />
@@ -2077,7 +2077,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-4 sm:px-6">
           <div className="min-w-0">
             <p className="text-xs font-medium text-neutral-500">{formatStatus(viaje.estadoLogistico)} · {formatStatus(viaje.estadoFinanciero)}</p>
-            <h2 className="truncate text-xl font-semibold">{viaje.codigo}</h2>
+            <h2 className="truncate text-lg font-semibold">{viaje.codigo}</h2>
           </div>
           <button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-md hover:bg-neutral-100">
             <X size={18} />
@@ -2105,10 +2105,10 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
                   </div>
                   {paradas.map((parada) => (
                     <div key={parada.id} className="grid gap-3 border-b border-neutral-100 px-4 py-3 last:border-b-0 lg:grid-cols-[48px_110px_1fr_auto]">
-                      <span className="text-sm font-semibold text-neutral-500">#{parada.orden}</span>
+                      <span className="text-sm font-medium text-neutral-500">#{parada.orden}</span>
                       <span className="text-sm font-medium">{parada.tipo}</span>
                       <div>
-                        <p className="text-sm font-semibold">{parada.lugar}</p>
+                        <p className="text-sm font-medium">{parada.lugar}</p>
                         <p className="text-xs text-neutral-500">{parada.ciudad}</p>
                         {parada.fechaProgramada && (
                           <p className="mt-1 text-xs font-medium text-blue-700">Carga programada: {formatDate(parada.fechaProgramada)}</p>
@@ -2194,11 +2194,11 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
                 {paginate(viaje.gastos || [], expensePage, detailPageSize).map((gasto) => (
                   <div key={gasto.id} className="flex items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3 last:border-b-0">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">{gasto.tipo} · {gasto.origen || 'ADMIN'}</p>
+                      <p className="truncate text-sm font-medium">{gasto.tipo} · {gasto.origen || 'ADMIN'}</p>
                       <p className="truncate text-xs text-neutral-500">{gasto.descripcion || 'Gasto'}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-red-600">-{money(gasto.monto)}</span>
+                      <span className="text-sm font-medium text-red-600">-{money(gasto.monto)}</span>
                       <button onClick={() => eliminarGasto(gasto.id)} disabled={Boolean(saving)} className="grid h-8 w-8 place-items-center rounded-md text-neutral-400 hover:bg-red-50 hover:text-red-600">
                         <X size={14} />
                       </button>
@@ -2239,7 +2239,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
           <div className="w-full max-w-md rounded-md border border-neutral-200 bg-white p-5 shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-lg font-semibold">Liquidar viaje</h3>
+                <h3 className="text-base font-semibold">Liquidar viaje</h3>
                 <p className="mt-1 text-sm text-neutral-500">
                   Registra el numero de guia entregado por el chofer, si esta disponible.
                 </p>
@@ -2329,8 +2329,8 @@ function Login({ onLogin }) {
             <img src={logo} alt="Transporte San Roman" className="h-11 w-16 rounded-md object-cover" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold">San Roman</h1>
-            <p className="text-sm text-neutral-500">Panel operativo</p>
+            <h1 className="text-base font-semibold">San Roman</h1>
+            <p className="text-xs text-neutral-500">Panel operativo</p>
           </div>
         </div>
         <div className="space-y-3">
@@ -2340,7 +2340,7 @@ function Login({ onLogin }) {
           <Field label="Clave">
             <input value={password} onChange={(event) => setPassword(event.target.value)} className="input" type="password" autoComplete="current-password" />
           </Field>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-[13px] text-red-600">{error}</p>}
           <button disabled={loading} className="btn-primary w-full">
             <LockIcon />
             {loading ? 'Entrando' : 'Entrar'}
@@ -2362,12 +2362,12 @@ function Metric({ title, value, icon: Icon, tone = 'neutral' }) {
   return (
     <div className="rounded-md border border-neutral-200 bg-white p-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-neutral-500">{title}</p>
-        <div className={`grid h-9 w-9 place-items-center rounded-md ${tones[tone]}`}>
-          <Icon size={17} />
+        <p className="text-xs font-medium text-neutral-500">{title}</p>
+        <div className={`grid h-8 w-8 place-items-center rounded-md ${tones[tone]}`}>
+          <Icon size={16} />
         </div>
       </div>
-      <p className="mt-3 text-3xl font-semibold tracking-tight">{value}</p>
+      <p className="mt-3 text-2xl font-semibold">{value}</p>
     </div>
   )
 }
@@ -2382,7 +2382,7 @@ function ReportRow({ reporte, compact = false }) {
     <div className="border-b border-neutral-100 px-4 py-3 last:border-b-0">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{titulo}</p>
+          <p className="truncate text-sm font-medium">{titulo}</p>
           {contexto && <p className="mt-1 truncate text-xs text-neutral-500">{contexto}</p>}
           {reporte.ubicacion && <p className="mt-1 truncate text-xs text-neutral-400">{reporte.ubicacion}</p>}
           {!compact && !reporte.ubicacion && <p className="mt-1 text-xs text-neutral-500">Sin ubicacion</p>}
@@ -2409,7 +2409,7 @@ function InfoBlock({ label, value }) {
   return (
     <div className="min-w-0">
       <p className="text-xs font-medium text-neutral-500">{label}</p>
-      <p className="mt-1 break-words text-sm font-semibold text-neutral-900">{value}</p>
+      <p className="mt-1 break-words text-sm font-medium text-neutral-900">{value}</p>
     </div>
   )
 }
@@ -2421,7 +2421,7 @@ function Fact({ icon: Icon, label, value }) {
         <Icon size={15} />
         {label}
       </div>
-      <div className="min-w-0 text-sm font-semibold">{value}</div>
+      <div className="min-w-0 text-sm font-medium text-neutral-950">{value}</div>
     </div>
   )
 }
@@ -2454,7 +2454,7 @@ function Banner({ icon: Icon, text, tone }) {
     : 'border-neutral-200 bg-white text-neutral-600'
 
   return (
-    <div className={`mb-4 flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${className}`}>
+    <div className={`mb-4 flex items-center gap-2 rounded-md border px-3 py-2 text-[13px] ${className}`}>
       <Icon size={16} />
       {text}
     </div>
@@ -2462,7 +2462,7 @@ function Banner({ icon: Icon, text, tone }) {
 }
 
 function Empty({ text }) {
-  return <div className="px-4 py-8 text-center text-sm text-neutral-500">{text}</div>
+  return <div className="px-4 py-8 text-center text-[13px] text-neutral-500">{text}</div>
 }
 
 function ParadaPill({ parada }) {

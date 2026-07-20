@@ -105,7 +105,7 @@ export default function GpsMap({ truckId, truckIds = [], initialPositions = [] }
     <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">
       <div className="flex items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3">
       <div>
-        <p className="text-sm font-semibold">Rastreo satelital</p>
+        <p className="text-sm font-medium">Rastreo satelital</p>
         <p className="text-xs text-neutral-500">
             {currentPosition ? `${currentPosition.latitude.toFixed(6)}, ${currentPosition.longitude.toFixed(6)}${currentPositions.length > 1 ? ` · ${currentPositions.length} unidades` : ''}` : 'Sin posicion recibida'}
         </p>
@@ -155,9 +155,9 @@ function PositionFallback({ position }) {
   return (
     <div className="grid min-h-[260px] place-items-center bg-neutral-50 px-4 text-center">
       <div>
-        <p className="text-sm font-semibold">Ubicacion recibida</p>
+        <p className="text-sm font-medium">Ubicacion recibida</p>
         <p className="mt-1 text-xs text-neutral-500">{position.latitude.toFixed(6)}, {position.longitude.toFixed(6)}</p>
-        <a href={mapsUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex h-9 items-center rounded-md bg-neutral-950 px-3 text-sm font-medium text-white">
+        <a href={mapsUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex h-9 items-center rounded-md bg-neutral-950 px-3 text-[13px] font-medium text-white">
           Abrir en Mapas
         </a>
       </div>
@@ -167,7 +167,7 @@ function PositionFallback({ position }) {
 
 function MapState({ text }) {
   return (
-    <div className="grid min-h-52 place-items-center rounded-md border border-neutral-200 bg-white px-4 text-center text-sm text-neutral-500">
+    <div className="grid min-h-52 place-items-center rounded-md border border-neutral-200 bg-white px-4 text-center text-[13px] text-neutral-500">
       {text}
     </div>
   )
