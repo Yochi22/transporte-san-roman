@@ -77,14 +77,18 @@ app.get('/api/whatsapp/status', autenticar, soloAdmin, (req, res) => {
   })
 })
 
+app.get('/whatsapp-qr/status', ...(demoPublicQr ? [] : [autenticar, soloAdmin]), (req, res) => {
+  res.set('Cache-Control', 'no-store')
+  const estado = obtenerEstadoWhatsApp()
+  res.json({
+    conectado: estado.conectado,
+    qrDataUrl: estado.qrDataUrl || null
+  })
+})
+
 app.get('/whatsapp-qr', ...(demoPublicQr ? [] : [autenticar, soloAdmin]), (req, res) => {
   res.set('Cache-Control', 'no-store')
   const estado = obtenerEstadoWhatsApp()
-  const contenido = estado.conectado
-    ? '<div class="status ok">WhatsApp conectado</div><p>La sesion esta activa. Ya puedes volver al panel.</p>'
-    : estado.qrDataUrl
-      ? `<img src="${estado.qrDataUrl}" alt="QR de WhatsApp" /><p>Abre WhatsApp, ve a Dispositivos vinculados y escanea este codigo.</p>`
-      : '<div class="status wait">Esperando QR</div><p>Si no aparece, espera unos segundos y recarga esta pagina.</p>'
 
   res.type('html').send(`<!doctype html>
 <html lang="es">
@@ -97,27 +101,50 @@ app.get('/whatsapp-qr', ...(demoPublicQr ? [] : [autenticar, soloAdmin]), (req, 
     main{width:min(92vw,520px);border:1px solid #e5e5e5;border-radius:10px;background:#fff;padding:28px;text-align:center;box-shadow:0 22px 70px rgb(0 0 0 / 10%)}
     h1{margin:0 0 8px;font-size:22px}
     p{margin:12px auto 0;max-width:390px;color:#737373;font-size:14px;line-height:1.5}
-    img{display:block;width:min(78vw,420px);height:auto;margin:20px auto;border:12px solid #fff;border-radius:8px;box-shadow:0 0 0 1px #e5e5e5}
+    img{display:none;width:min(78vw,420px);height:auto;margin:20px auto;border:12px solid #fff;border-radius:8px;box-shadow:0 0 0 1px #e5e5e5}
     .status{display:inline-flex;margin:20px 0 4px;border-radius:6px;padding:10px 14px;font-weight:700;font-size:14px}
     .ok{background:#ecfdf5;color:#047857}
     .wait{background:#fffbeb;color:#92400e}
-    button{margin-top:18px;border:1px solid #d4d4d4;border-radius:8px;background:#111;color:#fff;padding:10px 14px;font-weight:700;cursor:pointer}
     small{display:block;margin-top:16px;color:#a3a3a3}
   </style>
 </head>
 <body>
   <main>
     <h1>Vincular WhatsApp</h1>
-    ${contenido}
-    <button type="button" onclick="recargar()">Actualizar QR</button>
-    <small>Si tu navegador intenta HTTPS, vuelve a abrir esta pagina con http://</small>
+    <div id="status" class="status ${estado.conectado ? 'ok' : 'wait'}">${estado.conectado ? 'WhatsApp conectado' : 'Esperando QR'}</div>
+    <img id="qr" src="${estado.qrDataUrl || ''}" alt="QR de WhatsApp" style="${estado.qrDataUrl ? 'display:block' : ''}" />
+    <p id="message">${estado.conectado ? 'La sesion esta activa. Ya puedes volver al panel.' : estado.qrDataUrl ? 'Abre WhatsApp, ve a Dispositivos vinculados y escanea este codigo.' : 'Preparando codigo de vinculacion.'}</p>
+    <small>Esta vista se actualiza automaticamente.</small>
   </main>
   <script>
-    function recargar() {
-      var url = window.location.href.replace(/^https:/, 'http:')
-      window.location.replace(url)
+    async function actualizar() {
+      try {
+        var response = await fetch('/whatsapp-qr/status', { cache: 'no-store' })
+        if (!response.ok) return
+        var data = await response.json()
+        var status = document.getElementById('status')
+        var message = document.getElementById('message')
+        var qr = document.getElementById('qr')
+        if (data.conectado) {
+          status.className = 'status ok'
+          status.textContent = 'WhatsApp conectado'
+          message.textContent = 'La sesion esta activa. Ya puedes volver al panel.'
+          qr.style.display = 'none'
+          return
+        }
+        status.className = 'status wait'
+        status.textContent = data.qrDataUrl ? 'Escanea el QR' : 'Esperando QR'
+        message.textContent = data.qrDataUrl
+          ? 'Abre WhatsApp, ve a Dispositivos vinculados y escanea este codigo.'
+          : 'Preparando codigo de vinculacion.'
+        if (data.qrDataUrl) {
+          qr.src = data.qrDataUrl
+          qr.style.display = 'block'
+        }
+      } catch (error) {}
     }
-    setTimeout(recargar, 12000)
+    actualizar()
+    setInterval(actualizar, 5000)
   </script>
 </body>
 </html>`)
