@@ -2179,12 +2179,19 @@ function Metric({ title, value, icon: Icon, tone = 'neutral' }) {
 }
 
 function ReportRow({ reporte, compact = false }) {
+  const titulo = formatReportTitle(reporte)
+  const chofer = reporte.chofer?.nombre || reporte.viaje?.chofer?.nombre || ''
+  const viaje = reporte.viaje?.codigo || ''
+  const contexto = [chofer, viaje].filter(Boolean).join(' · ')
+
   return (
     <div className="border-b border-neutral-100 px-4 py-3 last:border-b-0">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium">{reporte.mensajeOriginal || reporte.resumen || 'Reporte'}</p>
-          {!compact && <p className="mt-1 text-xs text-neutral-500">{reporte.ubicacion || 'Sin ubicacion'}</p>}
+          <p className="truncate text-sm font-semibold">{titulo}</p>
+          {contexto && <p className="mt-1 truncate text-xs text-neutral-500">{contexto}</p>}
+          {reporte.ubicacion && <p className="mt-1 truncate text-xs text-neutral-400">{reporte.ubicacion}</p>}
+          {!compact && !reporte.ubicacion && <p className="mt-1 text-xs text-neutral-500">Sin ubicacion</p>}
         </div>
         <span className={`shrink-0 rounded-md px-2 py-1 text-xs font-medium ${reporteStyles[reporte.tipoReporte] || reporteStyles.OTRO}`}>
           {labelReporte(reporte.tipoReporte)}
@@ -2287,7 +2294,7 @@ function buildOperationalData({ viajes, choferes, camiones, query }) {
       viaje.camion?.ubicacionActual,
       formatGpsLocation(viaje.camion?.posicionGps),
       formatRoute(viaje),
-      ...(viaje.reportes || []).map((reporte) => reporte.mensajeOriginal),
+      ...(viaje.reportes || []).flatMap((reporte) => [reporte.mensajeOriginal, formatReportTitle(reporte), reporte.chofer?.nombre]),
     ]
       .some((value) => normalize(value).includes(q))
   })
@@ -2359,9 +2366,26 @@ function getCurrentLocationDetails(viaje) {
   }
 }
 
+const quickReportLabels = {
+  '1': 'Cargando',
+  '2': 'Lista la carga',
+  '3': 'Descargando',
+  '4': 'Lista la descarga',
+  '5': 'En pernocta',
+  '6': 'Esperando instrucciones',
+  '7': 'Novedad',
+}
+
+function formatReportTitle(reporte) {
+  const mensaje = String(reporte.mensajeOriginal || '').trim()
+  if (quickReportLabels[mensaje]) return quickReportLabels[mensaje]
+  if (mensaje) return mensaje
+  return labelReporte(reporte.tipoReporte) || 'Reporte'
+}
+
 function formatLastReportLocation(reporte) {
   const ubicacion = reporte.ubicacion || ''
-  const texto = reporte.mensajeOriginal || ''
+  const texto = formatReportTitle(reporte)
   if (ubicacion) return `${labelReporte(reporte.tipoReporte)} · ${ubicacion}`
   return `${labelReporte(reporte.tipoReporte)} · ${texto || 'Sin detalle'}`
 }
