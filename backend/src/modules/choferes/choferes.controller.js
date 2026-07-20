@@ -2,7 +2,7 @@ const service = require('./choferes.service')
 const { ok } = require('../../utils/respuesta')
 
 const listar = async (req, res) => {
-  const choferes = await service.listar()
+  const choferes = await service.listar(req.query)
   return ok(res, choferes)
 }
 

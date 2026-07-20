@@ -2,7 +2,7 @@ const service = require('./camiones.service')
 const { ok } = require('../../utils/respuesta')
 
 const listar = async (req, res) => {
-  const camiones = await service.listar()
+  const camiones = await service.listar(req.query)
   return ok(res, camiones)
 }
 
@@ -26,4 +26,9 @@ const eliminar = async (req, res) => {
   return ok(res, null, 'Camion eliminado')
 }
 
-module.exports = { listar, obtener, crear, actualizar, eliminar }
+const inactivar = async (req, res) => {
+  await service.inactivar(req.params.id)
+  return ok(res, null, 'Camion inactivado')
+}
+
+module.exports = { listar, obtener, crear, actualizar, eliminar, inactivar }

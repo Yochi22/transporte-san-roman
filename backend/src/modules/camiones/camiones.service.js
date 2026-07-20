@@ -1,9 +1,15 @@
 const prisma = require('../../config/database')
 const { camionPanelSelect } = require('../../utils/prismaSelects')
 
-const listar = async () => {
+const filtroActivo = (estado) => {
+  if (estado === 'todos') return undefined
+  if (estado === 'inactivos') return false
+  return true
+}
+
+const listar = async (filtros = {}) => {
   return prisma.camion.findMany({
-    where: { activo: true },
+    where: { activo: filtroActivo(filtros.estado) },
     select: camionPanelSelect,
     orderBy: { placa: 'asc' },
     take: 500
@@ -59,7 +65,7 @@ const normalizarDatosCamion = (datos) => {
   }
 }
 
-const eliminar = async (id) => {
+const inactivar = async (id) => {
   const viajesActivos = await prisma.viaje.count({
     where: { camionId: id, estadoLogistico: 'EN_CURSO' }
   })
@@ -73,4 +79,23 @@ const eliminar = async (id) => {
   })
 }
 
-module.exports = { listar, obtener, crear, actualizar, eliminar }
+const eliminar = async (id) => {
+  const viajes = await prisma.viaje.findMany({
+    where: { camionId: id },
+    select: { id: true }
+  })
+  const viajeIds = viajes.map((viaje) => viaje.id)
+
+  return prisma.$transaction(async (tx) => {
+    await tx.gasto.deleteMany({ where: { viajeId: { in: viajeIds } } })
+    await tx.reporteChofer.deleteMany({ where: { viajeId: { in: viajeIds } } })
+    await tx.parada.deleteMany({ where: { viajeId: { in: viajeIds } } })
+    await tx.viaje.deleteMany({ where: { id: { in: viajeIds } } })
+    await tx.mantenimientoVehiculo.deleteMany({ where: { camionId: id } })
+    await tx.truckPosition.deleteMany({ where: { truckId: id } })
+    await tx.choferUnidad.deleteMany({ where: { camionId: id } })
+    return tx.camion.delete({ where: { id } })
+  })
+}
+
+module.exports = { listar, obtener, crear, actualizar, eliminar, inactivar }

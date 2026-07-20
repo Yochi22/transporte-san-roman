@@ -9,6 +9,7 @@ router.get('/', ctrl.listar)
 router.get('/:id', ctrl.obtener)
 router.post('/', soloAdmin, ctrl.crear)
 router.put('/:id', soloAdmin, ctrl.actualizar)
+router.patch('/:id/inactivar', soloAdmin, ctrl.inactivar)
 router.delete('/:id', soloAdmin, ctrl.eliminar)
 
 module.exports = router

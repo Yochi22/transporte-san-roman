@@ -28,6 +28,7 @@ import {
   Truck,
   Trash2,
   User,
+  UserX,
   Users,
   Wallet,
   Wrench,
@@ -162,8 +163,8 @@ export default function App() {
     try {
       const [viajesRes, choferesRes, camionesRes] = await Promise.all([
         api.get('/viajes'),
-        api.get('/choferes'),
-        api.get('/camiones'),
+        api.get('/choferes', { params: { estado: 'todos' } }),
+        api.get('/camiones', { params: { estado: 'todos' } }),
       ])
 
       const nextViajes = viajesRes.data?.data || []
@@ -871,14 +872,15 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
 function RecursosView({ data, isAdmin, onDone }) {
   return (
     <div className="grid gap-5 xl:grid-cols-2">
-      <ResourcePanel title="Choferes" items={data.choferesOperativos} type="chofer" isAdmin={isAdmin} onDone={onDone} camiones={data.camionesOperativos} />
-      <ResourcePanel title="Camiones" items={data.camionesOperativos} type="camion" isAdmin={isAdmin} onDone={onDone} />
+      <ResourcePanel title="Choferes" items={data.choferesRecursos} type="chofer" isAdmin={isAdmin} onDone={onDone} camiones={data.camionesOperativos} />
+      <ResourcePanel title="Camiones" items={data.camionesRecursos} type="camion" isAdmin={isAdmin} onDone={onDone} />
     </div>
   )
 }
 
 function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
   const [open, setOpen] = useState(false)
+  const [estadoFiltro, setEstadoFiltro] = useState('activos')
   const emptyForm = () => type === 'chofer'
     ? { nombre: '', cedula: '', telefono: '', unidadIds: [] }
     : { tipoVehiculo: 'NPR', placa: '', marcaModelo: '', gpsImei: '' }
@@ -887,8 +889,9 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
   const [editingId, setEditingId] = useState(null)
   const [page, setPage] = useState(1)
   const pageSize = 8
-  const pageItems = paginate(items, page, pageSize)
-  useClampPage(page, items.length, pageSize, setPage)
+  const visibleItems = items.filter((item) => estadoFiltro === 'inactivos' ? !item.activo : item.activo)
+  const pageItems = paginate(visibleItems, page, pageSize)
+  useClampPage(page, visibleItems.length, pageSize, setPage)
   const assignedUnits = type === 'chofer' ? buildAssignedUnitsMap(items) : new Map()
 
   const submit = async (event) => {
@@ -955,11 +958,11 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
   const eliminar = async (item) => {
     const name = type === 'chofer' ? item.nombre : item.placa
     const result = await confirmAction(
-      type === 'chofer' ? `Inactivar ${name}` : `Eliminar ${name}`,
+      `Eliminar ${name}`,
       type === 'chofer'
-        ? 'El chofer dejara de aparecer para agendar viajes, se conservara su historial y se liberaran sus unidades.'
-        : 'El registro dejara de aparecer, pero se conservara su historial.',
-      type === 'chofer' ? 'Inactivar' : 'Eliminar'
+        ? 'Se borrara permanentemente el chofer y toda su data operativa relacionada.'
+        : 'Se borrara permanentemente la unidad y toda su data operativa relacionada.',
+      'Eliminar'
     )
     if (!result.isConfirmed) return
     try {
@@ -973,10 +976,48 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
     }
   }
 
+  const inactivar = async (item) => {
+    const name = type === 'chofer' ? item.nombre : item.placa
+    const result = await confirmAction(
+      `Inactivar ${name}`,
+      type === 'chofer'
+        ? 'Dejara de aparecer para agendar viajes, se conservara su historial y se liberaran sus unidades.'
+        : 'Dejara de aparecer para operaciones, se conservara su historial y se liberara de choferes.',
+      'Inactivar'
+    )
+    if (!result.isConfirmed) return
+    try {
+      await api.patch(`/${type === 'chofer' ? 'choferes' : 'camiones'}/${item.id}/inactivar`, {})
+      await notifySuccess('Registro inactivado')
+      onDone()
+    } catch (err) {
+      const message = err.response?.data?.mensaje || 'No se pudo inactivar.'
+      setError(message)
+      await notifyError(message)
+    }
+  }
+
   return (
     <section className="rounded-md border border-neutral-200 bg-white">
       <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
-        <SectionTitle title={title} subtitle={`${items.length} registros`} />
+        <div className="space-y-2">
+          <SectionTitle title={title} subtitle={`${visibleItems.length} registros`} />
+          <div className="flex rounded-md border border-neutral-200 bg-white p-1">
+            {[
+              ['activos', 'Activos'],
+              ['inactivos', 'Inactivos'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => { setEstadoFiltro(value); setPage(1) }}
+                className={`h-8 px-3 text-xs font-medium ${estadoFiltro === value ? 'rounded bg-neutral-950 text-white' : 'text-neutral-600'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
         {isAdmin && (
           <button onClick={crearNuevo} className="btn-secondary">
             <Plus size={16} />
@@ -1045,24 +1086,30 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <span className={`rounded-md px-2 py-1 text-xs font-medium ${item.estadoCalculado === 'DISPONIBLE' ? 'bg-emerald-50 text-emerald-700' : item.estadoCalculado === 'EN_TALLER' ? 'bg-red-50 text-red-700' : 'bg-neutral-100 text-neutral-700'}`}>
-                {formatStatus(item.estadoCalculado)}
+                {item.activo ? formatStatus(item.estadoCalculado) : 'INACTIVO'}
               </span>
               {isAdmin && (
                 <button onClick={() => editar(item)} title="Editar" className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100">
                   <Edit3 size={14} />
                 </button>
               )}
+              {isAdmin && item.activo && (
+                <button onClick={() => inactivar(item)} title="Inactivar" className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-amber-50 hover:text-amber-700">
+                  <UserX size={14} />
+                </button>
+              )}
               {isAdmin && (
-                <button onClick={() => eliminar(item)} title={type === 'chofer' ? 'Inactivar' : 'Eliminar'} className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-red-50 hover:text-red-700">
+                <button onClick={() => eliminar(item)} title="Eliminar permanentemente" className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-red-50 hover:text-red-700">
                   <Trash2 size={14} />
                 </button>
               )}
             </div>
           </div>
         ))}
+        {visibleItems.length === 0 && <Empty text={estadoFiltro === 'inactivos' ? 'Sin registros inactivos.' : 'Sin registros activos.'} />}
       </div>
       <div className="px-4 py-3">
-        <Pagination page={page} total={items.length} pageSize={pageSize} onChange={setPage} />
+        <Pagination page={page} total={visibleItems.length} pageSize={pageSize} onChange={setPage} />
       </div>
 
       {open && (
@@ -2104,7 +2151,7 @@ function buildOperationalData({ viajes, choferes, camiones, query }) {
   const choferesOcupados = new Set(activos.map((viaje) => viaje.choferId))
   const camionesOcupados = new Set(activos.map((viaje) => viaje.camionId))
 
-  const choferesOperativos = choferes.map((chofer) => ({
+  const choferesRecursos = choferes.map((chofer) => ({
     ...chofer,
     estadoCalculado: chofer.estado,
   })).filter((chofer) =>
@@ -2112,7 +2159,7 @@ function buildOperationalData({ viajes, choferes, camiones, query }) {
       .some((value) => normalize(value).includes(q))
   )
 
-  const camionesOperativos = camiones.map((camion) => ({
+  const camionesRecursos = camiones.map((camion) => ({
     ...camion,
     estadoCalculado: camion.estado,
     ubicacionActual:
@@ -2131,6 +2178,8 @@ function buildOperationalData({ viajes, choferes, camiones, query }) {
       camion.ubicacionActual,
     ].some((value) => normalize(value).includes(q))
   )
+  const choferesOperativos = choferesRecursos.filter((chofer) => chofer.activo)
+  const camionesOperativos = camionesRecursos.filter((camion) => camion.activo)
 
   return {
     activos,
@@ -2138,6 +2187,8 @@ function buildOperationalData({ viajes, choferes, camiones, query }) {
     completados,
     liquidados,
     esperando,
+    choferesRecursos,
+    camionesRecursos,
     choferesOperativos,
     camionesOperativos,
     choferesDisponibles: choferes.filter((chofer) => chofer.estado === 'DISPONIBLE' && !choferesOcupados.has(chofer.id)),

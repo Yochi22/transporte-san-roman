@@ -28,9 +28,15 @@ const normalizarUnidadIds = (datos) => {
   return [...new Set(ids.filter((id) => typeof id === 'string' && id.trim()).map((id) => id.trim()))]
 }
 
-const listar = async () => {
+const filtroActivo = (estado) => {
+  if (estado === 'todos') return undefined
+  if (estado === 'inactivos') return false
+  return true
+}
+
+const listar = async (filtros = {}) => {
   return prisma.chofer.findMany({
-    where: { activo: true },
+    where: { activo: filtroActivo(filtros.estado) },
     select: choferPanelSelect,
     orderBy: { nombre: 'asc' },
     take: 500
@@ -121,7 +127,7 @@ const guardarAsignaciones = async (tx, choferId, unidadIds) => {
   })
 }
 
-const eliminar = async (id) => {
+const inactivar = async (id) => {
   const viajesActivos = await prisma.viaje.count({
     where: { choferId: id, estadoLogistico: 'EN_CURSO' }
   })
@@ -135,6 +141,21 @@ const eliminar = async (id) => {
   })
 }
 
-const inactivar = async (id) => eliminar(id)
+const eliminar = async (id) => {
+  const viajes = await prisma.viaje.findMany({
+    where: { choferId: id },
+    select: { id: true }
+  })
+  const viajeIds = viajes.map((viaje) => viaje.id)
+
+  return prisma.$transaction(async (tx) => {
+    await tx.gasto.deleteMany({ where: { OR: [{ choferId: id }, { viajeId: { in: viajeIds } }] } })
+    await tx.reporteChofer.deleteMany({ where: { OR: [{ choferId: id }, { viajeId: { in: viajeIds } }] } })
+    await tx.parada.deleteMany({ where: { viajeId: { in: viajeIds } } })
+    await tx.viaje.deleteMany({ where: { id: { in: viajeIds } } })
+    await tx.choferUnidad.deleteMany({ where: { choferId: id } })
+    return tx.chofer.delete({ where: { id } })
+  })
+}
 
 module.exports = { listar, obtener, crear, actualizar, eliminar, inactivar }
