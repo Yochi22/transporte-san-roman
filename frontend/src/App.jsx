@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { io } from 'socket.io-client'
 import Swal from 'sweetalert2'
 import 'sweetalert2/dist/sweetalert2.min.css'
@@ -437,7 +437,7 @@ export default function App() {
               <ViajesView data={data} onSelect={setSelectedViaje} />
             )}
             {activeTab === 'reportes' && (
-              <ReportesView reportes={data.reportes} onSelectViaje={setSelectedViaje} />
+              <ReportesTableView reportes={data.reportes} onSelectViaje={setSelectedViaje} />
             )}
             {activeTab === 'despacho' && (
               <DespachoView choferes={data.choferesOperativos} camiones={data.camionesOperativos.filter((camion) => camion.estado !== 'EN_TALLER')} viajesActivos={data.activos} onDone={() => fetchData()} />
@@ -618,6 +618,101 @@ function ViajesView({ data, onSelect }) {
       <TripList title="En curso" viajes={data.activos} onSelect={onSelect} />
       <PendientesLiquidacion onSelect={onSelect} />
       <ArchivoLogistico onSelect={onSelect} />
+    </div>
+  )
+}
+
+function ReportesTableView({ reportes, onSelectViaje }) {
+  const [page, setPage] = useState(1)
+  const [expandedId, setExpandedId] = useState(null)
+  const pageSize = 12
+  const visibleReports = paginate(reportes, page, pageSize)
+  useClampPage(page, reportes.length, pageSize, setPage)
+
+  return (
+    <div className="space-y-4">
+      <section className="border border-neutral-200 bg-white">
+        <div className="flex flex-col gap-3 border-b border-neutral-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <SectionTitle title="Reportes de choferes" subtitle={`${reportes.length} registros recientes`} />
+          <span className="text-xs text-neutral-500">Conservacion automatica: 3 dias</span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[980px] border-collapse text-left">
+            <thead className="border-b border-neutral-200 bg-neutral-50">
+              <tr className="text-xs font-semibold uppercase text-neutral-500">
+                <th className="w-36 px-4 py-3">Fecha</th>
+                <th className="w-44 px-4 py-3">Chofer</th>
+                <th className="w-40 px-4 py-3">Viaje</th>
+                <th className="w-36 px-4 py-3">Tipo</th>
+                <th className="w-48 px-4 py-3">Ubicacion</th>
+                <th className="px-4 py-3">Reporte</th>
+                <th className="w-32 px-4 py-3 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100">
+              {visibleReports.map((reporte) => {
+                const expanded = expandedId === reporte.id
+                const chofer = reporte.chofer?.nombre || reporte.viaje?.chofer?.nombre || 'Sin chofer'
+                const viaje = reporte.viaje
+                const mensaje = reporte.mensajeOriginal || 'Sin mensaje'
+
+                return (
+                  <Fragment key={reporte.id}>
+                    <tr className="align-top text-sm hover:bg-neutral-50">
+                      <td className="px-4 py-3 text-xs text-neutral-500">{formatDate(reporte.createdAt)}</td>
+                      <td className="px-4 py-3 font-medium text-neutral-950">{chofer}</td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          onClick={() => viaje && onSelectViaje(viaje)}
+                          disabled={!viaje}
+                          className="text-sm font-semibold text-neutral-950 underline-offset-4 hover:underline disabled:cursor-default disabled:text-neutral-400 disabled:no-underline"
+                        >
+                          {viaje?.codigo || 'Sin viaje'}
+                        </button>
+                        {viaje && <p className="mt-1 truncate text-xs text-neutral-500">{formatRoute(viaje)}</p>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex rounded px-2 py-1 text-xs font-medium ${reporteStyles[reporte.tipoReporte] || reporteStyles.OTRO}`}>
+                          {labelReporte(reporte.tipoReporte)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-neutral-600">{reporte.ubicacion || 'Sin ubicacion'}</td>
+                      <td className="px-4 py-3">
+                        <p className="max-w-xl truncate font-medium text-neutral-950">{formatReportTitle(reporte)}</p>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedId(expanded ? null : reporte.id)}
+                          className="h-8 rounded border border-neutral-200 px-3 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+                        >
+                          {expanded ? 'Cerrar' : 'Detalle'}
+                        </button>
+                      </td>
+                    </tr>
+                    {expanded && (
+                      <tr className="bg-stone-50">
+                        <td colSpan={7} className="px-4 py-4">
+                          <div className="grid gap-4 text-sm md:grid-cols-[1.4fr_0.8fr_1fr]">
+                            <InfoBlock label="Mensaje recibido" value={mensaje} />
+                            <InfoBlock label="Ubicacion" value={reporte.ubicacion || 'Sin ubicacion reportada'} />
+                            <InfoBlock label="Viaje" value={viaje ? `${viaje.codigo} · ${formatRoute(viaje)}` : 'Sin viaje asociado'} />
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
+          {visibleReports.length === 0 && <Empty text="Sin reportes recientes." />}
+        </div>
+      </section>
+
+      <Pagination page={page} total={reportes.length} pageSize={pageSize} onChange={setPage} />
     </div>
   )
 }
