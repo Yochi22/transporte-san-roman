@@ -26,4 +26,9 @@ const eliminar = async (req, res) => {
   return ok(res, null, 'Chofer eliminado')
 }
 
-module.exports = { listar, obtener, crear, actualizar, eliminar }
+const inactivar = async (req, res) => {
+  await service.inactivar(req.params.id)
+  return ok(res, null, 'Chofer inactivado')
+}
+
+module.exports = { listar, obtener, crear, actualizar, eliminar, inactivar }

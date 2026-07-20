@@ -64,9 +64,12 @@ const eliminar = async (id) => {
     where: { camionId: id, estadoLogistico: 'EN_CURSO' }
   })
   if (viajesActivos > 0) throw { status: 409, message: 'No se puede eliminar una unidad con viajes activos' }
-  return prisma.camion.update({
-    where: { id },
-    data: { activo: false, estado: 'DISPONIBLE' }
+  return prisma.$transaction(async (tx) => {
+    await tx.choferUnidad.deleteMany({ where: { camionId: id } })
+    return tx.camion.update({
+      where: { id },
+      data: { activo: false, estado: 'DISPONIBLE' }
+    })
   })
 }
 

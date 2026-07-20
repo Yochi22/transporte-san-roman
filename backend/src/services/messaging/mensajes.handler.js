@@ -1,6 +1,6 @@
 const prisma = require('../../config/database')
 const { parsearReporteChofer } = require('./ia.parser')
-const { normalizarTelefono } = require('../../utils/normalizarTelefono')
+const { normalizarTelefono, ultimosDigitosTelefono } = require('../../utils/normalizarTelefono')
 
 const COMANDOS = {
   MENU: ['menu', 'ayuda', 'help', '0'],
@@ -50,6 +50,7 @@ const buscarChofer = async (remoteJid) => {
   })
 
   if (chofer?.activo) return chofer
+  if (chofer && !chofer.activo) chofer = null
 
   if (remoteJid.endsWith('@s.whatsapp.net')) {
     const telefono = normalizarTelefono(remoteJid.replace('@s.whatsapp.net', '').split(':')[0])
@@ -58,6 +59,16 @@ const buscarChofer = async (remoteJid) => {
       where: { telefono },
       include: includeChoferConViajes(),
     })
+
+    if (!chofer) {
+      chofer = await prisma.chofer.findFirst({
+        where: {
+          activo: true,
+          telefono: { endsWith: ultimosDigitosTelefono(telefono) },
+        },
+        include: includeChoferConViajes(),
+      })
+    }
 
     if (chofer?.activo && !chofer.whatsappChatId) {
       await prisma.chofer.update({
@@ -192,7 +203,8 @@ const procesarReporte = async ({
     resultado.ubicacion = 'Sede Barquisimeto'
     resultado.resumen = 'Chofer disponible en sede Barquisimeto'
   }
-  if (resultado.tipo === 'NOVEDAD') {
+  if (resultado.tipo === 'NOVEDAD' || esNovedad(textoOriginal)) {
+    resultado.tipo = 'NOVEDAD'
     resultado.paradaId = null
     resultado.estadoParada = null
     resultado.resumen = resultado.resumen || 'Novedad operativa reportada'
@@ -425,6 +437,14 @@ const esReporteSede = (texto) => {
     /\btsr\b/.test(normalizado) ||
     normalizado.includes('transporte san roman') ||
     normalizado.includes('transporte san román')
+  )
+}
+
+const esNovedad = (texto) => {
+  const normalizado = normalizarComando(texto)
+  return (
+    esComando(normalizado, COMANDOS.NOVEDAD) ||
+    /\b(novedad|incidencia|problema|retraso|demora|accidente|falla|averia|tranca|cola|foto)\b/.test(normalizado)
   )
 }
 

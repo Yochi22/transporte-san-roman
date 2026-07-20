@@ -125,20 +125,38 @@ const obtener = async (id) => {
 }
 
 const crear = async (datos, creadoPorId) => {
-  const { camionId, choferId } = datos
-  if (typeof camionId !== 'string' || typeof choferId !== 'string') {
-    throw { status: 400, message: 'Chofer y unidad son requeridos' }
+  let { camionId, choferId } = datos
+  if (typeof choferId !== 'string') {
+    throw { status: 400, message: 'Chofer es requerido' }
   }
   const paradas = validarParadas(datos.paradas)
   const viaticosDepositados = validarMonto(datos.viaticosDepositados, 'Monto de viaticos')
   const odometroInicial = validarNumeroOpcional(datos.odometroInicial, 'Odometro inicial', { entero: true })
   const combustibleInicial = validarNumeroOpcional(datos.combustibleInicial, 'Combustible inicial')
-  const [camion, chofer] = await Promise.all([
-    prisma.camion.findUniqueOrThrow({ where: { id: camionId } }),
-    prisma.chofer.findUniqueOrThrow({ where: { id: choferId } })
-  ])
-  if (!camion.activo || !chofer.activo) {
-    throw { status: 409, message: 'El chofer o la unidad no estan activos' }
+  const chofer = await prisma.chofer.findUniqueOrThrow({
+    where: { id: choferId },
+    include: {
+      unidadesAsignadas: {
+        include: { camion: true }
+      }
+    }
+  })
+  if (!chofer.activo) {
+    throw { status: 409, message: 'El chofer no esta activo' }
+  }
+  const unidadesAsignadas = chofer.unidadesAsignadas.map((asignacion) => asignacion.camion).filter((camion) => camion?.activo)
+  if (!camionId && unidadesAsignadas.length === 1) {
+    camionId = unidadesAsignadas[0].id
+  }
+  if (typeof camionId !== 'string') {
+    throw { status: 400, message: 'El chofer tiene varias unidades asignadas. Selecciona cual usara.' }
+  }
+  const camion = unidadesAsignadas.find((unidad) => unidad.id === camionId)
+  if (!camion) {
+    throw { status: 409, message: 'La unidad seleccionada no esta asignada a este chofer' }
+  }
+  if (!camion.activo) {
+    throw { status: 409, message: 'La unidad no esta activa' }
   }
   if (camion.estado === 'EN_TALLER') {
     throw { status: 409, message: 'La unidad esta fuera de servicio y no puede ser despachada' }

@@ -60,11 +60,14 @@ const crear = async (datos) => {
 const actualizar = async (id, datos) => {
   const { nombre, cedula, telefono } = validarDatos(datos, true)
   const unidadIds = normalizarUnidadIds(datos)
+  const activo = typeof datos.activo === 'boolean' ? datos.activo : undefined
   const actual = await prisma.chofer.findUniqueOrThrow({
     where: { id },
     select: { telefono: true }
   })
   const telefonoNormalizado = telefono ? normalizarTelefono(telefono) : undefined
+  const debeResetearWhatsapp =
+    activo === false || (telefonoNormalizado && telefonoNormalizado !== actual.telefono)
   return prisma.$transaction(async (tx) => {
     await tx.chofer.update({
       where: { id },
@@ -72,10 +75,16 @@ const actualizar = async (id, datos) => {
         nombre,
         cedula,
         telefono: telefonoNormalizado,
-        whatsappChatId: telefonoNormalizado && telefonoNormalizado !== actual.telefono ? null : undefined
+        activo,
+        estado: activo === false ? 'DISPONIBLE' : undefined,
+        whatsappChatId: debeResetearWhatsapp ? null : undefined
       }
     })
-    await guardarAsignaciones(tx, id, unidadIds)
+    if (activo === false) {
+      await tx.choferUnidad.deleteMany({ where: { choferId: id } })
+    } else {
+      await guardarAsignaciones(tx, id, unidadIds)
+    }
     return tx.chofer.findUniqueOrThrow({ where: { id }, select: choferPanelSelect })
   })
 }
@@ -117,10 +126,15 @@ const eliminar = async (id) => {
     where: { choferId: id, estadoLogistico: 'EN_CURSO' }
   })
   if (viajesActivos > 0) throw { status: 409, message: 'No se puede eliminar un chofer con viajes activos' }
-  return prisma.chofer.update({
-    where: { id },
-    data: { activo: false, estado: 'DISPONIBLE', whatsappChatId: null }
+  return prisma.$transaction(async (tx) => {
+    await tx.choferUnidad.deleteMany({ where: { choferId: id } })
+    return tx.chofer.update({
+      where: { id },
+      data: { activo: false, estado: 'DISPONIBLE', whatsappChatId: null }
+    })
   })
 }
 
-module.exports = { listar, obtener, crear, actualizar, eliminar }
+const inactivar = async (id) => eliminar(id)
+
+module.exports = { listar, obtener, crear, actualizar, eliminar, inactivar }

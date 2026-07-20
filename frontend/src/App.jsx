@@ -698,9 +698,28 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
   ])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const selectedChofer = choferes.find((chofer) => chofer.id === form.choferId)
+  const unidadesAsignadas = useMemo(
+    () => (selectedChofer?.unidadesAsignadas || [])
+      .map((asignacion) => asignacion.camion)
+      .filter((camion) => camion?.activo !== false && camion.estado !== 'EN_TALLER'),
+    [selectedChofer]
+  )
   const viajeExistente = viajesActivos.find(
     (viaje) => viaje.choferId === form.choferId && viaje.camionId === form.camionId
   )
+
+  useEffect(() => {
+    if (!form.choferId) {
+      if (form.camionId) setForm((current) => ({ ...current, camionId: '' }))
+      return
+    }
+    if (unidadesAsignadas.length === 1 && form.camionId !== unidadesAsignadas[0].id) {
+      setForm((current) => ({ ...current, camionId: unidadesAsignadas[0].id }))
+    } else if (form.camionId && !unidadesAsignadas.some((camion) => camion.id === form.camionId)) {
+      setForm((current) => ({ ...current, camionId: '' }))
+    }
+  }, [form.choferId, form.camionId, unidadesAsignadas])
 
   const updateParada = (id, patch) => {
     setParadas((prev) => prev.map((parada) => (parada.id === id ? { ...parada, ...patch } : parada)))
@@ -760,21 +779,30 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
           text={`Esta ruta se agregara como un nuevo tramo de ${viajeExistente.codigo}.`}
         />
       )}
+      {form.choferId && unidadesAsignadas.length === 0 && (
+        <Banner tone="danger" icon={AlertTriangle} text="Este chofer no tiene unidades activas asignadas. Asignale una unidad en Recursos antes de agendar." />
+      )}
 
       <section className="rounded-md border border-neutral-200 bg-white p-4 sm:p-5">
         <SectionTitle title="Nuevo despacho" subtitle="Chofer, unidad, viaticos y ruta" />
         <div className="mt-4 grid gap-4 md:grid-cols-3">
           <Field label="Chofer">
-            <select required value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value })} className="input">
+            <select required value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value, camionId: '' })} className="input">
               <option value="">Seleccionar</option>
               {choferes.map((chofer) => <option key={chofer.id} value={chofer.id}>{chofer.nombre} · {formatStatus(chofer.estadoCalculado)}</option>)}
             </select>
           </Field>
-          <Field label="Camion">
-            <select required value={form.camionId} onChange={(event) => setForm({ ...form, camionId: event.target.value })} className="input">
-              <option value="">Seleccionar</option>
-              {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)} · {formatStatus(camion.estadoCalculado)}</option>)}
-            </select>
+          <Field label="Unidad asignada">
+            {form.choferId && unidadesAsignadas.length === 1 ? (
+              <div className="flex h-10 items-center rounded-md border border-neutral-200 bg-neutral-50 px-3 text-sm font-medium">
+                {vehicleLabel(unidadesAsignadas[0])}
+              </div>
+            ) : (
+              <select required value={form.camionId} onChange={(event) => setForm({ ...form, camionId: event.target.value })} className="input" disabled={!form.choferId || unidadesAsignadas.length === 0}>
+                <option value="">{form.choferId ? 'Seleccionar unidad del chofer' : 'Selecciona un chofer primero'}</option>
+                {unidadesAsignadas.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)} - {formatStatus(camion.estadoCalculado || camion.estado)}</option>)}
+              </select>
+            )}
           </Field>
           <Field label="Viaticos (opcional)">
             <input type="number" min="0" step="0.01" value={form.viaticosDepositados} onChange={(event) => setForm({ ...form, viaticosDepositados: event.target.value })} className="input" placeholder="Sin viaticos" />
@@ -830,7 +858,7 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
         </div>
 
         <div className="mt-5 flex justify-end">
-          <button disabled={saving} className="btn-primary">
+          <button disabled={saving || !form.camionId} className="btn-primary">
             <Send size={16} />
             {saving ? 'Guardando' : viajeExistente ? 'Agregar tramo' : 'Despachar'}
           </button>
@@ -926,7 +954,13 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
 
   const eliminar = async (item) => {
     const name = type === 'chofer' ? item.nombre : item.placa
-    const result = await confirmAction(`Eliminar ${name}`, 'El registro dejara de aparecer, pero se conservara su historial.', 'Eliminar')
+    const result = await confirmAction(
+      type === 'chofer' ? `Inactivar ${name}` : `Eliminar ${name}`,
+      type === 'chofer'
+        ? 'El chofer dejara de aparecer para agendar viajes, se conservara su historial y se liberaran sus unidades.'
+        : 'El registro dejara de aparecer, pero se conservara su historial.',
+      type === 'chofer' ? 'Inactivar' : 'Eliminar'
+    )
     if (!result.isConfirmed) return
     try {
       await api.delete(`/${type === 'chofer' ? 'choferes' : 'camiones'}/${item.id}`)
@@ -1019,7 +1053,7 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
                 </button>
               )}
               {isAdmin && (
-                <button onClick={() => eliminar(item)} title="Eliminar" className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-red-50 hover:text-red-700">
+                <button onClick={() => eliminar(item)} title={type === 'chofer' ? 'Inactivar' : 'Eliminar'} className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-red-50 hover:text-red-700">
                   <Trash2 size={14} />
                 </button>
               )}
