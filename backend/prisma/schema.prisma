@@ -102,6 +102,14 @@ enum EstadoMotor {
   APAGADO
 }
 
+enum TipoEventoCombustible {
+  CARGA
+  TRANSFERENCIA_SALIDA
+  TRANSFERENCIA_ENTRADA
+  AJUSTE
+  PERDIDA
+}
+
 model Usuario {
   id             String   @id @default(uuid())
   nombre         String
@@ -134,6 +142,7 @@ model Chofer {
   reportes          ReporteChofer[]
   gastos            Gasto[]
   unidadesAsignadas ChoferUnidad[]
+  eventosCombustible CombustibleEvento[]
 
   @@index([estado, activo])
   @@map("choferes")
@@ -150,6 +159,9 @@ model Camion {
   estado            EstadoCamion            @default(DISPONIBLE)
   ubicacionActual   String?                 @default("Sede") @map("ubicacion_actual")
   motivoTaller      String?                 @map("motivo_taller")
+  capacidadTanqueLitros Decimal?            @map("capacidad_tanque_litros")
+  rendimientoEsperadoKmL Decimal?           @map("rendimiento_esperado_km_l")
+  toleranciaCombustiblePct Decimal?         @default(10) @map("tolerancia_combustible_pct")
   activo            Boolean                 @default(true)
   createdAt         DateTime                @default(now()) @map("created_at")
   updatedAt         DateTime                @updatedAt @map("updated_at")
@@ -158,6 +170,8 @@ model Camion {
   mantenimientos    MantenimientoVehiculo[]
   posicionGps       TruckPosition?
   choferesAsignados ChoferUnidad[]
+  eventosCombustible CombustibleEvento[]
+  estandaresCombustible CombustibleEstandarRuta[]
 
   @@index([estado, activo])
   @@map("camiones")
@@ -246,12 +260,56 @@ model Viaje {
   reportes  ReporteChofer[]
   gastos    Gasto[]
   unidades  ViajeUnidad[]
+  combustibleEventos CombustibleEvento[]
 
   @@index([estadoLogistico, estadoFinanciero])
   @@index([camionId, estadoLogistico])
   @@index([choferId, estadoLogistico])
   @@index([createdAt])
   @@map("viajes")
+}
+
+model CombustibleEvento {
+  id          String                 @id @default(uuid())
+  viajeId     String                 @map("viaje_id")
+  choferId    String                 @map("chofer_id")
+  camionId    String                 @map("camion_id")
+  tipo        TipoEventoCombustible
+  litros      Decimal
+  monto       Decimal                @default(0)
+  moneda      String                 @default("USD")
+  tasaBcv     Decimal?               @map("tasa_bcv")
+  ubicacion   String?
+  descripcion String?
+  createdAt   DateTime               @default(now()) @map("created_at")
+
+  viaje  Viaje  @relation(fields: [viajeId], references: [id], onDelete: Cascade)
+  chofer Chofer @relation(fields: [choferId], references: [id], onDelete: Cascade)
+  camion Camion @relation(fields: [camionId], references: [id], onDelete: Cascade)
+
+  @@index([viajeId, createdAt])
+  @@index([choferId, createdAt])
+  @@index([camionId, createdAt])
+  @@map("combustible_eventos")
+}
+
+model CombustibleEstandarRuta {
+  id            String       @id @default(uuid())
+  origen        String
+  destino       String
+  tipoVehiculo  TipoVehiculo? @map("tipo_vehiculo")
+  camionId      String?       @map("camion_id")
+  litrosEsperados Decimal     @map("litros_esperados")
+  toleranciaPct Decimal       @default(10) @map("tolerancia_pct")
+  activo        Boolean       @default(true)
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  camion Camion? @relation(fields: [camionId], references: [id], onDelete: SetNull)
+
+  @@index([origen, destino, activo])
+  @@index([camionId])
+  @@map("combustible_estandares_ruta")
 }
 
 model ViajeUnidad {

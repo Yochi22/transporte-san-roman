@@ -46,6 +46,9 @@ const normalizarDatosCamion = (datos) => {
   const placa = datos.placa?.trim().toUpperCase()
   const marcaModelo = datos.marcaModelo?.trim() || tipoVehiculo
   const gpsImei = datos.gpsImei?.trim() || null
+  const capacidadTanqueLitros = validarNumeroOpcional(datos.capacidadTanqueLitros, 'Capacidad del tanque')
+  const rendimientoEsperadoKmL = validarNumeroOpcional(datos.rendimientoEsperadoKmL, 'Rendimiento esperado')
+  const toleranciaCombustiblePct = validarNumeroOpcional(datos.toleranciaCombustiblePct, 'Tolerancia de combustible') ?? 10
 
   if (!placa) throw { status: 400, message: 'La placa es requerida' }
   if (placa.length > 20) {
@@ -62,7 +65,19 @@ const normalizarDatosCamion = (datos) => {
     placaFurgon,
     placaChuto,
     marcaModelo,
+    capacidadTanqueLitros,
+    rendimientoEsperadoKmL,
+    toleranciaCombustiblePct,
   }
+}
+
+const validarNumeroOpcional = (valor, campo) => {
+  if (valor === undefined || valor === null || valor === '') return null
+  const numero = Number(valor)
+  if (!Number.isFinite(numero) || numero < 0 || numero > 1_000_000) {
+    throw { status: 400, message: `${campo} invalido` }
+  }
+  return numero
 }
 
 const inactivar = async (id) => {
@@ -98,6 +113,7 @@ const eliminar = async (id) => {
   const viajeIds = viajes.map((viaje) => viaje.id)
 
   return prisma.$transaction(async (tx) => {
+    await tx.combustibleEvento.deleteMany({ where: { OR: [{ viajeId: { in: viajeIds } }, { camionId: id }] } })
     await tx.gasto.deleteMany({ where: { viajeId: { in: viajeIds } } })
     await tx.reporteChofer.deleteMany({ where: { viajeId: { in: viajeIds } } })
     await tx.parada.deleteMany({ where: { viajeId: { in: viajeIds } } })

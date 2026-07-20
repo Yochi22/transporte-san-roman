@@ -1224,7 +1224,7 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
   const [estadoFiltro, setEstadoFiltro] = useState('activos')
   const emptyForm = () => type === 'chofer'
     ? { nombre: '', cedula: '', telefono: '', unidadIds: [] }
-    : { tipoVehiculo: 'NPR', placa: '', marcaModelo: '', gpsImei: '' }
+    : { tipoVehiculo: 'NPR', placa: '', marcaModelo: '', gpsImei: '', capacidadTanqueLitros: '', rendimientoEsperadoKmL: '', toleranciaCombustiblePct: '10' }
   const [form, setForm] = useState(emptyForm)
   const [error, setError] = useState('')
   const [editingId, setEditingId] = useState(null)
@@ -1275,6 +1275,9 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
             placa: item.placa,
             marcaModelo: item.marcaModelo,
             gpsImei: item.gpsImei || '',
+            capacidadTanqueLitros: item.capacidadTanqueLitros || '',
+            rendimientoEsperadoKmL: item.rendimientoEsperadoKmL || '',
+            toleranciaCombustiblePct: item.toleranciaCombustiblePct || '10',
           }
     )
     setOpen(true)
@@ -1391,6 +1394,9 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
               <input required value={form.placa} onChange={(event) => setForm({ ...form, placa: event.target.value })} className="input md:col-span-2" placeholder="Placa" />
               <input value={form.marcaModelo} onChange={(event) => setForm({ ...form, marcaModelo: event.target.value })} className="input md:col-span-3" placeholder="Marca / modelo (opcional)" />
               <input value={form.gpsImei} onChange={(event) => setForm({ ...form, gpsImei: event.target.value })} className="input md:col-span-3" placeholder="IMEI GPS Baanool / Coban (opcional)" />
+              <input type="number" min="0" step="0.01" value={form.capacidadTanqueLitros} onChange={(event) => setForm({ ...form, capacidadTanqueLitros: event.target.value })} className="input" placeholder="Tanque litros" />
+              <input type="number" min="0" step="0.01" value={form.rendimientoEsperadoKmL} onChange={(event) => setForm({ ...form, rendimientoEsperadoKmL: event.target.value })} className="input" placeholder="Km por litro" />
+              <input type="number" min="0" step="0.01" value={form.toleranciaCombustiblePct} onChange={(event) => setForm({ ...form, toleranciaCombustiblePct: event.target.value })} className="input" placeholder="Tolerancia %" />
             </>
           )}
           <button className="btn-primary md:col-span-3">
@@ -1552,6 +1558,15 @@ function ResourceModal({ title, type, form, setForm, error, editingId, camiones,
                   <input value={form.gpsImei} onChange={(event) => setForm({ ...form, gpsImei: event.target.value })} className="input" placeholder="Opcional" />
                 </Field>
               </div>
+              <Field label="Tanque litros">
+                <input type="number" min="0" step="0.01" value={form.capacidadTanqueLitros} onChange={(event) => setForm({ ...form, capacidadTanqueLitros: event.target.value })} className="input" placeholder="Opcional" />
+              </Field>
+              <Field label="Km por litro">
+                <input type="number" min="0" step="0.01" value={form.rendimientoEsperadoKmL} onChange={(event) => setForm({ ...form, rendimientoEsperadoKmL: event.target.value })} className="input" placeholder="Opcional" />
+              </Field>
+              <Field label="Tolerancia %">
+                <input type="number" min="0" step="0.01" value={form.toleranciaCombustiblePct} onChange={(event) => setForm({ ...form, toleranciaCombustiblePct: event.target.value })} className="input" placeholder="10" />
+              </Field>
             </>
           )}
           {error && <p className="text-sm text-red-600 md:col-span-3">{error}</p>}
@@ -1953,6 +1968,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   const [reportPage, setReportPage] = useState(1)
   const [noveltyPage, setNoveltyPage] = useState(1)
   const [expensePage, setExpensePage] = useState(1)
+  const [fuelRefreshKey, setFuelRefreshKey] = useState(0)
   const [showLiquidarModal, setShowLiquidarModal] = useState(false)
   const [numeroGuia, setNumeroGuia] = useState(viaje.numeroGuia || '')
   const [cierreForm, setCierreForm] = useState({ odometroFinal: viaje.odometroFinal || '', combustibleFinal: viaje.combustibleFinal || '' })
@@ -2147,6 +2163,10 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
             </section>
           )}
 
+          {isAdmin && (
+            <FuelSection viaje={viaje} refreshKey={fuelRefreshKey} onDone={() => { setFuelRefreshKey((value) => value + 1); onDone() }} />
+          )}
+
           <section className={`grid gap-5 ${isAdmin ? 'xl:grid-cols-2' : ''}`}>
             {isAdmin && <div className="space-y-3">
               <SectionTitle title="Novedades" subtitle={`${novedades.length} registros`} />
@@ -2294,6 +2314,145 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
         </div>
       )}
     </div>
+  )
+}
+
+function FuelSection({ viaje, refreshKey, onDone }) {
+  const unidades = tripUnits(viaje)
+  const [summary, setSummary] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [form, setForm] = useState({
+    camionId: unidades[0]?.id || '',
+    tipo: 'CARGA',
+    litros: '',
+    monto: '',
+    moneda: 'USD',
+    tasaBcv: '',
+    ubicacion: '',
+    descripcion: '',
+  })
+
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    api.get(`/combustible/viajes/${viaje.id}/resumen`)
+      .then((response) => {
+        if (active) setSummary(response.data?.data || null)
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [viaje.id, refreshKey])
+
+  const submit = async (event) => {
+    event.preventDefault()
+    try {
+      await api.post(`/combustible/viajes/${viaje.id}/eventos`, {
+        ...form,
+        litros: Number(form.litros),
+        monto: form.monto ? Number(form.monto) : 0,
+        tasaBcv: form.tasaBcv ? Number(form.tasaBcv) : null,
+      })
+      setForm({ ...form, litros: '', monto: '', tasaBcv: '', ubicacion: '', descripcion: '' })
+      setOpen(false)
+      await notifySuccess('Combustible registrado')
+      onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo registrar el evento de combustible.')
+    }
+  }
+
+  const eliminar = async (id) => {
+    const result = await confirmAction('Eliminar evento', 'Se retirara este movimiento del calculo de combustible.', 'Eliminar')
+    if (!result.isConfirmed) return
+    try {
+      await api.delete(`/combustible/eventos/${id}`)
+      await notifySuccess('Evento eliminado')
+      onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo eliminar el evento.')
+    }
+  }
+
+  const estado = summary?.estado || 'SIN_DATOS'
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <SectionTitle title="Combustible" subtitle="Rendimiento y trazabilidad del viaje" />
+        <button type="button" onClick={() => setOpen((value) => !value)} className="btn-secondary">
+          <Plus size={16} />
+          Evento
+        </button>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-4">
+        <Fact icon={Truck} label="Km recorridos" value={summary?.kmRecorridos ?? 'Sin cierre'} />
+        <Fact icon={Wallet} label="Consumo real" value={summary?.consumoRealLitros !== null && summary?.consumoRealLitros !== undefined ? `${Number(summary.consumoRealLitros).toFixed(2)} L` : 'Sin datos'} />
+        <Fact icon={Wallet} label="Esperado" value={summary?.consumoEsperadoLitros ? `${Number(summary.consumoEsperadoLitros).toFixed(2)} L` : 'Sin referencia'} />
+        <Fact icon={AlertTriangle} label="Estado" value={<span className={fuelStatusTextClass(estado)}>{formatStatus(estado)}</span>} />
+      </div>
+
+      {summary?.desviacionPct !== null && summary?.desviacionPct !== undefined && (
+        <div className="rounded-md border border-neutral-200 bg-white px-4 py-3 text-xs text-neutral-600">
+          Desviacion: <span className="font-medium text-neutral-950">{Number(summary.desviacionPct).toFixed(1)}%</span> · Referencia: {summary.referencia === 'RUTA' ? 'estandar por ruta' : summary.referencia === 'UNIDAD' ? 'rendimiento esperado de unidad' : 'sin referencia'}
+        </div>
+      )}
+
+      {open && (
+        <form onSubmit={submit} className="grid gap-2 rounded-md border border-neutral-200 bg-neutral-50 p-3 md:grid-cols-3">
+          <select value={form.camionId} onChange={(event) => setForm({ ...form, camionId: event.target.value })} className="input">
+            {unidades.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)}</option>)}
+          </select>
+          <select value={form.tipo} onChange={(event) => setForm({ ...form, tipo: event.target.value })} className="input">
+            <option value="CARGA">Carga</option>
+            <option value="TRANSFERENCIA_SALIDA">Transferencia salida</option>
+            <option value="TRANSFERENCIA_ENTRADA">Transferencia entrada</option>
+            <option value="AJUSTE">Ajuste</option>
+            <option value="PERDIDA">Perdida</option>
+          </select>
+          <input required type="number" min="0.01" step="0.01" value={form.litros} onChange={(event) => setForm({ ...form, litros: event.target.value })} className="input" placeholder="Litros" />
+          <input type="number" min="0" step="0.01" value={form.monto} onChange={(event) => setForm({ ...form, monto: event.target.value })} className="input" placeholder="Monto" />
+          <select value={form.moneda} onChange={(event) => setForm({ ...form, moneda: event.target.value })} className="input">
+            <option value="USD">USD</option>
+            <option value="BS">Bs</option>
+          </select>
+          <input type="number" min="0" step="0.0001" value={form.tasaBcv} onChange={(event) => setForm({ ...form, tasaBcv: event.target.value })} className="input" placeholder="Tasa BCV" />
+          <input value={form.ubicacion} onChange={(event) => setForm({ ...form, ubicacion: event.target.value })} className="input" placeholder="Lugar" />
+          <input value={form.descripcion} onChange={(event) => setForm({ ...form, descripcion: event.target.value })} className="input md:col-span-2" placeholder="Observacion" />
+          <button className="btn-primary md:col-span-3">
+            <Check size={16} />
+            Guardar evento
+          </button>
+        </form>
+      )}
+
+      <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">
+        {(summary?.eventos || []).map((evento) => (
+          <div key={evento.id} className="grid gap-2 border-b border-neutral-100 px-4 py-3 text-sm last:border-b-0 md:grid-cols-[160px_1fr_120px_120px_32px] md:items-center">
+            <div>
+              <p className="font-medium text-neutral-950">{formatStatus(evento.tipo)}</p>
+              <p className="text-xs text-neutral-500">{formatDate(evento.createdAt)}</p>
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-xs text-neutral-500">{vehicleLabel(evento.camion || unidades.find((camion) => camion.id === evento.camionId) || {})}</p>
+              <p className="truncate text-xs text-neutral-500">{evento.ubicacion || evento.descripcion || 'Sin observacion'}</p>
+            </div>
+            <p className="text-sm font-medium">{Number(evento.litros || 0).toFixed(2)} L</p>
+            <p className="text-sm text-neutral-600">{moneyCurrency(evento.monto, evento.moneda)}</p>
+            <button onClick={() => eliminar(evento.id)} className="grid h-8 w-8 place-items-center rounded-md text-neutral-400 hover:bg-red-50 hover:text-red-600">
+              <X size={14} />
+            </button>
+          </div>
+        ))}
+        {!loading && (summary?.eventos || []).length === 0 && <Empty text="Sin eventos de combustible." />}
+        {loading && <Empty text="Calculando combustible..." />}
+      </div>
+    </section>
   )
 }
 
@@ -2702,6 +2861,13 @@ function tripUnitIds(viaje) {
   return ids.length > 0 ? ids : [viaje.camionId].filter(Boolean)
 }
 
+function tripUnits(viaje) {
+  const unidades = (viaje.unidades || []).map((unidad) => unidad.camion).filter(Boolean)
+  const fallback = viaje.camion ? [viaje.camion] : []
+  const byId = new Map([...fallback, ...unidades].filter(Boolean).map((camion) => [camion.id, camion]))
+  return [...byId.values()]
+}
+
 function sameIdSet(a = [], b = []) {
   if (a.length !== b.length) return false
   const set = new Set(a)
@@ -2761,6 +2927,11 @@ function money(value) {
   return `$${Number(value || 0).toFixed(2)}`
 }
 
+function moneyCurrency(value, currency = 'USD') {
+  const amount = Number(value || 0).toFixed(2)
+  return currency === 'BS' ? `Bs ${amount}` : `$${amount}`
+}
+
 function formatDate(value) {
   if (!value) return ''
   return new Date(value).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' })
@@ -2782,6 +2953,13 @@ function resourceStatusClass(value) {
   if (key === 'pernocta') return 'bg-indigo-50 text-indigo-700'
   if (key === 'en ruta') return 'bg-neutral-100 text-neutral-700'
   return 'bg-neutral-100 text-neutral-700'
+}
+
+function fuelStatusTextClass(value) {
+  if (value === 'NORMAL') return 'text-emerald-700'
+  if (value === 'OBSERVAR') return 'text-amber-700'
+  if (value === 'CRITICO') return 'text-red-700'
+  return 'text-neutral-600'
 }
 
 function labelReporte(tipo) {

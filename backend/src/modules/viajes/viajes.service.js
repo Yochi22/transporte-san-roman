@@ -8,6 +8,7 @@ const viajePanelInclude = {
   unidades: { include: { camion: { select: camionPanelSelect } } },
   paradas: { orderBy: { orden: 'asc' } },
   reportes: { select: reportePanelSelect, orderBy: { createdAt: 'desc' }, take: 100 },
+  combustibleEventos: { include: { camion: { select: { id: true, placa: true, tipoVehiculo: true } } }, orderBy: { createdAt: 'desc' }, take: 200 },
   gastos: { orderBy: { createdAt: 'desc' }, take: 200 }
 }
 

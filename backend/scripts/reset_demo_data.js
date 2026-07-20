@@ -7,6 +7,8 @@ const main = async () => {
   }
 
   await prisma.$transaction(async (tx) => {
+    await tx.combustibleEvento.deleteMany()
+    await tx.combustibleEstandarRuta.deleteMany()
     await tx.gasto.deleteMany()
     await tx.reporteChofer.deleteMany()
     await tx.parada.deleteMany()
