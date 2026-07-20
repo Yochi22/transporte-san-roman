@@ -1426,7 +1426,7 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
               )}
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              <span className={`rounded-md px-2 py-1 text-xs font-medium ${item.estadoCalculado === 'DISPONIBLE' ? 'bg-emerald-50 text-emerald-700' : item.estadoCalculado === 'EN_TALLER' ? 'bg-red-50 text-red-700' : 'bg-neutral-100 text-neutral-700'}`}>
+              <span className={`rounded-md px-2 py-1 text-xs font-medium ${resourceStatusClass(item.estadoCalculado)}`}>
                 {item.activo ? formatStatus(item.estadoCalculado) : 'INACTIVO'}
               </span>
               {isAdmin && (
@@ -2482,6 +2482,51 @@ function LockIcon() {
   return <ClipboardList size={16} />
 }
 
+function buildOperationalStatusMaps(viajesActivos) {
+  const choferes = new Map()
+  const camiones = new Map()
+
+  viajesActivos.forEach((viaje) => {
+    const estado = getTripOperationalStatus(viaje)
+    const currentChofer = choferes.get(viaje.choferId)
+    if (!currentChofer || estado.timestamp >= currentChofer.timestamp) {
+      choferes.set(viaje.choferId, estado)
+    }
+
+    tripUnitIds(viaje).forEach((camionId) => {
+      const currentCamion = camiones.get(camionId)
+      if (!currentCamion || estado.timestamp >= currentCamion.timestamp) {
+        camiones.set(camionId, estado)
+      }
+    })
+  })
+
+  return { choferes, camiones }
+}
+
+function getTripOperationalStatus(viaje) {
+  const reporte = viaje.reportes?.find((item) => item.tipoReporte !== 'NOVEDAD') || null
+  const mensaje = normalize(reporte?.mensajeOriginal)
+  const timestamp = new Date(reporte?.createdAt || viaje.updatedAt || viaje.createdAt || 0).getTime()
+
+  if (reporte?.tipoReporte === 'CARGANDO') {
+    return { estado: mensaje === '2' || mensaje.includes('lista la carga') ? 'CARGA LISTA' : 'CARGANDO', timestamp }
+  }
+  if (reporte?.tipoReporte === 'DESCARGADO') {
+    return { estado: mensaje === '3' || mensaje.includes('descargando') ? 'DESCARGANDO' : 'DESCARGA LISTA', timestamp }
+  }
+  if (reporte?.tipoReporte === 'ESPERANDO_INSTRUCCIONES') return { estado: 'ESPERANDO', timestamp }
+  if (reporte?.tipoReporte === 'EN_PERNOCTA') return { estado: 'PERNOCTA', timestamp }
+  if (reporte?.tipoReporte === 'LIBRE') return { estado: 'DISPONIBLE', timestamp }
+  if (reporte?.tipoReporte === 'EN_RUTA') return { estado: 'EN RUTA', timestamp }
+
+  const paradaEnCurso = (viaje.paradas || []).find((parada) => parada.estado === 'EN_CURSO')
+  if (paradaEnCurso?.tipo === 'CARGA') return { estado: 'CARGANDO', timestamp }
+  if (paradaEnCurso?.tipo === 'DESCARGA') return { estado: 'DESCARGANDO', timestamp }
+
+  return { estado: 'EN RUTA', timestamp }
+}
+
 function buildOperationalData({ viajes, choferes, camiones, query }) {
   const q = normalize(query)
   const filteredViajes = viajes.filter((viaje) => {
@@ -2507,13 +2552,17 @@ function buildOperationalData({ viajes, choferes, camiones, query }) {
   const completados = filteredViajes.filter((viaje) => viaje.estadoLogistico === 'COMPLETADO')
   const liquidados = filteredViajes.filter((viaje) => viaje.estadoFinanciero === 'LIQUIDADO')
   const esperando = activos.filter((viaje) => viaje.reportes?.some((reporte) => reporte.tipoReporte === 'ESPERANDO_INSTRUCCIONES'))
+  const activosGlobales = viajes.filter((viaje) => viaje.estadoLogistico === 'EN_CURSO')
+  const estadosOperativos = buildOperationalStatusMaps(activosGlobales)
+  const estadosChoferes = estadosOperativos.choferes
+  const estadosCamiones = estadosOperativos.camiones
 
   const choferesOcupados = new Set(activos.map((viaje) => viaje.choferId))
   const camionesOcupados = new Set(activos.flatMap((viaje) => tripUnitIds(viaje)))
 
   const choferesRecursos = choferes.map((chofer) => ({
     ...chofer,
-    estadoCalculado: chofer.estado,
+    estadoCalculado: estadosChoferes.get(chofer.id)?.estado || chofer.estado,
   })).filter((chofer) =>
     !q || [chofer.nombre, chofer.cedula, chofer.telefono, chofer.estado, chofer.ubicacionActual]
       .some((value) => normalize(value).includes(q))
@@ -2521,7 +2570,7 @@ function buildOperationalData({ viajes, choferes, camiones, query }) {
 
   const camionesRecursos = camiones.map((camion) => ({
     ...camion,
-    estadoCalculado: camion.estado,
+    estadoCalculado: estadosCamiones.get(camion.id)?.estado || camion.estado,
     ubicacionActual:
       formatGpsLocation(camion.posicionGps) ||
       activos.find((viaje) => tripUnitIds(viaje).includes(camion.id))?.chofer?.ubicacionActual ||
@@ -2721,6 +2770,20 @@ function formatStatus(value) {
   return value ? String(value).replace(/_/g, ' ') : ''
 }
 
+function resourceStatusClass(value) {
+  const key = normalize(value).replace(/\s+/g, ' ')
+  if (key === 'disponible') return 'bg-emerald-50 text-emerald-700'
+  if (key === 'en taller') return 'bg-red-50 text-red-700'
+  if (key === 'cargando') return 'bg-blue-50 text-blue-700'
+  if (key === 'carga lista') return 'bg-cyan-50 text-cyan-700'
+  if (key === 'descargando') return 'bg-amber-50 text-amber-700'
+  if (key === 'descarga lista') return 'bg-lime-50 text-lime-700'
+  if (key === 'esperando') return 'bg-orange-50 text-orange-700'
+  if (key === 'pernocta') return 'bg-indigo-50 text-indigo-700'
+  if (key === 'en ruta') return 'bg-neutral-100 text-neutral-700'
+  return 'bg-neutral-100 text-neutral-700'
+}
+
 function labelReporte(tipo) {
   const labels = {
     ESPERANDO_INSTRUCCIONES: 'Esperando',
@@ -2735,6 +2798,7 @@ function pageTitle(tab) {
   const titles = {
     monitor: 'Resumen',
     viajes: 'Viajes',
+    reportes: 'Reportes',
     despacho: 'Agendamiento',
     recursos: 'Recursos',
     taller: 'Taller',
