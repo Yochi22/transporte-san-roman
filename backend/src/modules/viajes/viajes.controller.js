@@ -58,9 +58,14 @@ const notificarAgendamiento = async (viaje) => {
   })
   if (paradas.length === 0) paradas.push('Carga: por confirmar')
 
+  const unidades = (viaje.unidades || [])
+    .map((unidad) => `${unidad.camion?.placa || ''}${unidad.camion?.tipoVehiculo ? ` (${unidad.camion.tipoVehiculo})` : ''}`.trim())
+    .filter(Boolean)
+  if (unidades.length === 0 && viaje.camion?.placa) unidades.push(viaje.camion.placa)
+
   const mensaje = [
     `Nuevo viaje agendado: ${viaje.codigo}`,
-    `Unidad: ${viaje.camion?.placa || 'Por confirmar'}`,
+    `Unidades: ${unidades.length > 0 ? unidades.join(' + ') : 'Por confirmar'}`,
     '',
     'Lugar de carga:',
     ...paradas,

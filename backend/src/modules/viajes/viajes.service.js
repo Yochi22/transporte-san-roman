@@ -5,6 +5,7 @@ const { choferPanelSelect, camionPanelSelect, reportePanelSelect } = require('..
 const viajePanelInclude = {
   chofer: { select: choferPanelSelect },
   camion: { select: camionPanelSelect },
+  unidades: { include: { camion: { select: camionPanelSelect } } },
   paradas: { orderBy: { orden: 'asc' } },
   reportes: { select: reportePanelSelect, orderBy: { createdAt: 'desc' }, take: 100 },
   gastos: { orderBy: { createdAt: 'desc' }, take: 200 }
@@ -48,6 +49,22 @@ const validarParadas = (paradas) => {
     }
     return { ...parada, tipo, lugar, ciudad, fechaProgramada }
   })
+}
+
+const normalizarUnidadIdsViaje = (datos) => {
+  const ids = Array.isArray(datos.camionIds) ? datos.camionIds : [datos.camionId]
+  return [...new Set(ids.filter((id) => typeof id === 'string' && id.trim()).map((id) => id.trim()))]
+}
+
+const tripUnitIds = (viaje) => {
+  const ids = (viaje.unidades || []).map((unidad) => unidad.camionId).filter(Boolean)
+  return ids.length > 0 ? ids : [viaje.camionId].filter(Boolean)
+}
+
+const sameSet = (a, b) => {
+  if (a.length !== b.length) return false
+  const set = new Set(a)
+  return b.every((item) => set.has(item))
 }
 
 const listar = async (filtros = {}) => {
@@ -125,7 +142,8 @@ const obtener = async (id) => {
 }
 
 const crear = async (datos, creadoPorId) => {
-  let { camionId, choferId } = datos
+  const { choferId } = datos
+  let unidadIds = normalizarUnidadIdsViaje(datos)
   if (typeof choferId !== 'string') {
     throw { status: 400, message: 'Chofer es requerido' }
   }
@@ -145,29 +163,30 @@ const crear = async (datos, creadoPorId) => {
     throw { status: 409, message: 'El chofer no esta activo' }
   }
   const unidadesAsignadas = chofer.unidadesAsignadas.map((asignacion) => asignacion.camion).filter((camion) => camion?.activo)
-  if (!camionId && unidadesAsignadas.length === 1) {
-    camionId = unidadesAsignadas[0].id
+  if (unidadIds.length === 0 && unidadesAsignadas.length === 1) {
+    unidadIds = [unidadesAsignadas[0].id]
   }
-  if (typeof camionId !== 'string') {
-    throw { status: 400, message: 'El chofer tiene varias unidades asignadas. Selecciona cual usara.' }
+  if (unidadIds.length === 0) {
+    throw { status: 400, message: 'Selecciona al menos una unidad asignada al chofer' }
   }
-  const camion = unidadesAsignadas.find((unidad) => unidad.id === camionId)
-  if (!camion) {
-    throw { status: 409, message: 'La unidad seleccionada no esta asignada a este chofer' }
+  const unidadesSeleccionadas = unidadIds.map((id) => unidadesAsignadas.find((unidad) => unidad.id === id))
+  if (unidadesSeleccionadas.some((unidad) => !unidad)) {
+    throw { status: 409, message: 'Una o mas unidades seleccionadas no estan asignadas a este chofer' }
   }
-  if (!camion.activo) {
-    throw { status: 409, message: 'La unidad no esta activa' }
+  if (unidadesSeleccionadas.some((unidad) => !unidad.activo)) {
+    throw { status: 409, message: 'Una o mas unidades no estan activas' }
   }
-  if (camion.estado === 'EN_TALLER') {
-    throw { status: 409, message: 'La unidad esta fuera de servicio y no puede ser despachada' }
+  if (unidadesSeleccionadas.some((unidad) => unidad.estado === 'EN_TALLER')) {
+    throw { status: 409, message: 'Una o mas unidades estan fuera de servicio y no pueden ser despachadas' }
   }
+  const camionId = unidadIds[0]
 
   const asignacionConflictiva = await prisma.viaje.findFirst({
     where: {
       estadoLogistico: 'EN_CURSO',
       OR: [
-        { camionId, choferId: { not: choferId } },
-        { choferId, camionId: { not: camionId } }
+        { choferId: { not: choferId }, unidades: { some: { camionId: { in: unidadIds } } } },
+        { choferId, unidades: { some: { camionId: { notIn: unidadIds } } } }
       ]
     },
     select: { id: true }
@@ -176,10 +195,11 @@ const crear = async (datos, creadoPorId) => {
     throw { status: 409, message: 'El chofer o la unidad ya tienen otra asignacion activa' }
   }
 
-  const viajeActivo = await prisma.viaje.findFirst({
-    where: { camionId, choferId, estadoLogistico: 'EN_CURSO' },
-    include: { paradas: { orderBy: { orden: 'asc' } } }
+  const viajesActivosChofer = await prisma.viaje.findMany({
+    where: { choferId, estadoLogistico: 'EN_CURSO' },
+    include: { paradas: { orderBy: { orden: 'asc' } }, unidades: true }
   })
+  const viajeActivo = viajesActivosChofer.find((viaje) => sameSet(unidadIds, tripUnitIds(viaje)))
 
   if (viajeActivo) {
     return agregarTramo(viajeActivo.id, { paradas, viaticosDepositados })
@@ -199,6 +219,9 @@ const crear = async (datos, creadoPorId) => {
       combustibleInicial,
       estadoLogistico: 'EN_CURSO',
       fechaInicio: primeraCarga ? new Date(primeraCarga.fechaProgramada) : null,
+      unidades: {
+        create: unidadIds.map((id) => ({ camionId: id }))
+      },
       paradas: {
         create: paradas.map((p, i) => ({
           orden: i + 1,
@@ -213,7 +236,7 @@ const crear = async (datos, creadoPorId) => {
     }
   })
 
-  await prisma.camion.update({ where: { id: camionId }, data: { estado: 'EN_RUTA' } })
+  await prisma.camion.updateMany({ where: { id: { in: unidadIds } }, data: { estado: 'EN_RUTA' } })
   await prisma.chofer.update({ where: { id: choferId }, data: { estado: 'EN_RUTA' } })
 
   return obtener(viaje.id)
@@ -339,7 +362,7 @@ const cerrar = async (id, soloLogistica = false, numeroGuia = null, control = {}
   }
   const viaje = await prisma.viaje.findUniqueOrThrow({
     where: { id },
-    include: { gastos: true }
+    include: { gastos: true, unidades: true }
   })
   if (viaje.estadoFinanciero === 'LIQUIDADO') {
     throw { status: 409, message: 'El viaje ya fue liquidado' }
@@ -373,16 +396,16 @@ const cerrar = async (id, soloLogistica = false, numeroGuia = null, control = {}
       }
     })
 
-    await recalcularEstadoRecursos(tx, viaje.choferId, viaje.camionId)
+    await recalcularEstadoRecursos(tx, viaje.choferId, tripUnitIds(viaje))
     return actualizado
   })
 }
 
-const recalcularEstadoRecursos = async (tx, choferId, camionId) => {
-  const [viajesChofer, viajesCamion, camion] = await Promise.all([
+const recalcularEstadoRecursos = async (tx, choferId, camionIds) => {
+  const unidadIds = Array.isArray(camionIds) ? camionIds : [camionIds]
+  const [viajesChofer, camiones] = await Promise.all([
     tx.viaje.count({ where: { choferId, estadoLogistico: 'EN_CURSO' } }),
-    tx.viaje.count({ where: { camionId, estadoLogistico: 'EN_CURSO' } }),
-    tx.camion.findUnique({ where: { id: camionId }, select: { estado: true } })
+    tx.camion.findMany({ where: { id: { in: unidadIds } }, select: { id: true, estado: true } })
   ])
 
   await tx.chofer.update({
@@ -390,7 +413,17 @@ const recalcularEstadoRecursos = async (tx, choferId, camionId) => {
     data: { estado: viajesChofer > 0 ? 'EN_RUTA' : 'DISPONIBLE' }
   })
 
-  if (camion?.estado !== 'EN_TALLER') {
+  const disponibles = camiones.filter((camion) => camion.estado !== 'EN_TALLER').map((camion) => camion.id)
+  for (const camionId of disponibles) {
+    const viajesCamion = await tx.viaje.count({
+      where: {
+        estadoLogistico: 'EN_CURSO',
+        OR: [
+          { camionId },
+          { unidades: { some: { camionId } } }
+        ]
+      }
+    })
     await tx.camion.update({
       where: { id: camionId },
       data: { estado: viajesCamion > 0 ? 'EN_RUTA' : 'DISPONIBLE' }

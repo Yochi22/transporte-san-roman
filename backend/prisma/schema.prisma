@@ -154,6 +154,7 @@ model Camion {
   createdAt         DateTime                @default(now()) @map("created_at")
   updatedAt         DateTime                @updatedAt @map("updated_at")
   viajes            Viaje[]
+  viajesAsignados   ViajeUnidad[]
   mantenimientos    MantenimientoVehiculo[]
   posicionGps       TruckPosition?
   choferesAsignados ChoferUnidad[]
@@ -244,12 +245,27 @@ model Viaje {
   paradas   Parada[]
   reportes  ReporteChofer[]
   gastos    Gasto[]
+  unidades  ViajeUnidad[]
 
   @@index([estadoLogistico, estadoFinanciero])
   @@index([camionId, estadoLogistico])
   @@index([choferId, estadoLogistico])
   @@index([createdAt])
   @@map("viajes")
+}
+
+model ViajeUnidad {
+  id        String   @id @default(uuid())
+  viajeId   String   @map("viaje_id")
+  camionId  String   @map("camion_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  viaje  Viaje  @relation(fields: [viajeId], references: [id])
+  camion Camion @relation(fields: [camionId], references: [id])
+
+  @@unique([viajeId, camionId])
+  @@index([camionId])
+  @@map("viajes_unidades")
 }
 
 model Parada {

@@ -10,6 +10,7 @@ const main = async () => {
     await tx.gasto.deleteMany()
     await tx.reporteChofer.deleteMany()
     await tx.parada.deleteMany()
+    await tx.viajeUnidad.deleteMany()
     await tx.viaje.deleteMany()
     await tx.mantenimientoVehiculo.deleteMany()
     await tx.truckPosition.deleteMany()

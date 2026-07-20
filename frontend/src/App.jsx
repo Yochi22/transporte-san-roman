@@ -504,7 +504,7 @@ function PendientesLiquidacion({ onSelect }) {
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{viaje.chofer?.nombre || 'Sin chofer'}</p>
-              <p className="truncate text-xs text-neutral-500">{vehicleLabel(viaje.camion)}</p>
+              <p className="truncate text-xs text-neutral-500">{formatTripUnits(viaje)}</p>
             </div>
             <div>
               <p className="text-sm font-semibold">{money(balance(viaje))}</p>
@@ -654,7 +654,7 @@ function TripCard({ viaje, onSelect }) {
     <button onClick={() => onSelect(viaje)} className="rounded-md border border-neutral-200 bg-white p-4 text-left transition hover:border-neutral-300 hover:shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-xs font-medium text-neutral-500">{viaje.camion?.placa || 'Sin placa'}</p>
+          <p className="text-xs font-medium text-neutral-500">{formatTripUnits(viaje) || 'Sin placa'}</p>
           <h3 className="mt-1 truncate text-lg font-semibold">{viaje.codigo}</h3>
           <p className="mt-1 truncate text-sm text-neutral-600">{viaje.chofer?.nombre || 'Sin chofer'}</p>
         </div>
@@ -692,7 +692,7 @@ function TripCard({ viaje, onSelect }) {
 }
 
 function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
-  const [form, setForm] = useState({ choferId: '', camionId: '', viaticosDepositados: '', odometroInicial: '', combustibleInicial: '' })
+  const [form, setForm] = useState({ choferId: '', camionIds: [], viaticosDepositados: '', odometroInicial: '', combustibleInicial: '' })
   const [paradas, setParadas] = useState([
     { id: createClientId(), tipo: 'CARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
     { id: createClientId(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
@@ -706,21 +706,28 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
       .filter((camion) => camion?.activo !== false && camion.estado !== 'EN_TALLER'),
     [selectedChofer]
   )
-  const viajeExistente = viajesActivos.find(
-    (viaje) => viaje.choferId === form.choferId && viaje.camionId === form.camionId
-  )
+  const viajeExistente = viajesActivos.find((viaje) => viaje.choferId === form.choferId && sameIdSet(tripUnitIds(viaje), form.camionIds))
 
   useEffect(() => {
     if (!form.choferId) {
-      if (form.camionId) setForm((current) => ({ ...current, camionId: '' }))
+      if (form.camionIds.length > 0) setForm((current) => ({ ...current, camionIds: [] }))
       return
     }
-    if (unidadesAsignadas.length === 1 && form.camionId !== unidadesAsignadas[0].id) {
-      setForm((current) => ({ ...current, camionId: unidadesAsignadas[0].id }))
-    } else if (form.camionId && !unidadesAsignadas.some((camion) => camion.id === form.camionId)) {
-      setForm((current) => ({ ...current, camionId: '' }))
+    if (unidadesAsignadas.length === 1 && !sameIdSet(form.camionIds, [unidadesAsignadas[0].id])) {
+      setForm((current) => ({ ...current, camionIds: [unidadesAsignadas[0].id] }))
+    } else if (form.camionIds.some((id) => !unidadesAsignadas.some((camion) => camion.id === id))) {
+      setForm((current) => ({ ...current, camionIds: current.camionIds.filter((id) => unidadesAsignadas.some((camion) => camion.id === id)) }))
     }
-  }, [form.choferId, form.camionId, unidadesAsignadas])
+  }, [form.choferId, form.camionIds, unidadesAsignadas])
+
+  const toggleUnidadViaje = (camionId) => {
+    setForm((current) => {
+      const selected = new Set(current.camionIds)
+      if (selected.has(camionId)) selected.delete(camionId)
+      else selected.add(camionId)
+      return { ...current, camionIds: Array.from(selected) }
+    })
+  }
 
   const updateParada = (id, patch) => {
     setParadas((prev) => prev.map((parada) => (parada.id === id ? { ...parada, ...patch } : parada)))
@@ -741,7 +748,8 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
 
     try {
       await api.post('/viajes', {
-        camionId: form.camionId,
+        camionId: form.camionIds[0],
+        camionIds: form.camionIds,
         choferId: form.choferId,
         viaticosDepositados: Number(form.viaticosDepositados) || 0,
         odometroInicial: form.odometroInicial || null,
@@ -754,7 +762,7 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
           cargarAlDescargar: tipo === 'CARGA' && programacion === 'AL_DESCARGAR',
         })),
       })
-      setForm({ choferId: '', camionId: '', viaticosDepositados: '', odometroInicial: '', combustibleInicial: '' })
+      setForm({ choferId: '', camionIds: [], viaticosDepositados: '', odometroInicial: '', combustibleInicial: '' })
       setParadas([
         { id: createClientId(), tipo: 'CARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
         { id: createClientId(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
@@ -788,22 +796,25 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
         <SectionTitle title="Nuevo despacho" subtitle="Chofer, unidad, viaticos y ruta" />
         <div className="mt-4 grid gap-4 md:grid-cols-3">
           <Field label="Chofer">
-            <select required value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value, camionId: '' })} className="input">
+            <select required value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value, camionIds: [] })} className="input">
               <option value="">Seleccionar</option>
               {choferes.map((chofer) => <option key={chofer.id} value={chofer.id}>{chofer.nombre} · {formatStatus(chofer.estadoCalculado)}</option>)}
             </select>
           </Field>
-          <Field label="Unidad asignada">
-            {form.choferId && unidadesAsignadas.length === 1 ? (
-              <div className="flex h-10 items-center rounded-md border border-neutral-200 bg-neutral-50 px-3 text-sm font-medium">
-                {vehicleLabel(unidadesAsignadas[0])}
-              </div>
-            ) : (
-              <select required value={form.camionId} onChange={(event) => setForm({ ...form, camionId: event.target.value })} className="input" disabled={!form.choferId || unidadesAsignadas.length === 0}>
-                <option value="">{form.choferId ? 'Seleccionar unidad del chofer' : 'Selecciona un chofer primero'}</option>
-                {unidadesAsignadas.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)} - {formatStatus(camion.estadoCalculado || camion.estado)}</option>)}
-              </select>
-            )}
+          <Field label="Unidades del viaje">
+            <div className="min-h-10 rounded-md border border-neutral-200 bg-white">
+              {!form.choferId && <p className="px-3 py-2 text-sm text-neutral-400">Selecciona un chofer primero</p>}
+              {form.choferId && unidadesAsignadas.length === 0 && <p className="px-3 py-2 text-sm text-neutral-400">Sin unidades asignadas</p>}
+              {unidadesAsignadas.map((camion) => (
+                <label key={camion.id} className="flex items-center gap-3 border-b border-neutral-100 px-3 py-2 last:border-b-0 hover:bg-neutral-50">
+                  <input type="checkbox" checked={form.camionIds.includes(camion.id)} onChange={() => toggleUnidadViaje(camion.id)} className="h-4 w-4 accent-neutral-950" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold">{camion.placa}</span>
+                    <span className="block truncate text-xs text-neutral-500">{formatStatus(camion.tipoVehiculo)} - {formatStatus(camion.estadoCalculado || camion.estado)}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
           </Field>
           <Field label="Viaticos (opcional)">
             <input type="number" min="0" step="0.01" value={form.viaticosDepositados} onChange={(event) => setForm({ ...form, viaticosDepositados: event.target.value })} className="input" placeholder="Sin viaticos" />
@@ -859,7 +870,7 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
         </div>
 
         <div className="mt-5 flex justify-end">
-          <button disabled={saving || !form.camionId} className="btn-primary">
+          <button disabled={saving || form.camionIds.length === 0} className="btn-primary">
             <Send size={16} />
             {saving ? 'Guardando' : viajeExistente ? 'Agregar tramo' : 'Despachar'}
           </button>
@@ -1487,7 +1498,7 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
         viaje.codigo,
         viaje.numeroGuia || 'Sin guia',
         viaje.chofer?.nombre || '',
-        vehicleLabel(viaje.camion || {}),
+        formatTripUnits(viaje),
         formatRoute(viaje),
         formatDate(viaje.fechaLiquidacion || viaje.fechaCierre),
         money(viaje.viaticosDepositados),
@@ -1744,7 +1755,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
         <div className="space-y-6 px-4 py-5 sm:px-6">
           <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Fact icon={User} label="Chofer" value={viaje.chofer?.nombre || 'Sin chofer'} />
-            <Fact icon={Truck} label="Camion" value={viaje.camion?.placa || 'Sin camion'} />
+            <Fact icon={Truck} label="Unidades" value={formatTripUnits(viaje) || 'Sin unidades'} />
             <Fact icon={MapPin} label="Ultima ubicacion" value={<LocationValue data={ultimaUbicacion} />} />
             <Fact icon={Banknote} label="Disponible" value={money(balance(viaje))} />
           </section>
@@ -2134,6 +2145,7 @@ function buildOperationalData({ viajes, choferes, camiones, query }) {
       viaje.camion?.placa,
       viaje.camion?.placaFurgon,
       viaje.camion?.placaChuto,
+      ...(viaje.unidades || []).flatMap((unidad) => [unidad.camion?.placa, unidad.camion?.tipoVehiculo, unidad.camion?.marcaModelo]),
       viaje.camion?.ubicacionActual,
       formatGpsLocation(viaje.camion?.posicionGps),
       formatRoute(viaje),
@@ -2149,7 +2161,7 @@ function buildOperationalData({ viajes, choferes, camiones, query }) {
   const esperando = activos.filter((viaje) => viaje.reportes?.some((reporte) => reporte.tipoReporte === 'ESPERANDO_INSTRUCCIONES'))
 
   const choferesOcupados = new Set(activos.map((viaje) => viaje.choferId))
-  const camionesOcupados = new Set(activos.map((viaje) => viaje.camionId))
+  const camionesOcupados = new Set(activos.flatMap((viaje) => tripUnitIds(viaje)))
 
   const choferesRecursos = choferes.map((chofer) => ({
     ...chofer,
@@ -2164,7 +2176,7 @@ function buildOperationalData({ viajes, choferes, camiones, query }) {
     estadoCalculado: camion.estado,
     ubicacionActual:
       formatGpsLocation(camion.posicionGps) ||
-      activos.find((viaje) => viaje.camionId === camion.id)?.chofer?.ubicacionActual ||
+      activos.find((viaje) => tripUnitIds(viaje).includes(camion.id))?.chofer?.ubicacionActual ||
       camion.ubicacionActual,
   })).filter((camion) =>
     !q || [
@@ -2242,6 +2254,22 @@ function formatRoute(viaje) {
 
 function vehicleLabel(camion) {
   return `${formatStatus(camion.tipoVehiculo || 'NPR')} ${camion.placa || ''}`.trim()
+}
+
+function tripUnitIds(viaje) {
+  const ids = (viaje.unidades || []).map((unidad) => unidad.camion?.id || unidad.camionId).filter(Boolean)
+  return ids.length > 0 ? ids : [viaje.camionId].filter(Boolean)
+}
+
+function sameIdSet(a = [], b = []) {
+  if (a.length !== b.length) return false
+  const set = new Set(a)
+  return b.every((id) => set.has(id))
+}
+
+function formatTripUnits(viaje) {
+  const unidades = (viaje.unidades || []).map((unidad) => vehicleLabel(unidad.camion)).filter(Boolean)
+  return unidades.length > 0 ? unidades.join(' + ') : vehicleLabel(viaje.camion || {})
 }
 
 function formatAssignedUnits(chofer) {

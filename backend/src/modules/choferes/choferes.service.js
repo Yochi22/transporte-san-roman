@@ -152,6 +152,7 @@ const eliminar = async (id) => {
     await tx.gasto.deleteMany({ where: { OR: [{ choferId: id }, { viajeId: { in: viajeIds } }] } })
     await tx.reporteChofer.deleteMany({ where: { OR: [{ choferId: id }, { viajeId: { in: viajeIds } }] } })
     await tx.parada.deleteMany({ where: { viajeId: { in: viajeIds } } })
+    await tx.viajeUnidad.deleteMany({ where: { viajeId: { in: viajeIds } } })
     await tx.viaje.deleteMany({ where: { id: { in: viajeIds } } })
     await tx.choferUnidad.deleteMany({ where: { choferId: id } })
     return tx.chofer.delete({ where: { id } })

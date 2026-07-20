@@ -67,7 +67,13 @@ const normalizarDatosCamion = (datos) => {
 
 const inactivar = async (id) => {
   const viajesActivos = await prisma.viaje.count({
-    where: { camionId: id, estadoLogistico: 'EN_CURSO' }
+    where: {
+      estadoLogistico: 'EN_CURSO',
+      OR: [
+        { camionId: id },
+        { unidades: { some: { camionId: id } } }
+      ]
+    }
   })
   if (viajesActivos > 0) throw { status: 409, message: 'No se puede eliminar una unidad con viajes activos' }
   return prisma.$transaction(async (tx) => {
@@ -81,7 +87,12 @@ const inactivar = async (id) => {
 
 const eliminar = async (id) => {
   const viajes = await prisma.viaje.findMany({
-    where: { camionId: id },
+    where: {
+      OR: [
+        { camionId: id },
+        { unidades: { some: { camionId: id } } }
+      ]
+    },
     select: { id: true }
   })
   const viajeIds = viajes.map((viaje) => viaje.id)
@@ -90,6 +101,7 @@ const eliminar = async (id) => {
     await tx.gasto.deleteMany({ where: { viajeId: { in: viajeIds } } })
     await tx.reporteChofer.deleteMany({ where: { viajeId: { in: viajeIds } } })
     await tx.parada.deleteMany({ where: { viajeId: { in: viajeIds } } })
+    await tx.viajeUnidad.deleteMany({ where: { OR: [{ viajeId: { in: viajeIds } }, { camionId: id }] } })
     await tx.viaje.deleteMany({ where: { id: { in: viajeIds } } })
     await tx.mantenimientoVehiculo.deleteMany({ where: { camionId: id } })
     await tx.truckPosition.deleteMany({ where: { truckId: id } })
