@@ -1960,6 +1960,8 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   const tramos = groupByTramo(viaje.paradas || [])
   const totalGastado = (viaje.gastos || []).reduce((total, gasto) => total + Number(gasto.monto), 0)
   const ultimaUbicacion = getCurrentLocationDetails(viaje)
+  const gpsTruckIds = tripUnitIds(viaje)
+  const gpsInitialPositions = tripGpsPositions(viaje)
   const novedades = (viaje.reportes || []).filter((reporte) => reporte.tipoReporte === 'NOVEDAD')
   const reportesOperativos = (viaje.reportes || []).filter((reporte) => reporte.tipoReporte !== 'NOVEDAD')
   useClampPage(reportPage, reportesOperativos.length, detailPageSize, setReportPage)
@@ -2091,7 +2093,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
           </section>
           {viaje.numeroGuia && <Banner tone="neutral" icon={FileCheck} text={`Guia entregada: ${viaje.numeroGuia}`} />}
 
-          <GpsMap truckId={viaje.camionId} />
+          <GpsMap truckIds={gpsTruckIds} initialPositions={gpsInitialPositions} />
 
           <section className="space-y-3">
             <SectionTitle title="Ruta" subtitle={formatRoute(viaje)} />
@@ -2560,11 +2562,38 @@ function buildOperationalData({ viajes, choferes, camiones, query }) {
 
 function getCurrentLocationDetails(viaje) {
   const ultimoReporte = viaje.reportes?.[0] || null
+  const ultimaPosicion = latestTripGpsPosition(viaje)
   return {
-    gps: formatGpsLocation(viaje.camion?.posicionGps) || coordsFromText(viaje.camion?.ubicacionActual),
+    gps: formatGpsLocation(ultimaPosicion) || coordsFromText(viaje.camion?.ubicacionActual),
     reporte: ultimoReporte ? formatLastReportLocation(ultimoReporte) : '',
     fallback: viaje.chofer?.ubicacionActual || viaje.camion?.ubicacionActual || 'Sin ubicacion',
   }
+}
+
+function tripGpsPositions(viaje) {
+  const fromUnits = (viaje.unidades || [])
+    .map((unidad) => ({
+      ...(unidad.camion?.posicionGps || {}),
+      truckId: unidad.camion?.id || unidad.camionId,
+      label: unidad.camion ? vehicleLabel(unidad.camion) : 'Unidad',
+    }))
+    .filter((position) => position.truckId && position.latitude !== undefined && position.latitude !== null && position.longitude !== undefined && position.longitude !== null)
+
+  const fallback = viaje.camion?.posicionGps
+    ? [{
+        ...viaje.camion.posicionGps,
+        truckId: viaje.camion.id || viaje.camionId,
+        label: vehicleLabel(viaje.camion),
+      }]
+    : []
+
+  const byTruck = new Map([...fallback, ...fromUnits].map((position) => [position.truckId, position]))
+  return [...byTruck.values()]
+}
+
+function latestTripGpsPosition(viaje) {
+  return tripGpsPositions(viaje)
+    .sort((a, b) => new Date(b.updatedAt || b.updated_at || 0) - new Date(a.updatedAt || a.updated_at || 0))[0] || null
 }
 
 const quickReportLabels = {

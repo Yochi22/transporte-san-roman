@@ -89,7 +89,13 @@ const registrarPosicionPorImei = async (data) => {
       }
     }),
     prisma.viaje.findMany({
-      where: { camionId: camion.id, estadoLogistico: 'EN_CURSO' },
+      where: {
+        estadoLogistico: 'EN_CURSO',
+        OR: [
+          { camionId: camion.id },
+          { unidades: { some: { camionId: camion.id } } }
+        ]
+      },
       select: { choferId: true }
     }),
     prisma.camion.update({

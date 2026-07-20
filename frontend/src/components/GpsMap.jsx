@@ -26,6 +26,7 @@ const normalizePosition = (row) => {
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null
   return {
     truckId: row.truck_id || row.truckId,
+    label: row.label || null,
     latitude,
     longitude,
     speed: Number(row.speed || 0),
@@ -49,11 +50,16 @@ const osmEmbedUrl = (position) => {
   return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${position.latitude.toFixed(6)}%2C${position.longitude.toFixed(6)}`
 }
 
-export default function GpsMap({ truckId }) {
-  const [position, setPosition] = useState(null)
+export default function GpsMap({ truckId, truckIds = [], initialPositions = [] }) {
+  const ids = [...new Set((truckIds.length > 0 ? truckIds : [truckId]).filter(Boolean))]
+  const labelsByTruck = new Map(initialPositions.map((position) => [position.truckId || position.truck_id, position.label]).filter(([id]) => Boolean(id)))
+  const [positions, setPositions] = useState(() => initialPositions.map(normalizePosition).filter(Boolean))
   const [status, setStatus] = useState('idle')
   const [mobileMap, setMobileMap] = useState(() => isMobileViewport())
-  const currentPosition = position?.truckId === truckId ? position : null
+  const currentPositions = positions
+    .filter((position) => ids.includes(position.truckId))
+    .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
+  const currentPosition = currentPositions[0] || null
 
   useEffect(() => {
     const updateMode = () => setMobileMap(isMobileViewport())
@@ -63,15 +69,21 @@ export default function GpsMap({ truckId }) {
   }, [])
 
   useEffect(() => {
-    if (!truckId) return undefined
+    if (ids.length === 0) return undefined
     let active = true
     const loadPosition = () => {
-      api.get(`/gps/trucks/${truckId}/position`)
-        .then(({ data }) => {
+      Promise.all(ids.map((id) =>
+        api.get(`/gps/trucks/${id}/position`)
+          .then(({ data }) => normalizePosition(data?.data || null))
+          .catch(() => null)
+      ))
+        .then((rows) => {
           if (!active) return
-          const row = data?.data || null
-          setPosition(normalizePosition(row))
-          setStatus(row ? 'online' : 'empty')
+          const nextPositions = rows
+            .filter(Boolean)
+            .map((position) => ({ ...position, label: position.label || labelsByTruck.get(position.truckId) || null }))
+          setPositions(nextPositions)
+          setStatus(nextPositions.length > 0 ? 'online' : 'empty')
         })
         .catch(() => {
           if (active) setStatus('error')
@@ -85,9 +97,9 @@ export default function GpsMap({ truckId }) {
       active = false
       clearInterval(interval)
     }
-  }, [truckId])
+  }, [ids.join('|')])
 
-  if (!truckId) return <MapState text="Unidad no asignada." />
+  if (ids.length === 0) return <MapState text="Unidad no asignada." />
 
   return (
     <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">
@@ -95,7 +107,7 @@ export default function GpsMap({ truckId }) {
       <div>
         <p className="text-sm font-semibold">Rastreo satelital</p>
         <p className="text-xs text-neutral-500">
-            {currentPosition ? `${currentPosition.latitude.toFixed(6)}, ${currentPosition.longitude.toFixed(6)}` : 'Sin posicion recibida'}
+            {currentPosition ? `${currentPosition.latitude.toFixed(6)}, ${currentPosition.longitude.toFixed(6)}${currentPositions.length > 1 ? ` · ${currentPositions.length} unidades` : ''}` : 'Sin posicion recibida'}
         </p>
       </div>
       <span className={`rounded-md px-2 py-1 text-xs font-medium ${status === 'online' ? 'bg-emerald-50 text-emerald-700' : status === 'error' ? 'bg-red-50 text-red-700' : 'bg-neutral-100 text-neutral-600'}`}>
@@ -107,7 +119,7 @@ export default function GpsMap({ truckId }) {
       ) : (
         <MapErrorBoundary fallback={<PositionFallback position={currentPosition} />}>
           <Suspense fallback={<MapState text="Cargando mapa." />}>
-            <DesktopLeafletMap position={currentPosition} truckId={truckId} />
+            <DesktopLeafletMap position={currentPosition} positions={currentPositions} truckId={ids.join('-')} />
           </Suspense>
         </MapErrorBoundary>
       )}
