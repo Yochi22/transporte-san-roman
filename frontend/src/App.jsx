@@ -99,6 +99,7 @@ const requestNumber = (title, value = '', placeholder = '0.00') => Swal.fire({
 const tabs = [
   { id: 'monitor', label: 'Resumen', icon: LayoutDashboard },
   { id: 'viajes', label: 'Viajes', icon: Route },
+  { id: 'reportes', label: 'Reportes', icon: ClipboardList },
   { id: 'despacho', label: 'Agendamiento', icon: Send },
   { id: 'recursos', label: 'Recursos', icon: Users },
   { id: 'taller', label: 'Taller', icon: Wrench },
@@ -269,6 +270,10 @@ export default function App() {
     const refresh = () => fetchData({ refreshSelected: true })
     const handleReporte = (payload) => {
       playAlertSound()
+      if (payload?.reporte?.tipoReporte === 'NOVEDAD') {
+        refresh()
+        return
+      }
       setAlertas((prev) => [{
         ...payload,
         id: createClientId(),
@@ -278,7 +283,13 @@ export default function App() {
       refresh()
     }
     const pushAlerta = (alerta) => {
-      setAlertas((prev) => [{ ...alerta, id: createClientId(), at: new Date() }, ...prev].slice(0, 5))
+      setAlertas((prev) => {
+        const clave = [alerta?.tipo, alerta?.chofer?.id, alerta?.viaje?.id, alerta?.mensaje].filter(Boolean).join('|')
+        const filtradas = prev.filter((item) => (
+          [item?.tipo, item?.chofer?.id, item?.viaje?.id, item?.mensaje].filter(Boolean).join('|') !== clave
+        ))
+        return [{ ...alerta, id: createClientId(), at: new Date() }, ...filtradas].slice(0, 5)
+      })
       refresh()
     }
 
@@ -425,6 +436,9 @@ export default function App() {
             {activeTab === 'viajes' && (
               <ViajesView data={data} onSelect={setSelectedViaje} />
             )}
+            {activeTab === 'reportes' && (
+              <ReportesView reportes={data.reportes} onSelectViaje={setSelectedViaje} />
+            )}
             {activeTab === 'despacho' && (
               <DespachoView choferes={data.choferesOperativos} camiones={data.camionesOperativos.filter((camion) => camion.estado !== 'EN_TALLER')} viajesActivos={data.activos} onDone={() => fetchData()} />
             )}
@@ -500,13 +514,16 @@ function Monitor({
 
       {alertas.length > 0 && (
         <section className="rounded-md border border-amber-200 bg-amber-50 px-4 py-3">
-          <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-amber-900">
-            <Bell size={16} />
-            Alertas recientes
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 text-sm font-semibold text-amber-900">
+              <Bell size={16} />
+              Alertas recientes
+            </div>
+            <span className="text-xs text-amber-800">Abre Reportes para ver el detalle completo.</span>
           </div>
-          <div className="grid gap-2 lg:grid-cols-2">
+          <div className="mt-2 grid gap-2 lg:grid-cols-2">
             {alertas.map((alerta) => (
-              <div key={alerta.id} className="rounded-md border border-amber-200 bg-white px-3 py-2 text-sm text-amber-900">
+              <div key={alerta.id} className="truncate rounded-md border border-amber-200 bg-white px-3 py-2 text-sm text-amber-900">
                 {alerta.mensaje || alerta.tipo || 'Alerta operativa'}
               </div>
             ))}
@@ -601,6 +618,86 @@ function ViajesView({ data, onSelect }) {
       <TripList title="En curso" viajes={data.activos} onSelect={onSelect} />
       <PendientesLiquidacion onSelect={onSelect} />
       <ArchivoLogistico onSelect={onSelect} />
+    </div>
+  )
+}
+
+function ReportesView({ reportes, onSelectViaje }) {
+  const [page, setPage] = useState(1)
+  const [expandedId, setExpandedId] = useState(null)
+  const pageSize = 12
+  const visibleReports = paginate(reportes, page, pageSize)
+  useClampPage(page, reportes.length, pageSize, setPage)
+
+  return (
+    <div className="space-y-4">
+      <section className="rounded-md border border-neutral-200 bg-white">
+        <div className="flex flex-col gap-3 border-b border-neutral-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <SectionTitle title="Reportes de choferes" subtitle={`${reportes.length} registros recientes`} />
+          <span className="text-xs text-neutral-500">Conservacion automatica: 3 dias</span>
+        </div>
+
+        <div className="divide-y divide-neutral-100">
+          {visibleReports.map((reporte) => {
+            const expanded = expandedId === reporte.id
+            const chofer = reporte.chofer?.nombre || reporte.viaje?.chofer?.nombre || 'Sin chofer'
+            const viaje = reporte.viaje
+
+            return (
+              <article key={reporte.id} className="px-4 py-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                      <span className={`rounded-md px-2 py-1 text-xs font-medium ${reporteStyles[reporte.tipoReporte] || reporteStyles.OTRO}`}>
+                        {labelReporte(reporte.tipoReporte)}
+                      </span>
+                      <span className="text-xs text-neutral-500">{formatDate(reporte.createdAt)}</span>
+                    </div>
+                    <h3 className="truncate text-sm font-semibold">{formatReportTitle(reporte)}</h3>
+                    <p className="mt-1 text-xs text-neutral-500">
+                      {chofer}{viaje?.codigo ? ` · ${viaje.codigo}` : ''}
+                    </p>
+                    {reporte.ubicacion && (
+                      <p className="mt-1 truncate text-xs text-neutral-400">{reporte.ubicacion}</p>
+                    )}
+                  </div>
+
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedId(expanded ? null : reporte.id)}
+                      className="h-9 rounded-md border border-neutral-200 px-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+                    >
+                      {expanded ? 'Ocultar' : 'Ver detalle'}
+                    </button>
+                    {viaje && (
+                      <button
+                        type="button"
+                        onClick={() => onSelectViaje(viaje)}
+                        className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-neutral-950 px-3 text-sm font-medium text-white hover:bg-neutral-800"
+                      >
+                        <Route size={15} />
+                        Viaje
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {expanded && (
+                  <div className="mt-4 grid gap-3 rounded-md border border-neutral-200 bg-stone-50 p-3 text-sm lg:grid-cols-3">
+                    <InfoBlock label="Mensaje recibido" value={reporte.mensajeOriginal || 'Sin mensaje'} />
+                    <InfoBlock label="Ubicacion" value={reporte.ubicacion || 'Sin ubicacion reportada'} />
+                    <InfoBlock label="Viaje" value={viaje ? `${viaje.codigo} · ${formatRoute(viaje)}` : 'Sin viaje asociado'} />
+                  </div>
+                )}
+              </article>
+            )
+          })}
+          {visibleReports.length === 0 && <Empty text="Sin reportes recientes." />}
+        </div>
+      </section>
+
+      <Pagination page={page} total={reportes.length} pageSize={pageSize} onChange={setPage} />
     </div>
   )
 }
@@ -2208,6 +2305,15 @@ function Field({ label, children }) {
       <span className="mb-1 block text-xs font-medium text-neutral-500">{label}</span>
       {children}
     </label>
+  )
+}
+
+function InfoBlock({ label, value }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs font-medium text-neutral-500">{label}</p>
+      <p className="mt-1 break-words text-sm font-semibold text-neutral-900">{value}</p>
+    </div>
   )
 }
 
