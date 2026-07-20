@@ -91,7 +91,6 @@ app.get('/whatsapp-qr', ...(demoPublicQr ? [] : [autenticar, soloAdmin]), (req, 
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="refresh" content="12" />
   <title>QR WhatsApp | Transporte San Roman</title>
   <style>
     body{margin:0;min-height:100vh;display:grid;place-items:center;background:#fafaf9;color:#171717;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
@@ -102,6 +101,7 @@ app.get('/whatsapp-qr', ...(demoPublicQr ? [] : [autenticar, soloAdmin]), (req, 
     .status{display:inline-flex;margin:20px 0 4px;border-radius:6px;padding:10px 14px;font-weight:700;font-size:14px}
     .ok{background:#ecfdf5;color:#047857}
     .wait{background:#fffbeb;color:#92400e}
+    button{margin-top:18px;border:1px solid #d4d4d4;border-radius:8px;background:#111;color:#fff;padding:10px 14px;font-weight:700;cursor:pointer}
     small{display:block;margin-top:16px;color:#a3a3a3}
   </style>
 </head>
@@ -109,8 +109,16 @@ app.get('/whatsapp-qr', ...(demoPublicQr ? [] : [autenticar, soloAdmin]), (req, 
   <main>
     <h1>Vincular WhatsApp</h1>
     ${contenido}
-    <small>Esta pagina se actualiza automaticamente.</small>
+    <button type="button" onclick="recargar()">Actualizar QR</button>
+    <small>Si tu navegador intenta HTTPS, vuelve a abrir esta pagina con http://</small>
   </main>
+  <script>
+    function recargar() {
+      var url = window.location.href.replace(/^https:/, 'http:')
+      window.location.replace(url)
+    }
+    setTimeout(recargar, 12000)
+  </script>
 </body>
 </html>`)
 })
