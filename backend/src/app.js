@@ -21,7 +21,7 @@ const viajesRoutes = require('./modules/viajes/viajes.routes')
 const gastosRoutes = require('./modules/gastos/gastos.routes')
 const tallerRoutes = require('./modules/taller/taller.routes')
 const gpsRoutes = require('./modules/gps/gps.routes')
-const { obtenerEstadoWhatsApp } = require('./services/messaging/whatsapp')
+const { obtenerEstadoWhatsApp, reiniciarWhatsApp } = require('./services/messaging/whatsapp')
 
 const app = express()
 const demoPublicQr = process.env.DEMO_PUBLIC_WHATSAPP_QR === 'true'
@@ -152,6 +152,19 @@ app.get('/whatsapp-qr', ...(demoPublicQr ? [] : [autenticar, soloAdmin]), (req, 
 
 app.use('/api/auth', authRoutes)
 app.use('/api', protegerCsrf)
+
+app.post('/api/whatsapp/reiniciar', autenticar, soloAdmin, async (req, res) => {
+  const estado = await reiniciarWhatsApp()
+  res.json({
+    ok: true,
+    mensaje: 'Vinculacion de WhatsApp reiniciada',
+    data: {
+      conectado: estado.conectado,
+      qrDisponible: Boolean(estado.qrDataUrl)
+    }
+  })
+})
+
 app.use('/api/usuarios', usuariosRoutes)
 app.use('/api/choferes', choferesRoutes)
 app.use('/api/camiones', camionesRoutes)

@@ -133,6 +133,11 @@ export default function App() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [alertas, setAlertas] = useState([])
+  const [whatsappStatus, setWhatsappStatus] = useState({
+    conectado: false,
+    qrDisponible: false,
+    loading: false,
+  })
 
   const [viajes, setViajes] = useState([])
   const [choferes, setChoferes] = useState([])
@@ -188,6 +193,49 @@ export default function App() {
       setLoading(false)
     }
   }, [isAuthenticated, logout])
+
+  const cargarWhatsappStatus = useCallback(async () => {
+    if (!isAuthenticated || usuario?.rol !== 'ADMIN') return
+    setWhatsappStatus((current) => ({ ...current, loading: true }))
+    try {
+      const response = await api.get('/whatsapp/status')
+      setWhatsappStatus({
+        conectado: Boolean(response.data?.conectado),
+        qrDisponible: Boolean(response.data?.qrDisponible),
+        loading: false,
+      })
+    } catch {
+      setWhatsappStatus((current) => ({ ...current, loading: false }))
+    }
+  }, [isAuthenticated, usuario?.rol])
+
+  const abrirWhatsappQr = useCallback(() => {
+    window.open(new URL('/whatsapp-qr', SOCKET_URL).toString(), '_blank', 'noopener,noreferrer')
+  }, [])
+
+  const reiniciarWhatsapp = useCallback(async () => {
+    const result = await confirmAction(
+      'Reiniciar WhatsApp',
+      'Se cerrara la sesion actual y se generara un QR nuevo para vincular el telefono.',
+      'Reiniciar'
+    )
+    if (!result.isConfirmed) return
+
+    setWhatsappStatus((current) => ({ ...current, loading: true }))
+    try {
+      const response = await api.post('/whatsapp/reiniciar', {})
+      setWhatsappStatus({
+        conectado: Boolean(response.data?.data?.conectado),
+        qrDisponible: Boolean(response.data?.data?.qrDisponible),
+        loading: false,
+      })
+      await notifySuccess('WhatsApp reiniciado', 'Abre el QR y vincula el telefono.')
+      abrirWhatsappQr()
+    } catch (err) {
+      setWhatsappStatus((current) => ({ ...current, loading: false }))
+      notifyError(err.response?.data?.mensaje || 'No se pudo reiniciar WhatsApp.')
+    }
+  }, [abrirWhatsappQr])
 
   useEffect(() => {
     let mounted = true
@@ -253,6 +301,15 @@ export default function App() {
 
   const data = useMemo(() => buildOperationalData({ viajes, choferes, camiones, query }), [viajes, choferes, camiones, query])
   const isAdmin = usuario?.rol === 'ADMIN'
+
+  useEffect(() => {
+    if (!isAuthenticated || !isAdmin) return
+
+    cargarWhatsappStatus()
+    const interval = setInterval(cargarWhatsappStatus, 15000)
+    return () => clearInterval(interval)
+  }, [cargarWhatsappStatus, isAdmin, isAuthenticated])
+
   const visibleTabs = useMemo(
     () => tabs.filter((tab) => tab.id !== 'liquidaciones' || isAdmin),
     [isAdmin]
@@ -354,7 +411,16 @@ export default function App() {
             {loading && <Banner tone="neutral" icon={RefreshCw} text="Actualizando datos..." />}
 
             {activeTab === 'monitor' && (
-              <Monitor data={data} alertas={alertas} onSelect={setSelectedViaje} />
+              <Monitor
+                data={data}
+                alertas={alertas}
+                isAdmin={isAdmin}
+                whatsappStatus={whatsappStatus}
+                onOpenWhatsappQr={abrirWhatsappQr}
+                onResetWhatsapp={reiniciarWhatsapp}
+                onRefreshWhatsapp={cargarWhatsappStatus}
+                onSelect={setSelectedViaje}
+              />
             )}
             {activeTab === 'viajes' && (
               <ViajesView data={data} onSelect={setSelectedViaje} />
@@ -387,7 +453,16 @@ export default function App() {
   )
 }
 
-function Monitor({ data, alertas, onSelect }) {
+function Monitor({
+  data,
+  alertas,
+  isAdmin,
+  whatsappStatus,
+  onOpenWhatsappQr,
+  onResetWhatsapp,
+  onRefreshWhatsapp,
+  onSelect,
+}) {
   const [tripPage, setTripPage] = useState(1)
   const [reportPage, setReportPage] = useState(1)
   const tripPageSize = 6
@@ -405,6 +480,15 @@ function Monitor({ data, alertas, onSelect }) {
         <Metric title="Por liquidar" value={data.pendientesLiquidacion.length} icon={Wallet} tone="blue" />
         <Metric title="Fuera de servicio" value={data.camionesTaller.length} icon={Wrench} tone="amber" />
       </section>
+
+      {isAdmin && (
+        <WhatsAppStatusCard
+          status={whatsappStatus}
+          onOpenQr={onOpenWhatsappQr}
+          onReset={onResetWhatsapp}
+          onRefresh={onRefreshWhatsapp}
+        />
+      )}
 
       {data.camionesTaller.length > 0 && (
         <Banner
@@ -454,6 +538,60 @@ function Monitor({ data, alertas, onSelect }) {
         </div>
       </section>
     </div>
+  )
+}
+
+function WhatsAppStatusCard({ status, onOpenQr, onReset, onRefresh }) {
+  const conectado = Boolean(status?.conectado)
+  const qrDisponible = Boolean(status?.qrDisponible)
+
+  return (
+    <section className="rounded-md border border-neutral-200 bg-white px-4 py-4">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold">WhatsApp del bot</p>
+            <span className={`rounded px-2 py-1 text-xs font-semibold ${conectado ? 'bg-emerald-50 text-emerald-700' : qrDisponible ? 'bg-amber-50 text-amber-700' : 'bg-neutral-100 text-neutral-600'}`}>
+              {conectado ? 'Conectado' : qrDisponible ? 'QR listo' : 'Esperando QR'}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-neutral-500">
+            {conectado
+              ? 'La sesion esta activa para recibir reportes.'
+              : 'Abre el QR para vincular el telefono operativo.'}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={status?.loading}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw className={status?.loading ? 'animate-spin' : ''} size={16} />
+            Actualizar
+          </button>
+          <button
+            type="button"
+            onClick={onOpenQr}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-neutral-200 bg-white px-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+          >
+            <Send size={16} />
+            Ver QR
+          </button>
+          <button
+            type="button"
+            onClick={onReset}
+            disabled={status?.loading}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-neutral-950 px-3 text-sm font-medium text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <RefreshCw size={16} />
+            Reiniciar vinculacion
+          </button>
+        </div>
+      </div>
+    </section>
   )
 }
 

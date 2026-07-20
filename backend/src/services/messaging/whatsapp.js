@@ -9,14 +9,23 @@ const { Boom } = require('@hapi/boom')
 const QRCode = require('qrcode')
 const pino = require('pino')
 const path = require('path')
+const fs = require('fs/promises')
 
 let sock = null
 let socketIO = null
 let ultimoQr = null
 let ultimoQrDataUrl = null
 let whatsappConectado = false
+let reconnectTimer = null
+let reinicioManual = false
 const logger = pino({ level: 'silent' })
 const MAX_AUDIO_BYTES = 20 * 1024 * 1024
+
+const obtenerAuthPath = () => (
+  process.env.WHATSAPP_AUTH_PATH
+    ? path.resolve(process.env.WHATSAPP_AUTH_PATH)
+    : path.join(__dirname, '../../../.whatsapp-auth')
+)
 
 const enviarMensaje = async (destino, texto) => {
   if (!sock) throw new Error('WhatsApp no conectado')
@@ -30,10 +39,8 @@ const enviarMensaje = async (destino, texto) => {
 }
 
 const iniciarWhatsApp = async (io) => {
-  socketIO = io
-  const authPath = process.env.WHATSAPP_AUTH_PATH
-    ? path.resolve(process.env.WHATSAPP_AUTH_PATH)
-    : path.join(__dirname, '../../../.whatsapp-auth')
+  socketIO = io || socketIO
+  const authPath = obtenerAuthPath()
   const { state, saveCreds } = await useMultiFileAuthState(authPath)
 
  sock = makeWASocket({
@@ -61,6 +68,7 @@ const iniciarWhatsApp = async (io) => {
 
     if (connection === 'close') {
       whatsappConectado = false
+      if (reinicioManual) return
       const shouldReconnect =
         lastDisconnect?.error instanceof Boom
           ? lastDisconnect.error.output?.statusCode !== DisconnectReason.loggedOut
@@ -68,7 +76,11 @@ const iniciarWhatsApp = async (io) => {
 
       console.log('WhatsApp desconectado. Reconectando:', shouldReconnect)
       if (shouldReconnect) {
-        setTimeout(() => iniciarWhatsApp(socketIO), 3000)
+        if (reconnectTimer) clearTimeout(reconnectTimer)
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null
+          iniciarWhatsApp(socketIO)
+        }, 3000)
       } else {
         console.log('Sesión cerrada. Escanea el QR nuevamente.')
       }
@@ -167,4 +179,45 @@ const obtenerEstadoWhatsApp = () => ({
   qrDataUrl: ultimoQrDataUrl
 })
 
-module.exports = { iniciarWhatsApp, enviarMensaje, obtenerSock, obtenerEstadoWhatsApp }
+const reiniciarWhatsApp = async () => {
+  reinicioManual = true
+  try {
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer)
+      reconnectTimer = null
+    }
+
+    whatsappConectado = false
+    ultimoQr = null
+    ultimoQrDataUrl = null
+
+    const socketActual = sock
+    sock = null
+
+    if (socketActual) {
+      try {
+        if (typeof socketActual.ev?.removeAllListeners === 'function') {
+          socketActual.ev.removeAllListeners('connection.update')
+          socketActual.ev.removeAllListeners('creds.update')
+          socketActual.ev.removeAllListeners('messages.upsert')
+        }
+        if (typeof socketActual.end === 'function') {
+          socketActual.end(new Error('Reinicio manual de WhatsApp'))
+        }
+      } catch (err) {
+        console.warn('No se pudo cerrar el socket de WhatsApp:', err.message)
+      }
+    }
+
+    await fs.rm(obtenerAuthPath(), { recursive: true, force: true })
+  } finally {
+    reinicioManual = false
+  }
+
+  await iniciarWhatsApp(socketIO)
+
+  if (socketIO) socketIO.emit('whatsapp:reiniciado')
+  return obtenerEstadoWhatsApp()
+}
+
+module.exports = { iniciarWhatsApp, enviarMensaje, obtenerSock, obtenerEstadoWhatsApp, reiniciarWhatsApp }
