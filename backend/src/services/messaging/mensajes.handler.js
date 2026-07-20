@@ -31,6 +31,53 @@ const VENTANA_MENSAJES_MS = 60 * 1000
 const MAX_MENSAJES_POR_VENTANA = 20
 const MAX_TEXTO_LENGTH = 2000
 
+const extraerTelefonoDesdeJid = (remoteJid = '') => {
+  const identificador = remoteJid.split('@')[0]?.split(':')[0]
+  return normalizarTelefono(identificador)
+}
+
+const buscarChoferPorTelefono = async (telefono) => {
+  if (!telefono) return null
+
+  const sufijo10 = ultimosDigitosTelefono(telefono, 10)
+  const sufijo7 = ultimosDigitosTelefono(telefono, 7)
+  const variantes = [...new Set([
+    telefono,
+    sufijo10,
+    sufijo10 ? `0${sufijo10}` : null,
+  ].filter(Boolean))]
+
+  const exacto = await prisma.chofer.findFirst({
+    where: {
+      activo: true,
+      telefono: { in: variantes },
+    },
+    include: includeChoferConViajes(),
+    orderBy: { createdAt: 'desc' },
+  })
+  if (exacto) return exacto
+
+  const porSufijo10 = sufijo10
+    ? await prisma.chofer.findMany({
+        where: { activo: true, telefono: { endsWith: sufijo10 } },
+        include: includeChoferConViajes(),
+        take: 2,
+      })
+    : []
+  if (porSufijo10.length === 1) return porSufijo10[0]
+
+  const porSufijo7 = sufijo7
+    ? await prisma.chofer.findMany({
+        where: { activo: true, telefono: { endsWith: sufijo7 } },
+        include: includeChoferConViajes(),
+        take: 2,
+      })
+    : []
+  if (porSufijo7.length === 1) return porSufijo7[0]
+
+  return null
+}
+
 const permitirMensaje = (remoteJid) => {
   const ahora = Date.now()
   const ventana = ventanasMensajes.get(remoteJid)
@@ -52,25 +99,11 @@ const buscarChofer = async (remoteJid) => {
   if (chofer?.activo) return chofer
   if (chofer && !chofer.activo) chofer = null
 
-  if (remoteJid.endsWith('@s.whatsapp.net')) {
-    const telefono = normalizarTelefono(remoteJid.replace('@s.whatsapp.net', '').split(':')[0])
+  if (remoteJid.includes('@')) {
+    const telefono = extraerTelefonoDesdeJid(remoteJid)
+    chofer = await buscarChoferPorTelefono(telefono)
 
-    chofer = await prisma.chofer.findUnique({
-      where: { telefono },
-      include: includeChoferConViajes(),
-    })
-
-    if (!chofer) {
-      chofer = await prisma.chofer.findFirst({
-        where: {
-          activo: true,
-          telefono: { endsWith: ultimosDigitosTelefono(telefono) },
-        },
-        include: includeChoferConViajes(),
-      })
-    }
-
-    if (chofer?.activo && !chofer.whatsappChatId) {
+    if (chofer?.activo && chofer.whatsappChatId !== remoteJid) {
       await prisma.chofer.update({
         where: { id: chofer.id },
         data: { whatsappChatId: remoteJid },
