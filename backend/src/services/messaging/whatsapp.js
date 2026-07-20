@@ -27,6 +27,13 @@ const obtenerAuthPath = () => (
     : path.join(__dirname, '../../../.whatsapp-auth')
 )
 
+const enmascararJid = (jid = '') => {
+  if (!jid) return null
+  const [id, dominio] = jid.split('@')
+  const visible = id.length <= 8 ? '***' : `${id.slice(0, 4)}...${id.slice(-4)}`
+  return dominio ? `${visible}@${dominio}` : visible
+}
+
 const enviarMensaje = async (destino, texto) => {
   if (!sock) throw new Error('WhatsApp no conectado')
   const jid = destino.includes('@') ? destino : `${destino}@s.whatsapp.net`
@@ -111,7 +118,11 @@ const iniciarWhatsApp = async (io) => {
 
       if (remoteJid.endsWith('@g.us') || remoteJid === 'status@broadcast') continue
 
-      console.log('[WhatsApp] Mensaje recibido')
+      console.log('[WhatsApp] Mensaje recibido', {
+        remoteJid: enmascararJid(remoteJid),
+        participant: enmascararJid(msg.key.participant),
+        senderLid: enmascararJid(msg.key.senderLid),
+      })
 
       const contenido = normalizeMessageContent(msg.message)
       let texto =
@@ -163,6 +174,7 @@ const iniciarWhatsApp = async (io) => {
       await procesarMensajeChofer({
         remoteJid,
         texto,
+        mensaje: msg,
         socketIO,
         enviarMensaje,
       })

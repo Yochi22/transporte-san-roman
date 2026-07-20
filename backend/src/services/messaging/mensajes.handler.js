@@ -31,6 +31,13 @@ const VENTANA_MENSAJES_MS = 60 * 1000
 const MAX_MENSAJES_POR_VENTANA = 20
 const MAX_TEXTO_LENGTH = 2000
 
+const enmascararValor = (valor = '') => {
+  if (!valor) return null
+  const texto = valor.toString()
+  if (texto.length <= 8) return '***'
+  return `${texto.slice(0, 4)}...${texto.slice(-4)}`
+}
+
 const extraerTelefonoDesdeJid = (remoteJid = '') => {
   const identificador = remoteJid.split('@')[0]?.split(':')[0]
   return normalizarTelefono(identificador)
@@ -78,6 +85,17 @@ const buscarChoferPorTelefono = async (telefono) => {
   return null
 }
 
+const normalizarIdentificadoresMensaje = (mensaje) => {
+  if (!mensaje?.key) return []
+  return [
+    mensaje.key.remoteJid,
+    mensaje.key.participant,
+    mensaje.key.senderLid,
+    mensaje.key.participantAlt,
+    mensaje.key.remoteJidAlt,
+  ].filter(Boolean)
+}
+
 const permitirMensaje = (remoteJid) => {
   const ahora = Date.now()
   const ventana = ventanasMensajes.get(remoteJid)
@@ -90,16 +108,18 @@ const permitirMensaje = (remoteJid) => {
   return true
 }
 
-const buscarChofer = async (remoteJid) => {
+const buscarChofer = async (identificadores = []) => {
+  const jids = [...new Set(identificadores.filter(Boolean))]
   let chofer = await prisma.chofer.findFirst({
-    where: { whatsappChatId: remoteJid },
+    where: { whatsappChatId: { in: jids } },
     include: includeChoferConViajes(),
   })
 
   if (chofer?.activo) return chofer
   if (chofer && !chofer.activo) chofer = null
 
-  if (remoteJid.includes('@')) {
+  for (const remoteJid of jids) {
+    if (!remoteJid.includes('@')) continue
     const telefono = extraerTelefonoDesdeJid(remoteJid)
     chofer = await buscarChoferPorTelefono(telefono)
 
@@ -109,8 +129,14 @@ const buscarChofer = async (remoteJid) => {
         data: { whatsappChatId: remoteJid },
       })
       console.log('[Vinculacion] Chofer auto-vinculado')
+      return chofer
     }
   }
+
+  console.warn('[Vinculacion] Chofer no encontrado', {
+    jids: jids.map(enmascararValor),
+    telefonos: jids.map(extraerTelefonoDesdeJid).filter(Boolean).map(enmascararValor),
+  })
 
   return chofer
 }
@@ -126,7 +152,7 @@ const includeChoferConViajes = () => ({
   },
 })
 
-const procesarMensajeChofer = async ({ remoteJid, texto, socketIO, enviarMensaje }) => {
+const procesarMensajeChofer = async ({ remoteJid, texto, mensaje = null, socketIO, enviarMensaje }) => {
   try {
     if (!permitirMensaje(remoteJid)) {
       await enviarMensaje(remoteJid, 'Has enviado demasiados mensajes. Espera un minuto e intenta nuevamente.')
@@ -140,7 +166,8 @@ const procesarMensajeChofer = async ({ remoteJid, texto, socketIO, enviarMensaje
     texto = texto.trim()
     const textoLower = texto.toLowerCase().trim()
 
-    const chofer = await buscarChofer(remoteJid)
+    const identificadores = [remoteJid, ...normalizarIdentificadoresMensaje(mensaje)]
+    const chofer = await buscarChofer(identificadores)
 
     if (!chofer) {
       await enviarMensaje(
