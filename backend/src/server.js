@@ -22,7 +22,7 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
   : [...new Set([...configuredOrigins, 'http://localhost:5173', 'http://127.0.0.1:5173'])]
 
 const server = http.createServer(app)
-const DIAS_RETENCION_REPORTES = Math.max(1, Number(process.env.DIAS_RETENCION_REPORTES) || 3)
+const DIAS_RETENCION_REPORTES = Math.max(1, Number(process.env.DIAS_RETENCION_REPORTES) || 5)
 const INTERVALO_DEPURACION = 24 * 60 * 60 * 1000
 
 const ejecutarDepuracionReportes = async () => {
@@ -84,7 +84,7 @@ io.on('connection', (socket) => {
 })
 
 server.listen(PORT, async () => {
-  console.log(`Transporte San Román API corriendo en puerto ${PORT}`)
+  console.log(`Transporte San RomÃ¡n API corriendo en puerto ${PORT}`)
   console.log(`Ambiente: ${process.env.NODE_ENV}`)
   try {
     await crearUsuarioInicial()

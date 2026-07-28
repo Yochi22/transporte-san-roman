@@ -2,15 +2,22 @@ const prisma = require('../../config/database')
 const { generarCodigoViaje } = require('../../utils/generarCodigo')
 const { choferPanelSelect, camionPanelSelect, reportePanelSelect } = require('../../utils/prismaSelects')
 
-const viajePanelInclude = {
+const DIAS_RETENCION_REPORTES = Math.max(1, Number(process.env.DIAS_RETENCION_REPORTES) || 5)
+
+const fechaLimiteReportes = () => {
+  const limite = new Date()
+  limite.setDate(limite.getDate() - DIAS_RETENCION_REPORTES)
+  return limite
+}
+
+const viajePanelInclude = () => ({
   chofer: { select: choferPanelSelect },
   camion: { select: camionPanelSelect },
   unidades: { include: { camion: { select: camionPanelSelect } } },
   paradas: { orderBy: { orden: 'asc' } },
-  reportes: { select: reportePanelSelect, orderBy: { createdAt: 'desc' }, take: 100 },
+  reportes: { where: { createdAt: { gte: fechaLimiteReportes() } }, select: reportePanelSelect, orderBy: { createdAt: 'desc' }, take: 100 },
   gastos: { orderBy: { createdAt: 'desc' }, take: 200 }
-}
-
+})
 const validarMonto = (valor, campo) => {
   const numero = Number(valor || 0)
   if (!Number.isFinite(numero) || numero < 0 || numero > 1_000_000_000) {
@@ -74,7 +81,7 @@ const listar = async (filtros = {}) => {
 
   return prisma.viaje.findMany({
     where,
-    include: viajePanelInclude,
+    include: viajePanelInclude(),
     orderBy: { createdAt: 'desc' },
     take: 500
   })
@@ -93,7 +100,7 @@ const listarArchivo = async (filtros = {}) => {
   const [items, total] = await prisma.$transaction([
     prisma.viaje.findMany({
       where,
-      include: viajePanelInclude,
+      include: viajePanelInclude(),
       orderBy: { fechaCierre: 'desc' },
       skip: (page - 1) * pageSize,
       take: pageSize
@@ -137,7 +144,7 @@ const construirRangoArchivo = (periodo, fecha) => {
 const obtener = async (id) => {
   return prisma.viaje.findUniqueOrThrow({
     where: { id },
-    include: viajePanelInclude
+    include: viajePanelInclude()
   })
 }
 
@@ -335,7 +342,7 @@ const listarPendientesLiquidacion = async (filtros = {}) => {
   const [items, total] = await prisma.$transaction([
     prisma.viaje.findMany({
       where,
-      include: viajePanelInclude,
+      include: viajePanelInclude(),
       orderBy: [{ fechaCierre: 'desc' }, { createdAt: 'desc' }],
       skip: (page - 1) * pageSize,
       take: pageSize

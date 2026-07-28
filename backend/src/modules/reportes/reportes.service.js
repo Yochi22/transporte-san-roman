@@ -7,14 +7,13 @@ const crear = async (datos) => {
   })
 }
 
-const depurarReportesAntiguos = async (diasRetencion = 3) => {
+const depurarReportesAntiguos = async (diasRetencion = 5) => {
   const limite = new Date()
   limite.setDate(limite.getDate() - diasRetencion)
 
   return prisma.reporteChofer.deleteMany({
     where: {
-      createdAt: { lte: limite },
-      tipoReporte: { not: 'NOVEDAD' }
+      createdAt: { lte: limite }
     }
   })
 }

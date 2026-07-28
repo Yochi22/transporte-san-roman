@@ -394,7 +394,7 @@ export default function App() {
               </button>
               <div className="min-w-0 flex-1">
                 <h1 className="truncate text-base font-semibold">{pageTitle(activeTab)}</h1>
-                <p className="hidden text-xs text-neutral-500 sm:block">{data.activos.length} viajes en curso · {data.pendientesLiquidacion.length} por liquidar</p>
+                <p className="hidden text-xs text-neutral-500 sm:block">{data.activos.length} viajes en curso Â· {data.pendientesLiquidacion.length} por liquidar</p>
               </div>
               <div className="relative hidden w-full max-w-sm md:block">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={16} />
@@ -634,7 +634,7 @@ function ReportesTableView({ reportes, onSelectViaje }) {
       <section className="border border-neutral-200 bg-white">
         <div className="flex flex-col gap-3 border-b border-neutral-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <SectionTitle title="Reportes de choferes" subtitle={`${reportes.length} registros recientes`} />
-          <span className="text-xs text-neutral-500">Conservacion automatica: 3 dias</span>
+          <span className="text-xs text-neutral-500">Conservacion automatica: 5 dias</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -698,7 +698,7 @@ function ReportesTableView({ reportes, onSelectViaje }) {
                           <div className="grid gap-4 text-sm md:grid-cols-[1.4fr_0.8fr_1fr]">
                             <InfoBlock label="Mensaje recibido" value={mensaje} />
                             <InfoBlock label="Ubicacion" value={reporte.ubicacion || 'Sin ubicacion reportada'} />
-                            <InfoBlock label="Viaje" value={viaje ? `${viaje.codigo} · ${formatRoute(viaje)}` : 'Sin viaje asociado'} />
+                            <InfoBlock label="Viaje" value={viaje ? `${viaje.codigo} Â· ${formatRoute(viaje)}` : 'Sin viaje asociado'} />
                           </div>
                         </td>
                       </tr>
@@ -729,7 +729,7 @@ function ReportesView({ reportes, onSelectViaje }) {
       <section className="rounded-md border border-neutral-200 bg-white">
         <div className="flex flex-col gap-3 border-b border-neutral-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <SectionTitle title="Reportes de choferes" subtitle={`${reportes.length} registros recientes`} />
-          <span className="text-xs text-neutral-500">Conservacion automatica: 3 dias</span>
+          <span className="text-xs text-neutral-500">Conservacion automatica: 5 dias</span>
         </div>
 
         <div className="divide-y divide-neutral-100">
@@ -750,7 +750,7 @@ function ReportesView({ reportes, onSelectViaje }) {
                     </div>
                     <h3 className="truncate text-sm font-semibold">{formatReportTitle(reporte)}</h3>
                     <p className="mt-1 text-xs text-neutral-500">
-                      {chofer}{viaje?.codigo ? ` · ${viaje.codigo}` : ''}
+                      {chofer}{viaje?.codigo ? ` Â· ${viaje.codigo}` : ''}
                     </p>
                     {reporte.ubicacion && (
                       <p className="mt-1 truncate text-xs text-neutral-400">{reporte.ubicacion}</p>
@@ -782,7 +782,7 @@ function ReportesView({ reportes, onSelectViaje }) {
                   <div className="mt-4 grid gap-3 rounded-md border border-neutral-200 bg-stone-50 p-3 text-sm lg:grid-cols-3">
                     <InfoBlock label="Mensaje recibido" value={reporte.mensajeOriginal || 'Sin mensaje'} />
                     <InfoBlock label="Ubicacion" value={reporte.ubicacion || 'Sin ubicacion reportada'} />
-                    <InfoBlock label="Viaje" value={viaje ? `${viaje.codigo} · ${formatRoute(viaje)}` : 'Sin viaje asociado'} />
+                    <InfoBlock label="Viaje" value={viaje ? `${viaje.codigo} Â· ${formatRoute(viaje)}` : 'Sin viaje asociado'} />
                   </div>
                 )}
               </article>
@@ -928,7 +928,7 @@ function ArchivoLogistico({ onSelect }) {
             <StatusDot estado={viaje.estadoLogistico} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{viaje.codigo}</p>
-              <p className="truncate text-xs text-neutral-500">{viaje.chofer?.nombre || 'Sin chofer'} · {formatRoute(viaje)}</p>
+              <p className="truncate text-xs text-neutral-500">{viaje.chofer?.nombre || 'Sin chofer'} Â· {formatRoute(viaje)}</p>
             </div>
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium">{formatDate(viaje.fechaCierre)}</p>
@@ -960,7 +960,7 @@ function TripList({ title, viajes, onSelect }) {
             <StatusDot estado={viaje.estadoLogistico} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{viaje.codigo}</p>
-              <p className="truncate text-xs text-neutral-500">{viaje.chofer?.nombre || 'Sin chofer'} · {formatRoute(viaje)}</p>
+              <p className="truncate text-xs text-neutral-500">{viaje.chofer?.nombre || 'Sin chofer'} Â· {formatRoute(viaje)}</p>
             </div>
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium">{money(balance(viaje))}</p>
@@ -1127,7 +1127,7 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
           <Field label="Chofer">
             <select required value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value, camionIds: [] })} className="input">
               <option value="">Seleccionar</option>
-              {choferes.map((chofer) => <option key={chofer.id} value={chofer.id}>{chofer.nombre} · {formatStatus(chofer.estadoCalculado)}</option>)}
+              {choferes.map((chofer) => <option key={chofer.id} value={chofer.id}>{chofer.nombre} Â· {formatStatus(chofer.estadoCalculado)}</option>)}
             </select>
           </Field>
           <Field label="Unidades del viaje">
@@ -1371,7 +1371,7 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
               <input required value={form.cedula} onChange={(event) => setForm({ ...form, cedula: event.target.value })} className="input" placeholder="Cedula" />
               <input required value={form.telefono} onChange={(event) => setForm({ ...form, telefono: event.target.value })} className="input" placeholder="Telefono" />
               <select multiple value={form.unidadIds} onChange={(event) => setForm({ ...form, unidadIds: Array.from(event.target.selectedOptions).map((option) => option.value) })} className="input md:col-span-3 min-h-28">
-                {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)} · {formatStatus(camion.estadoCalculado)}</option>)}
+                {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)} Â· {formatStatus(camion.estadoCalculado)}</option>)}
               </select>
             </>
           ) : (
@@ -2071,7 +2071,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
       <aside className="relative h-screen min-h-[100svh] w-full max-w-3xl overflow-y-auto bg-white shadow-xl">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-4 sm:px-6">
           <div className="min-w-0">
-            <p className="text-xs font-medium text-neutral-500">{formatStatus(viaje.estadoLogistico)} · {formatStatus(viaje.estadoFinanciero)}</p>
+            <p className="text-xs font-medium text-neutral-500">{formatStatus(viaje.estadoLogistico)} Â· {formatStatus(viaje.estadoFinanciero)}</p>
             <h2 className="truncate text-lg font-semibold">{viaje.codigo}</h2>
           </div>
           <button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-md hover:bg-neutral-100">
@@ -2160,7 +2160,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
 
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <SectionTitle title="Gastos" subtitle={`${viaje.gastos?.length || 0} registros · ${money(totalGastado)}`} />
+                <SectionTitle title="Gastos" subtitle={`${viaje.gastos?.length || 0} registros Â· ${money(totalGastado)}`} />
                 <button onClick={() => setShowGastoForm((value) => !value)} className="btn-secondary">
                   <Plus size={16} />
                   Registrar
@@ -2187,7 +2187,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
                 {paginate(viaje.gastos || [], expensePage, detailPageSize).map((gasto) => (
                   <div key={gasto.id} className="flex items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3 last:border-b-0">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{gasto.tipo} · {gasto.origen || 'ADMIN'}</p>
+                      <p className="truncate text-sm font-medium">{gasto.tipo} Â· {gasto.origen || 'ADMIN'}</p>
                       <p className="truncate text-xs text-neutral-500">{gasto.descripcion || 'Gasto'}</p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -2358,7 +2358,7 @@ function ReportRow({ reporte, compact = false }) {
   const titulo = formatReportTitle(reporte)
   const chofer = reporte.chofer?.nombre || reporte.viaje?.chofer?.nombre || ''
   const viaje = reporte.viaje?.codigo || ''
-  const contexto = [chofer, viaje].filter(Boolean).join(' · ')
+  const contexto = [chofer, viaje].filter(Boolean).join(' Â· ')
 
   return (
     <div className="border-b border-neutral-100 px-4 py-3 last:border-b-0">
@@ -2450,7 +2450,7 @@ function Empty({ text }) {
 function ParadaPill({ parada }) {
   return (
     <div className={`rounded-md border px-2 py-1 text-xs ${paradaStyles[parada.estado] || paradaStyles.PENDIENTE}`}>
-      <span className="font-medium">{parada.tipo}</span> · {parada.ciudad}
+      <span className="font-medium">{parada.tipo}</span> Â· {parada.ciudad}
     </div>
   )
 }
@@ -2647,8 +2647,8 @@ function formatReportTitle(reporte) {
 function formatLastReportLocation(reporte) {
   const ubicacion = reporte.ubicacion || ''
   const texto = formatReportTitle(reporte)
-  if (ubicacion) return `${labelReporte(reporte.tipoReporte)} · ${ubicacion}`
-  return `${labelReporte(reporte.tipoReporte)} · ${texto || 'Sin detalle'}`
+  if (ubicacion) return `${labelReporte(reporte.tipoReporte)} Â· ${ubicacion}`
+  return `${labelReporte(reporte.tipoReporte)} Â· ${texto || 'Sin detalle'}`
 }
 
 function coordsFromText(value = '') {
@@ -2811,7 +2811,7 @@ function Pagination({ page, total, pageSize, onChange }) {
 
   return (
     <div className="flex flex-col gap-3 text-xs text-neutral-500 sm:flex-row sm:items-center sm:justify-between">
-      <span>Mostrando {from}-{to} de {total} registros · Pagina {safePage} de {pages}</span>
+      <span>Mostrando {from}-{to} de {total} registros Â· Pagina {safePage} de {pages}</span>
       <div className="flex flex-wrap gap-2">
         <button disabled={safePage <= 1} onClick={() => onChange(1)} className="btn-secondary h-8 px-3">Primera</button>
         <button disabled={safePage <= 1} onClick={() => onChange(safePage - 1)} className="btn-secondary h-8 px-3">Anterior</button>
