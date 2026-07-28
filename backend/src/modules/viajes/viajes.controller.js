@@ -97,22 +97,22 @@ const actualizarParada = async (req, res) => {
 const recargarViaticos = async (req, res) => {
   const { monto } = req.body
   const viaje = await service.recargarViaticos(req.params.id, monto)
-  return ok(res, viaje, 'Viáticos recargados')
+  return ok(res, viaje, 'ViÃ¡ticos recargados')
 }
 
 const confirmarDocumentacion = async (req, res) => {
   const viaje = await service.confirmarDocumentacion(req.params.id)
-  return ok(res, viaje, 'Documentación confirmada')
+  return ok(res, viaje, 'DocumentaciÃ³n confirmada')
 }
 
 const cerrar = async (req, res) => {
-  const { numeroGuia, odometroFinal, combustibleFinal } = req.body
+  const { numeroGuia, odometroFinal } = req.body
   const soloLogistica = req.body.soloLogistica === true
   if (!soloLogistica && req.usuario.rol !== 'ADMIN') {
     return error(res, 'Solo un administrador puede liquidar viajes', 403)
   }
-  const viaje = await service.cerrar(req.params.id, soloLogistica, numeroGuia, { odometroFinal, combustibleFinal })
-  const mensaje = soloLogistica ? 'Viaje completado logísticamente' : 'Viaje cerrado y liquidado completamente'
+  const viaje = await service.cerrar(req.params.id, soloLogistica, numeroGuia, { odometroFinal })
+  const mensaje = soloLogistica ? 'Viaje completado logÃ­sticamente' : 'Viaje cerrado y liquidado completamente'
   return ok(res, filtrarFinanzas(viaje, req.usuario.rol), mensaje)
 }
 

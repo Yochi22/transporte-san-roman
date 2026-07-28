@@ -8,7 +8,6 @@ const viajePanelInclude = {
   unidades: { include: { camion: { select: camionPanelSelect } } },
   paradas: { orderBy: { orden: 'asc' } },
   reportes: { select: reportePanelSelect, orderBy: { createdAt: 'desc' }, take: 100 },
-  combustibleEventos: { include: { camion: { select: { id: true, placa: true, tipoVehiculo: true } } }, orderBy: { createdAt: 'desc' }, take: 200 },
   gastos: { orderBy: { createdAt: 'desc' }, take: 200 }
 }
 
@@ -151,7 +150,6 @@ const crear = async (datos, creadoPorId) => {
   const paradas = validarParadas(datos.paradas)
   const viaticosDepositados = validarMonto(datos.viaticosDepositados, 'Monto de viaticos')
   const odometroInicial = validarNumeroOpcional(datos.odometroInicial, 'Odometro inicial', { entero: true })
-  const combustibleInicial = validarNumeroOpcional(datos.combustibleInicial, 'Combustible inicial')
   const chofer = await prisma.chofer.findUniqueOrThrow({
     where: { id: choferId },
     include: {
@@ -217,7 +215,6 @@ const crear = async (datos, creadoPorId) => {
       creadoPorId,
       viaticosDepositados,
       odometroInicial,
-      combustibleInicial,
       estadoLogistico: 'EN_CURSO',
       fechaInicio: primeraCarga ? new Date(primeraCarga.fechaProgramada) : null,
       unidades: {
@@ -375,7 +372,6 @@ const cerrar = async (id, soloLogistica = false, numeroGuia = null, control = {}
   const totalGastado = viaje.gastos.reduce((acc, g) => acc + Number(g.monto), 0)
   const guia = numeroGuia?.trim() || viaje.numeroGuia
   const odometroFinal = validarNumeroOpcional(control.odometroFinal, 'Odometro final', { entero: true })
-  const combustibleFinal = validarNumeroOpcional(control.combustibleFinal, 'Combustible final')
 
   return prisma.$transaction(async (tx) => {
     await tx.parada.updateMany({
@@ -392,8 +388,7 @@ const cerrar = async (id, soloLogistica = false, numeroGuia = null, control = {}
         estadoFinanciero: soloLogistica ? 'PENDIENTE' : 'LIQUIDADO',
         fechaLiquidacion: soloLogistica ? null : new Date(),
         fechaCierre: new Date(),
-        odometroFinal: odometroFinal ?? viaje.odometroFinal,
-        combustibleFinal: combustibleFinal ?? viaje.combustibleFinal
+        odometroFinal: odometroFinal ?? viaje.odometroFinal
       }
     })
 

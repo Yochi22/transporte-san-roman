@@ -20,9 +20,7 @@ ON "choferes_unidades"("camion_id");
 
 ALTER TABLE "viajes"
 ADD COLUMN IF NOT EXISTS "odometro_inicial" INTEGER,
-ADD COLUMN IF NOT EXISTS "odometro_final" INTEGER,
-ADD COLUMN IF NOT EXISTS "combustible_inicial" DECIMAL(65,30),
-ADD COLUMN IF NOT EXISTS "combustible_final" DECIMAL(65,30);
+ADD COLUMN IF NOT EXISTS "odometro_final" INTEGER;
 
 ALTER TABLE "choferes_unidades" ENABLE ROW LEVEL SECURITY;
 REVOKE ALL PRIVILEGES ON TABLE "choferes_unidades" FROM PUBLIC, anon, authenticated;

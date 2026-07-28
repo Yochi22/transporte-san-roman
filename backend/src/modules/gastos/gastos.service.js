@@ -1,5 +1,5 @@
 const prisma = require('../../config/database')
-const TIPOS_GASTO = new Set(['COMBUSTIBLE', 'PEAJE', 'COMIDA', 'HOSPEDAJE', 'REPARACION', 'OTRO'])
+const TIPOS_GASTO = new Set(['PEAJE', 'COMIDA', 'HOSPEDAJE', 'REPARACION', 'OTRO'])
 
 const crear = async (datos, origen = 'ADMIN') => {
   const { viajeId, tipo, monto, descripcion } = datos

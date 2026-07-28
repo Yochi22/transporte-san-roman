@@ -149,7 +149,6 @@ const eliminar = async (id) => {
   const viajeIds = viajes.map((viaje) => viaje.id)
 
   return prisma.$transaction(async (tx) => {
-    await tx.combustibleEvento.deleteMany({ where: { OR: [{ choferId: id }, { viajeId: { in: viajeIds } }] } })
     await tx.gasto.deleteMany({ where: { OR: [{ choferId: id }, { viajeId: { in: viajeIds } }] } })
     await tx.reporteChofer.deleteMany({ where: { OR: [{ choferId: id }, { viajeId: { in: viajeIds } }] } })
     await tx.parada.deleteMany({ where: { viajeId: { in: viajeIds } } })
