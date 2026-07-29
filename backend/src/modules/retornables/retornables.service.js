@@ -95,14 +95,15 @@ const crear = async (datos, usuarioId) => {
 
 const mover = async (id, datos, usuarioId) => {
   const tipoMovimiento = datos.tipoMovimiento
-  if (!TIPOS_MOVIMIENTO.has(tipoMovimiento) || tipoMovimiento === 'REGISTRO') {
-    throw { status: 400, message: 'Tipo de movimiento invalido' }
+  if (!['DEVOLUCION_PARCIAL', 'DEVOLUCION_TOTAL'].includes(tipoMovimiento)) {
+    throw { status: 400, message: 'Solo se permiten devoluciones parciales o totales' }
   }
-  const cantidad = normalizarCantidad(datos.cantidad, 'Cantidad')
+  const actual = await prisma.retornable.findUniqueOrThrow({ where: { id } })
+  const cantidad = tipoMovimiento === 'DEVOLUCION_TOTAL' ? Number(actual.cantidadPendiente) : normalizarCantidad(datos.cantidad, 'Cantidad')
+  if (cantidad <= 0) throw { status: 409, message: 'No hay saldo pendiente por devolver' }
   await validarReferencias(datos)
 
   return prisma.$transaction(async (tx) => {
-    const actual = await tx.retornable.findUniqueOrThrow({ where: { id } })
     const cantidadPendiente = calcularPendiente(actual.cantidadPendiente, cantidad, tipoMovimiento)
     const estado = calcularEstado(actual.cantidadInicial, cantidadPendiente, tipoMovimiento)
 

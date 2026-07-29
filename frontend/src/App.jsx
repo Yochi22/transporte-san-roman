@@ -1273,16 +1273,23 @@ function TripPicker({ viajes, value, onChange, disabled = false }) {
   )
 }
 function RetornableDrawer({ item, viajes, choferes, camiones, onClose, onDone }) {
-  const [form, setForm] = useState({ tipoMovimiento: 'DEVOLUCION_PARCIAL', cantidad: item.cantidadPendiente || '', viajeId: '', choferId: '', camionId: '', ubicacion: '', origen: '', destino: '', observacion: '' })
-  const hasViaje = Boolean(form.viajeId)
+  const [form, setForm] = useState({ tipoMovimiento: 'DEVOLUCION_PARCIAL', cantidad: item.cantidadPendiente || '', viajeId: '', choferId: '', observacion: '' })
+  const pendiente = Number(item.cantidadPendiente || 0)
+
+  const updateTipoMovimiento = (tipoMovimiento) => {
+    setForm({
+      ...form,
+      tipoMovimiento,
+      cantidad: tipoMovimiento === 'DEVOLUCION_TOTAL' ? pendiente : form.cantidad,
+    })
+  }
+
   const updateViaje = (viajeId) => {
     const viaje = viajes.find((item) => item.id === viajeId)
     setForm({
       ...form,
       viajeId,
       choferId: viaje?.choferId || form.choferId,
-      camionId: viajeId ? '' : form.camionId,
-      ubicacion: viajeId ? 'En viaje' : form.ubicacion,
     })
   }
 
@@ -1290,15 +1297,17 @@ function RetornableDrawer({ item, viajes, choferes, camiones, onClose, onDone })
     event.preventDefault()
     try {
       await api.post(`/retornables/${item.id}/movimientos`, {
-        ...form,
-        cantidad: Number(form.cantidad),
-        camionId: form.viajeId ? null : form.camionId || null,
+        tipoMovimiento: form.tipoMovimiento,
+        cantidad: form.tipoMovimiento === 'DEVOLUCION_TOTAL' ? pendiente : Number(form.cantidad),
+        viajeId: form.viajeId || null,
+        choferId: form.choferId || null,
+        observacion: form.observacion || null,
       })
-      await notifySuccess('Movimiento registrado')
+      await notifySuccess('Devolucion registrada')
       onClose()
       onDone()
     } catch (err) {
-      await notifyError(err.response?.data?.mensaje || 'No se pudo registrar el movimiento.')
+      await notifyError(err.response?.data?.mensaje || 'No se pudo registrar la devolucion.')
     }
   }
 
@@ -1320,30 +1329,26 @@ function RetornableDrawer({ item, viajes, choferes, camiones, onClose, onDone })
           </section>
 
           <form onSubmit={submit} className="grid gap-3 rounded-md border border-neutral-200 bg-neutral-50 p-4 md:grid-cols-2">
-            <select value={form.tipoMovimiento} onChange={(event) => setForm({ ...form, tipoMovimiento: event.target.value })} className="input">
-              <option value="DEVOLUCION_PARCIAL">Devolucion parcial</option>
-              <option value="DEVOLUCION_TOTAL">Devolucion total</option>
-              <option value="TRANSFERENCIA">Transferencia</option>
-              <option value="UBICACION">Cambio de ubicacion</option>
-              <option value="AJUSTE">Ajuste de saldo</option>
-            </select>
-            <input required type="number" min="1" step="1" value={form.cantidad} onChange={(event) => setForm({ ...form, cantidad: event.target.value })} className="input" placeholder="Cantidad" />
-            <TripPicker viajes={viajes} value={form.viajeId} onChange={updateViaje} />
-            <select value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value })} className="input" disabled={hasViaje}>
-              <option value="">Sin chofer</option>
-              {choferes.map((chofer) => <option key={chofer.id} value={chofer.id}>{chofer.nombre}</option>)}
-            </select>
-            {!hasViaje && (
-              <select value={form.camionId} onChange={(event) => setForm({ ...form, camionId: event.target.value })} className="input">
-                <option value="">Sin unidad</option>
-                {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)}</option>)}
+            <div className="grid grid-cols-2 gap-2 md:col-span-2">
+              <button type="button" onClick={() => updateTipoMovimiento('DEVOLUCION_PARCIAL')} className={form.tipoMovimiento === 'DEVOLUCION_PARCIAL' ? 'btn-primary justify-center' : 'btn-secondary justify-center'}>Parcial</button>
+              <button type="button" onClick={() => updateTipoMovimiento('DEVOLUCION_TOTAL')} className={form.tipoMovimiento === 'DEVOLUCION_TOTAL' ? 'btn-primary justify-center' : 'btn-secondary justify-center'}>Total</button>
+            </div>
+            <Field label="Cantidad devuelta">
+              <input required type="number" min="1" max={pendiente || undefined} step="1" value={form.cantidad} disabled={form.tipoMovimiento === 'DEVOLUCION_TOTAL'} onChange={(event) => setForm({ ...form, cantidad: event.target.value })} className="input" />
+            </Field>
+            <Field label="Entregado por">
+              <select required value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value })} className="input">
+                <option value="">Seleccionar chofer</option>
+                {choferes.map((chofer) => <option key={chofer.id} value={chofer.id}>{chofer.nombre}</option>)}
               </select>
-            )}
-            <input value={form.ubicacion} onChange={(event) => setForm({ ...form, ubicacion: event.target.value })} className="input" placeholder="Ubicacion" />
-            <input value={form.origen} onChange={(event) => setForm({ ...form, origen: event.target.value })} className="input" placeholder="Origen" />
-            <input value={form.destino} onChange={(event) => setForm({ ...form, destino: event.target.value })} className="input" placeholder="Destino" />
-            <input value={form.observacion} onChange={(event) => setForm({ ...form, observacion: event.target.value })} className="input md:col-span-2" placeholder="Observacion" />
-            <button className="btn-primary md:col-span-2"><Check size={16} />Guardar movimiento</button>
+            </Field>
+            <div className="md:col-span-2">
+              <TripPicker viajes={viajes} value={form.viajeId} onChange={updateViaje} />
+            </div>
+            <Field label="Observacion">
+              <input value={form.observacion} onChange={(event) => setForm({ ...form, observacion: event.target.value })} className="input" placeholder="Opcional" />
+            </Field>
+            <button className="btn-primary md:col-span-2"><Check size={16} />Guardar devolucion</button>
           </form>
 
           <section className="rounded-md border border-neutral-200 bg-white">
@@ -1354,8 +1359,8 @@ function RetornableDrawer({ item, viajes, choferes, camiones, onClose, onDone })
                   <p className="font-medium">{formatStatus(movimiento.tipoMovimiento)} - {movimiento.cantidad}</p>
                   <p className="text-xs text-neutral-500">{formatDate(movimiento.createdAt)}</p>
                 </div>
-                <p className="mt-1 text-xs text-neutral-500">{[movimiento.chofer?.nombre, movimiento.camion?.placa, movimiento.viaje?.codigo].filter(Boolean).join(' - ') || 'Sin responsable vinculado'}</p>
-                <p className="mt-1 text-xs text-neutral-500">{movimiento.destino || movimiento.ubicacion || movimiento.origen || movimiento.observacion || 'Sin detalle'}</p>
+                <p className="mt-1 text-xs text-neutral-500">{formatReturnableMovementContext(movimiento)}</p>
+                {movimiento.observacion && <p className="mt-1 text-xs text-neutral-500">{movimiento.observacion}</p>}
               </div>
             ))}
           </section>
@@ -1364,7 +1369,15 @@ function RetornableDrawer({ item, viajes, choferes, camiones, onClose, onDone })
     </div>
   )
 }
-
+function formatReturnableMovementContext(movimiento) {
+  if (movimiento.tipoMovimiento === 'REGISTRO') {
+    return [movimiento.chofer?.nombre, movimiento.viaje?.codigo].filter(Boolean).join(' - ') || 'Registro inicial'
+  }
+  const partes = []
+  if (movimiento.chofer?.nombre) partes.push(`Entrego: ${movimiento.chofer.nombre}`)
+  if (movimiento.viaje?.codigo) partes.push(`Viaje: ${movimiento.viaje.codigo}`)
+  return partes.join(' - ') || 'Sin responsable vinculado'
+}
 function emptyRetornableForm() {
   return { tipo: 'CARTON', empresa: '', cantidad: '', viajeId: '', choferId: '', camionId: '', ubicacion: '', observacion: '' }
 }
