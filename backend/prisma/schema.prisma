@@ -100,6 +100,27 @@ enum EstadoMotor {
   ENCENDIDO
   APAGADO
 }
+enum TipoRetornable {
+  CARTON
+  PALETA
+  OTRO
+}
+
+enum EstadoRetornable {
+  PENDIENTE
+  PARCIAL
+  DEVUELTO
+  AJUSTADO
+}
+
+enum TipoMovimientoRetornable {
+  REGISTRO
+  UBICACION
+  TRANSFERENCIA
+  DEVOLUCION_PARCIAL
+  DEVOLUCION_TOTAL
+  AJUSTE
+}
 
 model Usuario {
   id             String   @id @default(uuid())
@@ -113,6 +134,7 @@ model Usuario {
   updatedAt      DateTime @updatedAt @map("updated_at")
 
   viajesCreados Viaje[] @relation("ViajeCreador")
+  retornableMovimientos RetornableMovimiento[]
 
   @@map("usuarios")
 }
@@ -133,6 +155,7 @@ model Chofer {
   reportes          ReporteChofer[]
   gastos            Gasto[]
   unidadesAsignadas ChoferUnidad[]
+  retornableMovimientos RetornableMovimiento[]
 
   @@index([estado, activo])
   @@map("choferes")
@@ -157,6 +180,7 @@ model Camion {
   mantenimientos    MantenimientoVehiculo[]
   posicionGps       TruckPosition?
   choferesAsignados ChoferUnidad[]
+  retornableMovimientos RetornableMovimiento[]
 
   @@index([estado, activo])
   @@map("camiones")
@@ -243,6 +267,8 @@ model Viaje {
   reportes  ReporteChofer[]
   gastos    Gasto[]
   unidades  ViajeUnidad[]
+  retornablesOrigen Retornable[] @relation("RetornableViajeOrigen")
+  retornableMovimientos RetornableMovimiento[]
 
   @@index([estadoLogistico, estadoFinanciero])
   @@index([camionId, estadoLogistico])
@@ -308,6 +334,56 @@ model ReporteChofer {
   @@index([viajeId, createdAt])
   @@index([choferId, createdAt])
   @@map("reportes_chofer")
+}
+
+
+model Retornable {
+  id                String             @id @default(uuid())
+  tipo              TipoRetornable
+  empresa           String
+  cantidadInicial   Int                @map("cantidad_inicial")
+  cantidadPendiente Int                @map("cantidad_pendiente")
+  estado            EstadoRetornable   @default(PENDIENTE)
+  viajeOrigenId     String?            @map("viaje_origen_id")
+  observacion       String?
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  viajeOrigen Viaje? @relation("RetornableViajeOrigen", fields: [viajeOrigenId], references: [id], onDelete: SetNull)
+  movimientos  RetornableMovimiento[]
+
+  @@index([estado, createdAt])
+  @@index([empresa])
+  @@index([viajeOrigenId])
+  @@map("retornables")
+}
+
+model RetornableMovimiento {
+  id              String                   @id @default(uuid())
+  retornableId    String                   @map("retornable_id")
+  tipoMovimiento  TipoMovimientoRetornable @map("tipo_movimiento")
+  cantidad        Int
+  viajeId         String?                  @map("viaje_id")
+  choferId        String?                  @map("chofer_id")
+  camionId        String?                  @map("camion_id")
+  ubicacion       String?
+  origen          String?
+  destino         String?
+  observacion     String?
+  registradoPorId String?                  @map("registrado_por_id")
+  createdAt       DateTime                 @default(now()) @map("created_at")
+
+  retornable    Retornable @relation(fields: [retornableId], references: [id], onDelete: Cascade)
+  viaje         Viaje?     @relation(fields: [viajeId], references: [id], onDelete: SetNull)
+  chofer        Chofer?    @relation(fields: [choferId], references: [id], onDelete: SetNull)
+  camion        Camion?    @relation(fields: [camionId], references: [id], onDelete: SetNull)
+  registradoPor Usuario?   @relation(fields: [registradoPorId], references: [id], onDelete: SetNull)
+
+  @@index([retornableId, createdAt])
+  @@index([viajeId, createdAt])
+  @@index([choferId, createdAt])
+  @@index([camionId, createdAt])
+  @@map("retornables_movimientos")
 }
 
 model Gasto {

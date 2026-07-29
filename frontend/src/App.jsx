@@ -100,6 +100,7 @@ const tabs = [
   { id: 'monitor', label: 'Resumen', icon: LayoutDashboard },
   { id: 'viajes', label: 'Viajes', icon: Route },
   { id: 'reportes', label: 'Reportes', icon: ClipboardList },
+  { id: 'retornables', label: 'Retornables', icon: ClipboardList },
   { id: 'despacho', label: 'Agendamiento', icon: Send },
   { id: 'recursos', label: 'Recursos', icon: Users },
   { id: 'taller', label: 'Taller', icon: Wrench },
@@ -143,6 +144,7 @@ export default function App() {
   const [viajes, setViajes] = useState([])
   const [choferes, setChoferes] = useState([])
   const [camiones, setCamiones] = useState([])
+  const [retornables, setRetornables] = useState([])
 
   const logout = useCallback(() => {
     setIsAuthenticated(false)
@@ -167,16 +169,18 @@ export default function App() {
     setError('')
 
     try {
-      const [viajesRes, choferesRes, camionesRes] = await Promise.all([
+      const [viajesRes, choferesRes, camionesRes, retornablesRes] = await Promise.all([
         api.get('/viajes'),
         api.get('/choferes', { params: { estado: 'todos' } }),
         api.get('/camiones', { params: { estado: 'todos' } }),
+        api.get('/retornables', { params: { estado: 'todos', pageSize: 500 } }),
       ])
 
       const nextViajes = viajesRes.data?.data || []
       setViajes(nextViajes)
       setChoferes(choferesRes.data?.data || [])
       setCamiones(camionesRes.data?.data || [])
+      setRetornables(retornablesRes.data?.data?.items || retornablesRes.data?.data || [])
 
       if (refreshSelected) {
         setSelectedViaje((current) => {
@@ -310,7 +314,7 @@ export default function App() {
     }
   }, [fetchData, isAuthenticated])
 
-  const data = useMemo(() => buildOperationalData({ viajes, choferes, camiones, query }), [viajes, choferes, camiones, query])
+  const data = useMemo(() => buildOperationalData({ viajes, choferes, camiones, retornables, query }), [viajes, choferes, camiones, retornables, query])
   const isAdmin = usuario?.rol === 'ADMIN'
 
   useEffect(() => {
@@ -394,7 +398,7 @@ export default function App() {
               </button>
               <div className="min-w-0 flex-1">
                 <h1 className="truncate text-base font-semibold">{pageTitle(activeTab)}</h1>
-                <p className="hidden text-xs text-neutral-500 sm:block">{data.activos.length} viajes en curso Â· {data.pendientesLiquidacion.length} por liquidar</p>
+                <p className="hidden text-xs text-neutral-500 sm:block">{data.activos.length} viajes en curso Ãƒâ€šÃ‚Â· {data.pendientesLiquidacion.length} por liquidar</p>
               </div>
               <div className="relative hidden w-full max-w-sm md:block">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={16} />
@@ -438,6 +442,9 @@ export default function App() {
             )}
             {activeTab === 'reportes' && (
               <ReportesTableView reportes={data.reportes} onSelectViaje={setSelectedViaje} />
+            )}
+            {activeTab === 'retornables' && (
+              <RetornablesView retornables={data.retornables} viajes={viajes} choferes={choferes} camiones={camiones} onDone={() => fetchData({ refreshSelected: true })} />
             )}
             {activeTab === 'despacho' && (
               <DespachoView choferes={data.choferesOperativos} camiones={data.camionesOperativos.filter((camion) => camion.estado !== 'EN_TALLER')} viajesActivos={data.activos} onDone={() => fetchData()} />
@@ -698,7 +705,7 @@ function ReportesTableView({ reportes, onSelectViaje }) {
                           <div className="grid gap-4 text-sm md:grid-cols-[1.4fr_0.8fr_1fr]">
                             <InfoBlock label="Mensaje recibido" value={mensaje} />
                             <InfoBlock label="Ubicacion" value={reporte.ubicacion || 'Sin ubicacion reportada'} />
-                            <InfoBlock label="Viaje" value={viaje ? `${viaje.codigo} Â· ${formatRoute(viaje)}` : 'Sin viaje asociado'} />
+                            <InfoBlock label="Viaje" value={viaje ? `${viaje.codigo} Ãƒâ€šÃ‚Â· ${formatRoute(viaje)}` : 'Sin viaje asociado'} />
                           </div>
                         </td>
                       </tr>
@@ -750,7 +757,7 @@ function ReportesView({ reportes, onSelectViaje }) {
                     </div>
                     <h3 className="truncate text-sm font-semibold">{formatReportTitle(reporte)}</h3>
                     <p className="mt-1 text-xs text-neutral-500">
-                      {chofer}{viaje?.codigo ? ` Â· ${viaje.codigo}` : ''}
+                      {chofer}{viaje?.codigo ? ` Ãƒâ€šÃ‚Â· ${viaje.codigo}` : ''}
                     </p>
                     {reporte.ubicacion && (
                       <p className="mt-1 truncate text-xs text-neutral-400">{reporte.ubicacion}</p>
@@ -782,7 +789,7 @@ function ReportesView({ reportes, onSelectViaje }) {
                   <div className="mt-4 grid gap-3 rounded-md border border-neutral-200 bg-stone-50 p-3 text-sm lg:grid-cols-3">
                     <InfoBlock label="Mensaje recibido" value={reporte.mensajeOriginal || 'Sin mensaje'} />
                     <InfoBlock label="Ubicacion" value={reporte.ubicacion || 'Sin ubicacion reportada'} />
-                    <InfoBlock label="Viaje" value={viaje ? `${viaje.codigo} Â· ${formatRoute(viaje)}` : 'Sin viaje asociado'} />
+                    <InfoBlock label="Viaje" value={viaje ? `${viaje.codigo} Ãƒâ€šÃ‚Â· ${formatRoute(viaje)}` : 'Sin viaje asociado'} />
                   </div>
                 )}
               </article>
@@ -928,7 +935,7 @@ function ArchivoLogistico({ onSelect }) {
             <StatusDot estado={viaje.estadoLogistico} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{viaje.codigo}</p>
-              <p className="truncate text-xs text-neutral-500">{viaje.chofer?.nombre || 'Sin chofer'} Â· {formatRoute(viaje)}</p>
+              <p className="truncate text-xs text-neutral-500">{viaje.chofer?.nombre || 'Sin chofer'} Ãƒâ€šÃ‚Â· {formatRoute(viaje)}</p>
             </div>
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium">{formatDate(viaje.fechaCierre)}</p>
@@ -960,7 +967,7 @@ function TripList({ title, viajes, onSelect }) {
             <StatusDot estado={viaje.estadoLogistico} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{viaje.codigo}</p>
-              <p className="truncate text-xs text-neutral-500">{viaje.chofer?.nombre || 'Sin chofer'} Â· {formatRoute(viaje)}</p>
+              <p className="truncate text-xs text-neutral-500">{viaje.chofer?.nombre || 'Sin chofer'} Ãƒâ€šÃ‚Â· {formatRoute(viaje)}</p>
             </div>
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium">{money(balance(viaje))}</p>
@@ -1021,6 +1028,287 @@ function TripCard({ viaje, onSelect }) {
   )
 }
 
+function RetornablesView({ retornables, viajes, choferes, camiones, onDone }) {
+  const [page, setPage] = useState(1)
+  const [open, setOpen] = useState(false)
+  const [selected, setSelected] = useState(null)
+  const [form, setForm] = useState(emptyRetornableForm())
+  const pageSize = 12
+  const abiertos = retornables.filter((item) => ['PENDIENTE', 'PARCIAL'].includes(item.estado))
+  const pageItems = paginate(retornables, page, pageSize)
+  useClampPage(page, retornables.length, pageSize, setPage)
+
+  const submit = async (event) => {
+    event.preventDefault()
+    try {
+      await api.post('/retornables', normalizarRetornablePayload(form))
+      setForm(emptyRetornableForm())
+      setOpen(false)
+      await notifySuccess('Retornable registrado')
+      onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo registrar el retornable.')
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <section className="grid gap-3 md:grid-cols-3">
+        <Fact icon={ClipboardList} label="Pendientes" value={abiertos.reduce((total, item) => total + Number(item.cantidadPendiente || 0), 0)} />
+        <Fact icon={Check} label="Registros abiertos" value={abiertos.length} />
+        <Fact icon={Truck} label="Empresas" value={new Set(abiertos.map((item) => item.empresa)).size} />
+      </section>
+
+      <section className="rounded-md border border-neutral-200 bg-white">
+        <div className="flex flex-col gap-3 border-b border-neutral-100 px-4 py-4 md:flex-row md:items-center md:justify-between">
+          <SectionTitle title="Retornables" subtitle="Cartones, paletas y saldos por devolver" />
+          <button onClick={() => setOpen((value) => !value)} className="btn-primary">
+            <Plus size={16} />
+            Registrar
+          </button>
+        </div>
+
+        {open && (
+          <RetornableForm form={form} setForm={setForm} viajes={viajes} choferes={choferes} camiones={camiones} onSubmit={submit} />
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px] text-left text-sm">
+            <thead className="bg-neutral-50 text-xs text-neutral-500">
+              <tr>
+                <th className="px-4 py-3">Empresa</th>
+                <th className="px-4 py-3">Tipo</th>
+                <th className="px-4 py-3">Pendiente</th>
+                <th className="px-4 py-3">Estado</th>
+                <th className="px-4 py-3">Origen</th>
+                <th className="px-4 py-3">Ultima ubicacion</th>
+                <th className="px-4 py-3">Antiguedad</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageItems.map((item) => {
+                const ultimo = item.movimientos?.[0]
+                return (
+                  <tr key={item.id} onClick={() => setSelected(item)} className="cursor-pointer border-t border-neutral-100 hover:bg-neutral-50">
+                    <td className="px-4 py-3 font-medium">{item.empresa}</td>
+                    <td className="px-4 py-3">{labelRetornableTipo(item.tipo)}</td>
+                    <td className="px-4 py-3 font-medium">{item.cantidadPendiente} / {item.cantidadInicial}</td>
+                    <td className="px-4 py-3"><span className={`rounded-md px-2 py-1 text-xs font-medium ${retornableStatusClass(item.estado)}`}>{formatStatus(item.estado)}</span></td>
+                    <td className="px-4 py-3 text-neutral-500">{item.viajeOrigen?.codigo || 'Sin viaje'}</td>
+                    <td className="px-4 py-3 text-neutral-500">{ultimo?.destino || ultimo?.ubicacion || ultimo?.camion?.placa || 'Sin ubicacion'}</td>
+                    <td className="px-4 py-3 text-neutral-500">{daysSince(item.createdAt)} dias</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {retornables.length === 0 && <Empty text="Sin retornables registrados." />}
+        </div>
+        <div className="px-4 py-3">
+          <Pagination page={page} total={retornables.length} pageSize={pageSize} onChange={setPage} />
+        </div>
+      </section>
+
+      {selected && (
+        <RetornableDrawer item={selected} viajes={viajes} choferes={choferes} camiones={camiones} onClose={() => setSelected(null)} onDone={onDone} />
+      )}
+    </div>
+  )
+}
+
+function RetornablesTripSection({ viaje, onDone }) {
+  const [items, setItems] = useState([])
+  const [open, setOpen] = useState(false)
+  const [selected, setSelected] = useState(null)
+  const [form, setForm] = useState(() => ({ ...emptyRetornableForm(), viajeId: viaje.id, choferId: viaje.choferId || '', camionId: tripUnitIds(viaje)[0] || '', ubicacion: 'En unidad' }))
+  const camionesViaje = tripUnits(viaje)
+
+  const cargar = useCallback(async () => {
+    try {
+      const response = await api.get(`/retornables/viajes/${viaje.id}`)
+      setItems(response.data?.data || [])
+    } catch {
+      setItems([])
+    }
+  }, [viaje.id])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  const submit = async (event) => {
+    event.preventDefault()
+    try {
+      await api.post('/retornables', normalizarRetornablePayload(form))
+      setForm({ ...emptyRetornableForm(), viajeId: viaje.id, choferId: viaje.choferId || '', camionId: tripUnitIds(viaje)[0] || '', ubicacion: 'En unidad' })
+      setOpen(false)
+      await notifySuccess('Retornable registrado')
+      await cargar()
+      onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo registrar el retornable.')
+    }
+  }
+
+  return (
+    <section className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <SectionTitle title="Retornables" subtitle={`${items.length} registros vinculados al viaje`} />
+        <button onClick={() => setOpen((value) => !value)} className="btn-secondary">
+          <Plus size={16} />
+          Registrar
+        </button>
+      </div>
+      {open && (
+        <RetornableForm form={form} setForm={setForm} viajes={[viaje]} choferes={[viaje.chofer].filter(Boolean)} camiones={camionesViaje} onSubmit={submit} compact />
+      )}
+      <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">
+        {items.map((item) => {
+          const ultimo = item.movimientos?.[0]
+          return (
+            <button key={item.id} type="button" onClick={() => setSelected(item)} className="grid w-full gap-2 border-b border-neutral-100 px-4 py-3 text-left text-sm last:border-b-0 md:grid-cols-[1fr_110px_120px_1fr]">
+              <div>
+                <p className="font-medium">{item.empresa}</p>
+                <p className="text-xs text-neutral-500">{labelRetornableTipo(item.tipo)}</p>
+              </div>
+              <p className="font-medium">{item.cantidadPendiente} / {item.cantidadInicial}</p>
+              <span className={`w-fit rounded-md px-2 py-1 text-xs font-medium ${retornableStatusClass(item.estado)}`}>{formatStatus(item.estado)}</span>
+              <p className="truncate text-xs text-neutral-500">{ultimo?.destino || ultimo?.ubicacion || ultimo?.observacion || 'Sin ubicacion'}</p>
+            </button>
+          )
+        })}
+        {items.length === 0 && <Empty text="Sin retornables vinculados a este viaje." />}
+      </div>
+      {selected && <RetornableDrawer item={selected} viajes={[viaje]} choferes={[viaje.chofer].filter(Boolean)} camiones={camionesViaje} onClose={() => setSelected(null)} onDone={async () => { await cargar(); onDone() }} />}
+    </section>
+  )
+}
+
+function RetornableForm({ form, setForm, viajes, choferes, camiones, onSubmit, compact = false }) {
+  return (
+    <form onSubmit={onSubmit} className={`grid gap-3 border-b border-neutral-100 bg-neutral-50 p-4 ${compact ? 'md:grid-cols-3' : 'md:grid-cols-4'}`}>
+      <select value={form.tipo} onChange={(event) => setForm({ ...form, tipo: event.target.value })} className="input">
+        <option value="CARTON">Cartones</option>
+        <option value="PALETA">Paletas</option>
+        <option value="OTRO">Otro</option>
+      </select>
+      <input required value={form.empresa} onChange={(event) => setForm({ ...form, empresa: event.target.value })} className="input" placeholder="Empresa propietaria" />
+      <input required type="number" min="1" step="1" value={form.cantidad} onChange={(event) => setForm({ ...form, cantidad: event.target.value })} className="input" placeholder="Cantidad" />
+      <select value={form.viajeId} onChange={(event) => setForm({ ...form, viajeId: event.target.value })} className="input">
+        <option value="">Sin viaje</option>
+        {viajes.map((viaje) => <option key={viaje.id} value={viaje.id}>{viaje.codigo}</option>)}
+      </select>
+      <select value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value })} className="input">
+        <option value="">Sin chofer</option>
+        {choferes.map((chofer) => <option key={chofer.id} value={chofer.id}>{chofer.nombre}</option>)}
+      </select>
+      <select value={form.camionId} onChange={(event) => setForm({ ...form, camionId: event.target.value })} className="input">
+        <option value="">Sin unidad</option>
+        {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)}</option>)}
+      </select>
+      <input value={form.ubicacion} onChange={(event) => setForm({ ...form, ubicacion: event.target.value })} className="input" placeholder="Ubicacion actual" />
+      <input value={form.observacion} onChange={(event) => setForm({ ...form, observacion: event.target.value })} className="input" placeholder="Observacion" />
+      <button className="btn-primary md:col-span-full">
+        <Check size={16} />
+        Guardar retornable
+      </button>
+    </form>
+  )
+}
+
+function RetornableDrawer({ item, viajes, choferes, camiones, onClose, onDone }) {
+  const [form, setForm] = useState({ tipoMovimiento: 'DEVOLUCION_PARCIAL', cantidad: item.cantidadPendiente || '', viajeId: '', choferId: '', camionId: '', ubicacion: '', origen: '', destino: '', observacion: '' })
+
+  const submit = async (event) => {
+    event.preventDefault()
+    try {
+      await api.post(`/retornables/${item.id}/movimientos`, {
+        ...form,
+        cantidad: Number(form.cantidad),
+      })
+      await notifySuccess('Movimiento registrado')
+      onClose()
+      onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo registrar el movimiento.')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[60] flex justify-end bg-neutral-950/30">
+      <aside className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-xl">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white px-5 py-4">
+          <div>
+            <p className="text-xs text-neutral-500">{labelRetornableTipo(item.tipo)} · {formatStatus(item.estado)}</p>
+            <h3 className="text-lg font-semibold">{item.empresa}</h3>
+          </div>
+          <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-md hover:bg-neutral-100"><X size={16} /></button>
+        </div>
+        <div className="space-y-5 p-5">
+          <section className="grid gap-3 sm:grid-cols-3">
+            <Fact icon={ClipboardList} label="Inicial" value={item.cantidadInicial} />
+            <Fact icon={AlertTriangle} label="Pendiente" value={item.cantidadPendiente} />
+            <Fact icon={Route} label="Origen" value={item.viajeOrigen?.codigo || 'Sin viaje'} />
+          </section>
+
+          <form onSubmit={submit} className="grid gap-3 rounded-md border border-neutral-200 bg-neutral-50 p-4 md:grid-cols-2">
+            <select value={form.tipoMovimiento} onChange={(event) => setForm({ ...form, tipoMovimiento: event.target.value })} className="input">
+              <option value="DEVOLUCION_PARCIAL">Devolucion parcial</option>
+              <option value="DEVOLUCION_TOTAL">Devolucion total</option>
+              <option value="TRANSFERENCIA">Transferencia</option>
+              <option value="UBICACION">Cambio de ubicacion</option>
+              <option value="AJUSTE">Ajuste de saldo</option>
+            </select>
+            <input required type="number" min="1" step="1" value={form.cantidad} onChange={(event) => setForm({ ...form, cantidad: event.target.value })} className="input" placeholder="Cantidad" />
+            <select value={form.viajeId} onChange={(event) => setForm({ ...form, viajeId: event.target.value })} className="input">
+              <option value="">Sin viaje</option>
+              {viajes.map((viaje) => <option key={viaje.id} value={viaje.id}>{viaje.codigo}</option>)}
+            </select>
+            <select value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value })} className="input">
+              <option value="">Sin chofer</option>
+              {choferes.map((chofer) => <option key={chofer.id} value={chofer.id}>{chofer.nombre}</option>)}
+            </select>
+            <select value={form.camionId} onChange={(event) => setForm({ ...form, camionId: event.target.value })} className="input">
+              <option value="">Sin unidad</option>
+              {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)}</option>)}
+            </select>
+            <input value={form.ubicacion} onChange={(event) => setForm({ ...form, ubicacion: event.target.value })} className="input" placeholder="Ubicacion" />
+            <input value={form.origen} onChange={(event) => setForm({ ...form, origen: event.target.value })} className="input" placeholder="Origen" />
+            <input value={form.destino} onChange={(event) => setForm({ ...form, destino: event.target.value })} className="input" placeholder="Destino" />
+            <input value={form.observacion} onChange={(event) => setForm({ ...form, observacion: event.target.value })} className="input md:col-span-2" placeholder="Observacion" />
+            <button className="btn-primary md:col-span-2"><Check size={16} />Guardar movimiento</button>
+          </form>
+
+          <section className="rounded-md border border-neutral-200 bg-white">
+            <div className="border-b border-neutral-100 px-4 py-3"><SectionTitle title="Historial" subtitle={`${item.movimientos?.length || 0} movimientos`} /></div>
+            {(item.movimientos || []).map((movimiento) => (
+              <div key={movimiento.id} className="border-b border-neutral-100 px-4 py-3 text-sm last:border-b-0">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-medium">{formatStatus(movimiento.tipoMovimiento)} · {movimiento.cantidad}</p>
+                  <p className="text-xs text-neutral-500">{formatDate(movimiento.createdAt)}</p>
+                </div>
+                <p className="mt-1 text-xs text-neutral-500">{[movimiento.chofer?.nombre, movimiento.camion?.placa, movimiento.viaje?.codigo].filter(Boolean).join(' · ') || 'Sin responsable vinculado'}</p>
+                <p className="mt-1 text-xs text-neutral-500">{movimiento.destino || movimiento.ubicacion || movimiento.origen || movimiento.observacion || 'Sin detalle'}</p>
+              </div>
+            ))}
+          </section>
+        </div>
+      </aside>
+    </div>
+  )
+}
+
+function emptyRetornableForm() {
+  return { tipo: 'CARTON', empresa: '', cantidad: '', viajeId: '', choferId: '', camionId: '', ubicacion: '', observacion: '' }
+}
+
+function normalizarRetornablePayload(form) {
+  return {
+    ...form,
+    cantidad: Number(form.cantidad),
+    viajeId: form.viajeId || null,
+    choferId: form.choferId || null,
+    camionId: form.camionId || null,
+  }
+}
 function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
   const [form, setForm] = useState({ choferId: '', camionIds: [], viaticosDepositados: '', odometroInicial: '' })
   const [paradas, setParadas] = useState([
@@ -1127,7 +1415,7 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
           <Field label="Chofer">
             <select required value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value, camionIds: [] })} className="input">
               <option value="">Seleccionar</option>
-              {choferes.map((chofer) => <option key={chofer.id} value={chofer.id}>{chofer.nombre} Â· {formatStatus(chofer.estadoCalculado)}</option>)}
+              {choferes.map((chofer) => <option key={chofer.id} value={chofer.id}>{chofer.nombre} Ãƒâ€šÃ‚Â· {formatStatus(chofer.estadoCalculado)}</option>)}
             </select>
           </Field>
           <Field label="Unidades del viaje">
@@ -1371,7 +1659,7 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
               <input required value={form.cedula} onChange={(event) => setForm({ ...form, cedula: event.target.value })} className="input" placeholder="Cedula" />
               <input required value={form.telefono} onChange={(event) => setForm({ ...form, telefono: event.target.value })} className="input" placeholder="Telefono" />
               <select multiple value={form.unidadIds} onChange={(event) => setForm({ ...form, unidadIds: Array.from(event.target.selectedOptions).map((option) => option.value) })} className="input md:col-span-3 min-h-28">
-                {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)} Â· {formatStatus(camion.estadoCalculado)}</option>)}
+                {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)} Ãƒâ€šÃ‚Â· {formatStatus(camion.estadoCalculado)}</option>)}
               </select>
             </>
           ) : (
@@ -2071,7 +2359,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
       <aside className="relative h-screen min-h-[100svh] w-full max-w-3xl overflow-y-auto bg-white shadow-xl">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-4 sm:px-6">
           <div className="min-w-0">
-            <p className="text-xs font-medium text-neutral-500">{formatStatus(viaje.estadoLogistico)} Â· {formatStatus(viaje.estadoFinanciero)}</p>
+            <p className="text-xs font-medium text-neutral-500">{formatStatus(viaje.estadoLogistico)} Ãƒâ€šÃ‚Â· {formatStatus(viaje.estadoFinanciero)}</p>
             <h2 className="truncate text-lg font-semibold">{viaje.codigo}</h2>
           </div>
           <button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-md hover:bg-neutral-100">
@@ -2089,6 +2377,8 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
           {viaje.numeroGuia && <Banner tone="neutral" icon={FileCheck} text={`Guia entregada: ${viaje.numeroGuia}`} />}
 
           <GpsMap truckIds={gpsTruckIds} initialPositions={gpsInitialPositions} />
+
+          <RetornablesTripSection viaje={viaje} onDone={onDone} />
 
           <section className="space-y-3">
             <SectionTitle title="Ruta" subtitle={formatRoute(viaje)} />
@@ -2160,7 +2450,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
 
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <SectionTitle title="Gastos" subtitle={`${viaje.gastos?.length || 0} registros Â· ${money(totalGastado)}`} />
+                <SectionTitle title="Gastos" subtitle={`${viaje.gastos?.length || 0} registros Ãƒâ€šÃ‚Â· ${money(totalGastado)}`} />
                 <button onClick={() => setShowGastoForm((value) => !value)} className="btn-secondary">
                   <Plus size={16} />
                   Registrar
@@ -2187,7 +2477,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
                 {paginate(viaje.gastos || [], expensePage, detailPageSize).map((gasto) => (
                   <div key={gasto.id} className="flex items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3 last:border-b-0">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{gasto.tipo} Â· {gasto.origen || 'ADMIN'}</p>
+                      <p className="truncate text-sm font-medium">{gasto.tipo} Ãƒâ€šÃ‚Â· {gasto.origen || 'ADMIN'}</p>
                       <p className="truncate text-xs text-neutral-500">{gasto.descripcion || 'Gasto'}</p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -2358,7 +2648,7 @@ function ReportRow({ reporte, compact = false }) {
   const titulo = formatReportTitle(reporte)
   const chofer = reporte.chofer?.nombre || reporte.viaje?.chofer?.nombre || ''
   const viaje = reporte.viaje?.codigo || ''
-  const contexto = [chofer, viaje].filter(Boolean).join(' Â· ')
+  const contexto = [chofer, viaje].filter(Boolean).join(' Ãƒâ€šÃ‚Â· ')
 
   return (
     <div className="border-b border-neutral-100 px-4 py-3 last:border-b-0">
@@ -2450,7 +2740,7 @@ function Empty({ text }) {
 function ParadaPill({ parada }) {
   return (
     <div className={`rounded-md border px-2 py-1 text-xs ${paradaStyles[parada.estado] || paradaStyles.PENDIENTE}`}>
-      <span className="font-medium">{parada.tipo}</span> Â· {parada.ciudad}
+      <span className="font-medium">{parada.tipo}</span> Ãƒâ€šÃ‚Â· {parada.ciudad}
     </div>
   )
 }
@@ -2464,6 +2754,30 @@ function LockIcon() {
   return <ClipboardList size={16} />
 }
 
+function labelRetornableTipo(value) {
+  const labels = { CARTON: 'Cartones', PALETA: 'Paletas', OTRO: 'Otro' }
+  return labels[value] || formatStatus(value)
+}
+
+function retornableStatusClass(value) {
+  if (value === 'DEVUELTO') return 'bg-emerald-50 text-emerald-700'
+  if (value === 'PARCIAL') return 'bg-amber-50 text-amber-700'
+  if (value === 'AJUSTADO') return 'bg-neutral-100 text-neutral-700'
+  return 'bg-blue-50 text-blue-700'
+}
+
+function daysSince(value) {
+  if (!value) return 0
+  const diff = Date.now() - new Date(value).getTime()
+  return Math.max(0, Math.floor(diff / 86400000))
+}
+
+function tripUnits(viaje) {
+  const unidades = (viaje.unidades || []).map((unidad) => unidad.camion).filter(Boolean)
+  const fallback = viaje.camion ? [viaje.camion] : []
+  const byId = new Map([...fallback, ...unidades].filter(Boolean).map((camion) => [camion.id, camion]))
+  return [...byId.values()]
+}
 function buildOperationalStatusMaps(viajesActivos) {
   const choferes = new Map()
   const camiones = new Map()
@@ -2509,7 +2823,7 @@ function getTripOperationalStatus(viaje) {
   return { estado: 'EN RUTA', timestamp }
 }
 
-function buildOperationalData({ viajes, choferes, camiones, query }) {
+function buildOperationalData({ viajes, choferes, camiones, retornables = [], query }) {
   const q = normalize(query)
   const filteredViajes = viajes.filter((viaje) => {
     if (!q) return true
@@ -2572,6 +2886,15 @@ function buildOperationalData({ viajes, choferes, camiones, query }) {
   const choferesOperativos = choferesRecursos.filter((chofer) => chofer.activo)
   const camionesOperativos = camionesRecursos.filter((camion) => camion.activo)
 
+  const retornablesFiltrados = retornables.filter((item) => !q || [
+    item.empresa,
+    item.tipo,
+    item.estado,
+    item.observacion,
+    item.viajeOrigen?.codigo,
+    ...(item.movimientos || []).flatMap((movimiento) => [movimiento.ubicacion, movimiento.origen, movimiento.destino, movimiento.observacion, movimiento.chofer?.nombre, movimiento.camion?.placa]),
+  ].some((value) => normalize(value).includes(q)))
+
   return {
     activos,
     pendientesLiquidacion,
@@ -2585,6 +2908,7 @@ function buildOperationalData({ viajes, choferes, camiones, query }) {
     choferesDisponibles: choferes.filter((chofer) => chofer.estado === 'DISPONIBLE' && !choferesOcupados.has(chofer.id)),
     camionesDisponibles: camiones.filter((camion) => camion.estado === 'DISPONIBLE' && !camionesOcupados.has(camion.id)),
     camionesTaller: camiones.filter((camion) => camion.estado === 'EN_TALLER'),
+    retornables: retornablesFiltrados,
     reportes: filteredViajes
       .flatMap((viaje) => (viaje.reportes || []).map((reporte) => ({ ...reporte, viaje })))
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
@@ -2647,8 +2971,8 @@ function formatReportTitle(reporte) {
 function formatLastReportLocation(reporte) {
   const ubicacion = reporte.ubicacion || ''
   const texto = formatReportTitle(reporte)
-  if (ubicacion) return `${labelReporte(reporte.tipoReporte)} Â· ${ubicacion}`
-  return `${labelReporte(reporte.tipoReporte)} Â· ${texto || 'Sin detalle'}`
+  if (ubicacion) return `${labelReporte(reporte.tipoReporte)} Ãƒâ€šÃ‚Â· ${ubicacion}`
+  return `${labelReporte(reporte.tipoReporte)} Ãƒâ€šÃ‚Â· ${texto || 'Sin detalle'}`
 }
 
 function coordsFromText(value = '') {
@@ -2811,7 +3135,7 @@ function Pagination({ page, total, pageSize, onChange }) {
 
   return (
     <div className="flex flex-col gap-3 text-xs text-neutral-500 sm:flex-row sm:items-center sm:justify-between">
-      <span>Mostrando {from}-{to} de {total} registros Â· Pagina {safePage} de {pages}</span>
+      <span>Mostrando {from}-{to} de {total} registros Ãƒâ€šÃ‚Â· Pagina {safePage} de {pages}</span>
       <div className="flex flex-wrap gap-2">
         <button disabled={safePage <= 1} onClick={() => onChange(1)} className="btn-secondary h-8 px-3">Primera</button>
         <button disabled={safePage <= 1} onClick={() => onChange(safePage - 1)} className="btn-secondary h-8 px-3">Anterior</button>

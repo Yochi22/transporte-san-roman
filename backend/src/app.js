@@ -19,6 +19,7 @@ const choferesRoutes = require('./modules/choferes/choferes.routes')
 const camionesRoutes = require('./modules/camiones/camiones.routes')
 const viajesRoutes = require('./modules/viajes/viajes.routes')
 const gastosRoutes = require('./modules/gastos/gastos.routes')
+const retornablesRoutes = require('./modules/retornables/retornables.routes')
 const tallerRoutes = require('./modules/taller/taller.routes')
 const gpsRoutes = require('./modules/gps/gps.routes')
 const { obtenerEstadoWhatsApp, reiniciarWhatsApp } = require('./services/messaging/whatsapp')
@@ -66,7 +67,7 @@ app.use('/api', (req, res, next) => {
 app.use('/api/gps', gpsRoutes)
 
 app.get('/health', (req, res) => {
-  res.json({ ok: true, servicio: 'Transporte San RomÃ¡n API', version: '1.0.0' })
+  res.json({ ok: true, servicio: 'Transporte San RomÃƒÂ¡n API', version: '1.0.0' })
 })
 
 app.get('/api/whatsapp/status', autenticar, soloAdmin, (req, res) => {
@@ -170,6 +171,7 @@ app.use('/api/choferes', choferesRoutes)
 app.use('/api/camiones', camionesRoutes)
 app.use('/api/viajes', viajesRoutes)
 app.use('/api/gastos', gastosRoutes)
+app.use('/api/retornables', retornablesRoutes)
 app.use('/api/taller', tallerRoutes)
 
 const frontendDist = path.resolve(__dirname, '../../frontend/dist')
