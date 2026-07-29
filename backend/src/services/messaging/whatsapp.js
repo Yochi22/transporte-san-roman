@@ -18,10 +18,12 @@ let ultimoQrDataUrl = null
 let whatsappConectado = false
 let reconnectTimer = null
 let reinicioManual = false
+let cierresSinQr = 0
 const logger = pino({ level: 'silent' })
 const MAX_AUDIO_BYTES = 20 * 1024 * 1024
 const AUTH_CLEANUP_RETRIES = 8
 const AUTH_CLEANUP_DELAY_MS = 350
+const MAX_CIERRES_SIN_QR = 3
 
 const obtenerAuthRootPath = () => (
   process.env.WHATSAPP_AUTH_PATH
@@ -117,6 +119,7 @@ const iniciarWhatsApp = async (io) => {
         color: { dark: '#171717', light: '#ffffff' }
       })
       whatsappConectado = false
+      cierresSinQr = 0
       console.log('QR web disponible en /whatsapp-qr')
       if (socketIO) socketIO.emit('whatsapp:qr-disponible')
     }
@@ -131,6 +134,18 @@ const iniciarWhatsApp = async (io) => {
 
       console.log('WhatsApp desconectado. Reconectando:', shouldReconnect)
       if (shouldReconnect) {
+        cierresSinQr += 1
+        if (cierresSinQr >= MAX_CIERRES_SIN_QR && !ultimoQrDataUrl) {
+          console.log('WhatsApp no genero QR tras varios intentos. Forzando vinculacion nueva.')
+          try {
+            await limpiarSesionWhatsApp()
+          } catch (err) {
+            console.error('No se pudo limpiar la sesion de WhatsApp:', err.message)
+          }
+          cierresSinQr = 0
+          programarInicioWhatsApp(1000)
+          return
+        }
         programarInicioWhatsApp(3000)
       } else {
         console.log('Sesion cerrada. Limpiando credenciales para generar un QR nuevo.')
@@ -145,6 +160,7 @@ const iniciarWhatsApp = async (io) => {
 
     if (connection === 'open') {
       whatsappConectado = true
+      cierresSinQr = 0
       ultimoQr = null
       ultimoQrDataUrl = null
       console.log('WhatsApp conectado exitosamente')
@@ -252,6 +268,7 @@ const reiniciarWhatsApp = async () => {
     whatsappConectado = false
     ultimoQr = null
     ultimoQrDataUrl = null
+    cierresSinQr = 0
 
     const socketActual = sock
     sock = null

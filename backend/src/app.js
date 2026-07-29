@@ -100,7 +100,7 @@ app.get('/whatsapp-qr', ...(demoPublicQr ? [] : [autenticar, soloAdmin]), (req, 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>QR WhatsApp | Transporte San Roman</title>
-  ${!estado.conectado ? '<meta http-equiv="refresh" content="5" />' : ''}
+  ${!estado.conectado ? '<meta http-equiv="refresh" content="12" />' : ''}
   <style>
     body{margin:0;min-height:100vh;display:grid;place-items:center;background:#fafaf9;color:#171717;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
     main{width:min(92vw,520px);border:1px solid #e5e5e5;border-radius:10px;background:#fff;padding:28px;text-align:center;box-shadow:0 22px 70px rgb(0 0 0 / 10%)}
