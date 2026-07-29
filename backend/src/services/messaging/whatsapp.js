@@ -20,6 +20,8 @@ let reconnectTimer = null
 let reinicioManual = false
 const logger = pino({ level: 'silent' })
 const MAX_AUDIO_BYTES = 20 * 1024 * 1024
+const AUTH_CLEANUP_RETRIES = 8
+const AUTH_CLEANUP_DELAY_MS = 350
 
 const obtenerAuthPath = () => (
   process.env.WHATSAPP_AUTH_PATH
@@ -45,6 +47,8 @@ const enviarMensaje = async (destino, texto) => {
   }
 }
 
+const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
 const programarInicioWhatsApp = (delayMs = 3000) => {
   if (reconnectTimer) clearTimeout(reconnectTimer)
   reconnectTimer = setTimeout(() => {
@@ -56,10 +60,22 @@ const programarInicioWhatsApp = (delayMs = 3000) => {
 }
 
 const limpiarSesionWhatsApp = async () => {
-  await fs.rm(obtenerAuthPath(), { recursive: true, force: true })
-  ultimoQr = null
-  ultimoQrDataUrl = null
-  whatsappConectado = false
+  const authPath = obtenerAuthPath()
+  let lastError = null
+  for (let intento = 1; intento <= AUTH_CLEANUP_RETRIES; intento += 1) {
+    try {
+      await fs.rm(authPath, { recursive: true, force: true })
+      ultimoQr = null
+      ultimoQrDataUrl = null
+      whatsappConectado = false
+      return
+    } catch (err) {
+      lastError = err
+      if (!['EBUSY', 'ENOTEMPTY', 'EPERM'].includes(err.code) || intento === AUTH_CLEANUP_RETRIES) break
+      await esperar(AUTH_CLEANUP_DELAY_MS * intento)
+    }
+  }
+  throw lastError
 }
 
 const iniciarWhatsApp = async (io) => {
@@ -231,6 +247,7 @@ const reiniciarWhatsApp = async () => {
         if (typeof socketActual.end === 'function') {
           socketActual.end(new Error('Reinicio manual de WhatsApp'))
         }
+        await esperar(700)
       } catch (err) {
         console.warn('No se pudo cerrar el socket de WhatsApp:', err.message)
       }
