@@ -397,6 +397,8 @@ model Gasto {
   moneda         String      @default("VES")
   montoOriginal  Decimal     @default(0) @map("monto_original")
   tasaBcv        Decimal?    @map("tasa_bcv")
+  tasaFuente     String?     @map("tasa_fuente")
+  tasaFecha      DateTime?   @map("tasa_fecha")
   descripcion    String?
   comprobanteUrl String?     @map("comprobante_url")
   createdAt      DateTime    @default(now()) @map("created_at")

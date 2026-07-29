@@ -11,6 +11,8 @@ const crear = async (datos, origen = 'ADMIN') => {
   const montoOriginal = normalizarMonto(datos.monto, 'Monto de gasto')
   const tasaBcv = moneda === 'USD' ? normalizarMonto(datos.tasaBcv, 'Tasa BCV') : null
   const montoNumerico = moneda === 'USD' ? redondearMonto(montoOriginal * tasaBcv) : montoOriginal
+  const tasaFuente = moneda === 'USD' ? normalizarTextoOpcional(datos.tasaFuente, 80) : null
+  const tasaFecha = moneda === 'USD' ? normalizarFechaOpcional(datos.tasaFecha) : null
 
   if (!TIPOS_GASTO.has(tipo)) throw { status: 400, message: 'Tipo de gasto invalido' }
   if (descripcionNormalizada?.length > 500) {
@@ -31,6 +33,8 @@ const crear = async (datos, origen = 'ADMIN') => {
         moneda,
         montoOriginal,
         tasaBcv,
+        tasaFuente,
+        tasaFecha,
         descripcion: descripcionNormalizada
       }
     })
@@ -70,5 +74,18 @@ const normalizarMonto = (valor, campo) => {
 }
 
 const redondearMonto = (valor) => Math.round(Number(valor) * 100) / 100
+
+const normalizarTextoOpcional = (valor, max) => {
+  const texto = String(valor || '').trim()
+  if (!texto) return null
+  return texto.slice(0, max)
+}
+
+const normalizarFechaOpcional = (valor) => {
+  if (!valor) return null
+  const fecha = new Date(valor)
+  if (Number.isNaN(fecha.getTime())) return null
+  return fecha
+}
 
 module.exports = { crear, eliminar }

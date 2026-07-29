@@ -2285,7 +2285,7 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
 
 function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   const [saving, setSaving] = useState('')
-  const [gastoForm, setGastoForm] = useState({ tipo: 'PEAJE', monto: '', moneda: 'VES', tasaBcv: '', descripcion: '' })
+  const [gastoForm, setGastoForm] = useState({ tipo: 'PEAJE', monto: '', moneda: 'VES', tasaBcv: '', tasaFuente: '', tasaFecha: '', descripcion: '' })
   const [tasaBcv, setTasaBcv] = useState(null)
   const [showGastoForm, setShowGastoForm] = useState(false)
   const [reportPage, setReportPage] = useState(1)
@@ -2309,10 +2309,11 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   const cargarTasaBcv = async () => {
     try {
       const response = await api.get('/tasas/bcv')
-      const tasa = response.data?.data?.tasa
+      const data = response.data?.data || {}
+      const tasa = data.tasa
       if (tasa) {
         setTasaBcv(tasa)
-        setGastoForm((current) => current.tasaBcv ? current : { ...current, tasaBcv: String(tasa) })
+        setGastoForm((current) => current.tasaBcv ? { ...current, tasaFuente: current.tasaFuente || data.fuente || '', tasaFecha: current.tasaFecha || data.fecha || '' } : { ...current, tasaBcv: String(tasa), tasaFuente: data.fuente || '', tasaFecha: data.fecha || '' })
       }
     } catch (error) {}
   }
@@ -2395,9 +2396,11 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
         monto: Number(gastoForm.monto),
         moneda: gastoForm.moneda,
         tasaBcv: gastoForm.moneda === 'USD' ? Number(gastoForm.tasaBcv) : null,
+        tasaFuente: gastoForm.moneda === 'USD' ? gastoForm.tasaFuente || null : null,
+        tasaFecha: gastoForm.moneda === 'USD' ? gastoForm.tasaFecha || null : null,
         descripcion: gastoForm.descripcion,
       })
-      setGastoForm({ tipo: 'PEAJE', monto: '', moneda: 'VES', tasaBcv: tasaBcv ? String(tasaBcv) : '', descripcion: '' })
+      setGastoForm({ tipo: 'PEAJE', monto: '', moneda: 'VES', tasaBcv: tasaBcv ? String(tasaBcv) : '', tasaFuente: gastoForm.tasaFuente || '', tasaFecha: gastoForm.tasaFecha || '', descripcion: '' })
       setShowGastoForm(false)
       await notifySuccess('Gasto registrado')
       onDone()
@@ -2550,7 +2553,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
                     </div>
                   )}
                   {gastoForm.moneda === 'USD' && gastoForm.monto && gastoForm.tasaBcv && (
-                    <p className="text-xs text-neutral-500">Equivalente: {money(Number(gastoForm.monto) * Number(gastoForm.tasaBcv))}</p>
+                    <p className="text-xs text-neutral-500">Equivalente: {money(Number(gastoForm.monto) * Number(gastoForm.tasaBcv))}{gastoForm.tasaFuente ? ` - ${gastoForm.tasaFuente}` : ''}</p>
                   )}
                   <input value={gastoForm.descripcion} onChange={(event) => setGastoForm({ ...gastoForm, descripcion: event.target.value })} className="input" placeholder="Descripcion" />
                   <button disabled={Boolean(saving)} className="btn-primary">
@@ -3161,7 +3164,7 @@ function formatParadasRoute(paradas) {
 function formatExpenseDetail(gasto) {
   const descripcion = gasto.descripcion || 'Gasto'
   if (gasto.moneda === 'USD') {
-    return descripcion + ' - ' + usd(gasto.montoOriginal || gasto.monto) + ' a BCV ' + money(gasto.tasaBcv || 0)
+    return descripcion + ' - ' + usd(gasto.montoOriginal || gasto.monto) + ' a BCV ' + money(gasto.tasaBcv || 0) + (gasto.tasaFuente ? ' - ' + gasto.tasaFuente : '')
   }
   return descripcion
 }
