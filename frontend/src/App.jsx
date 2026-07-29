@@ -1069,10 +1069,6 @@ function RetornablesView({ retornables, viajes, choferes, camiones, onDone }) {
           </button>
         </div>
 
-        {open && (
-          <RetornableForm form={form} setForm={setForm} viajes={viajes} choferes={choferes} camiones={camiones} onSubmit={submit} />
-        )}
-
         <div className="overflow-x-auto">
           <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="bg-neutral-50 text-xs text-neutral-500">
@@ -1109,6 +1105,12 @@ function RetornablesView({ retornables, viajes, choferes, camiones, onDone }) {
           <Pagination page={page} total={retornables.length} pageSize={pageSize} onChange={setPage} />
         </div>
       </section>
+
+      {open && (
+        <RetornableModal title="Registrar retornable" subtitle="Cartones, paletas y saldos vinculados al viaje o a la sede" onClose={() => setOpen(false)}>
+          <RetornableForm form={form} setForm={setForm} viajes={viajes} choferes={choferes} camiones={camiones} onSubmit={submit} modal />
+        </RetornableModal>
+      )}
 
       {selected && (
         <RetornableDrawer item={selected} viajes={viajes} choferes={choferes} camiones={camiones} onClose={() => setSelected(null)} onDone={onDone} />
@@ -1162,9 +1164,6 @@ function RetornablesTripSection({ viaje, onDone }) {
           Registrar
         </button>
       </div>
-      {open && (
-        <RetornableForm form={form} setForm={setForm} viajes={[viaje]} choferes={[viaje.chofer].filter(Boolean)} camiones={camionesViaje} onSubmit={submit} compact lockViaje />
-      )}
       <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">
         {pageItems.map((item) => {
           const ultimo = item.movimientos?.[0]
@@ -1183,12 +1182,33 @@ function RetornablesTripSection({ viaje, onDone }) {
         {items.length === 0 && <Empty text="Sin retornables vinculados a este viaje." />}
       </div>
       <Pagination page={page} total={items.length} pageSize={pageSize} onChange={setPage} />
+      {open && (
+        <RetornableModal title="Registrar retornable" subtitle={viaje.codigo} onClose={() => setOpen(false)}>
+          <RetornableForm form={form} setForm={setForm} viajes={[viaje]} choferes={[viaje.chofer].filter(Boolean)} camiones={camionesViaje} onSubmit={submit} modal lockViaje />
+        </RetornableModal>
+      )}
       {selected && <RetornableDrawer item={selected} viajes={[viaje]} choferes={[viaje.chofer].filter(Boolean)} camiones={camionesViaje} onClose={() => setSelected(null)} onDone={async () => { await cargar(); onDone() }} />}
     </section>
   )
 }
 
-function RetornableForm({ form, setForm, viajes, choferes, camiones, onSubmit, compact = false, lockViaje = false }) {
+function RetornableModal({ title, subtitle, children, onClose }) {
+  return (
+    <div className="fixed inset-0 z-[70] grid min-h-[100svh] place-items-center bg-neutral-950/40 p-4">
+      <div className="max-h-[92svh] w-full max-w-3xl overflow-hidden rounded-md border border-neutral-200 bg-white shadow-xl">
+        <div className="flex items-start justify-between gap-3 border-b border-neutral-100 px-5 py-4">
+          <div>
+            <h3 className="text-base font-semibold">{title}</h3>
+            {subtitle && <p className="mt-1 text-xs text-neutral-500">{subtitle}</p>}
+          </div>
+          <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-md hover:bg-neutral-100"><X size={16} /></button>
+        </div>
+        <div className="max-h-[calc(92svh-74px)] overflow-y-auto p-5">{children}</div>
+      </div>
+    </div>
+  )
+}
+function RetornableForm({ form, setForm, viajes, choferes, camiones, onSubmit, compact = false, lockViaje = false, modal = false }) {
   const hasViaje = Boolean(form.viajeId)
   const updateViaje = (viajeId) => {
     const viaje = viajes.find((item) => item.id === viajeId)
@@ -1202,7 +1222,7 @@ function RetornableForm({ form, setForm, viajes, choferes, camiones, onSubmit, c
   }
 
   return (
-    <form onSubmit={onSubmit} className={`grid gap-3 border-b border-neutral-100 bg-neutral-50 p-4 ${compact ? 'md:grid-cols-3' : 'md:grid-cols-4'}`}>
+    <form onSubmit={onSubmit} className={`grid gap-3 ${modal ? '' : 'border-b border-neutral-100 bg-neutral-50 p-4'} ${compact ? 'md:grid-cols-3' : 'md:grid-cols-4'}`}>
       <select value={form.tipo} onChange={(event) => setForm({ ...form, tipo: event.target.value })} className="input">
         <option value="CARTON">Cartones</option>
         <option value="PALETA">Paletas</option>
