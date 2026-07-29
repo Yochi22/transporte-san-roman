@@ -74,6 +74,22 @@ const sameSet = (a, b) => {
   return b.every((item) => set.has(item))
 }
 
+const tieneTrabajoLogisticoPendienteWhere = {
+  paradas: { some: { estado: { not: 'COMPLETADA' } } }
+}
+
+const estaPendienteDeLiquidacionWhere = {
+  estadoFinanciero: 'PENDIENTE',
+  paradas: { every: { estado: 'COMPLETADA' } }
+}
+
+const obtenerUltimaUbicacionLogistica = (viaje) => {
+  const paradas = [...(viaje.paradas || [])].sort((a, b) => a.orden - b.orden)
+  const parada = [...paradas].reverse().find((item) => item.tipo === 'DESCARGA') || paradas[paradas.length - 1]
+  if (!parada) return null
+  return parada.ciudad || parada.lugar || null
+}
+
 const listar = async (filtros = {}) => {
   const where = {}
   if (filtros.estadoLogistico) where.estadoLogistico = filtros.estadoLogistico
@@ -90,7 +106,7 @@ const listar = async (filtros = {}) => {
 const listarArchivo = async (filtros = {}) => {
   const page = Math.max(1, Number(filtros.page) || 1)
   const pageSize = Math.min(50, Math.max(1, Number(filtros.pageSize) || 10))
-  const where = { estadoLogistico: 'COMPLETADO' }
+  const where = { OR: [{ estadoLogistico: 'COMPLETADO' }, estaPendienteDeLiquidacionWhere] }
   const rango = construirRangoArchivo(filtros.periodo, filtros.fecha)
 
   if (rango) {
@@ -189,6 +205,7 @@ const crear = async (datos, creadoPorId) => {
   const asignacionConflictiva = await prisma.viaje.findFirst({
     where: {
       estadoLogistico: 'EN_CURSO',
+      ...tieneTrabajoLogisticoPendienteWhere,
       OR: [
         { choferId: { not: choferId }, unidades: { some: { camionId: { in: unidadIds } } } },
         { choferId, unidades: { some: { camionId: { notIn: unidadIds } } } }
@@ -201,7 +218,7 @@ const crear = async (datos, creadoPorId) => {
   }
 
   const viajesActivosChofer = await prisma.viaje.findMany({
-    where: { choferId, estadoLogistico: 'EN_CURSO' },
+    where: { choferId, estadoLogistico: 'EN_CURSO', estadoFinanciero: 'PENDIENTE' },
     include: { paradas: { orderBy: { orden: 'asc' } }, unidades: true }
   })
   const viajeActivo = viajesActivosChofer.find((viaje) => sameSet(unidadIds, tripUnitIds(viaje)))
@@ -250,14 +267,14 @@ const agregarTramo = async (id, datos) => {
   const viaticosDepositados = validarMonto(datos.viaticosDepositados, 'Monto de viaticos')
   const viaje = await prisma.viaje.findUniqueOrThrow({
     where: { id },
-    include: { paradas: true }
+    include: { paradas: true, unidades: true }
   })
 
   const ultimoOrden = viaje.paradas.reduce((max, parada) => Math.max(max, parada.orden), 0)
   const nuevoTramo = viaje.paradas.reduce((max, parada) => Math.max(max, parada.tramo || 1), 1) + 1
 
-  await prisma.$transaction([
-    prisma.parada.createMany({
+  await prisma.$transaction(async (tx) => {
+    await tx.parada.createMany({
       data: paradas.map((parada, index) => ({
         viajeId: id,
         orden: ultimoOrden + index + 1,
@@ -268,8 +285,8 @@ const agregarTramo = async (id, datos) => {
         fechaProgramada: parada.fechaProgramada,
         cargarAlDescargar: parada.tipo === 'CARGA' && !!parada.cargarAlDescargar
       }))
-    }),
-    prisma.viaje.update({
+    })
+    await tx.viaje.update({
       where: { id },
       data: {
         viaticosDepositados: { increment: viaticosDepositados },
@@ -278,7 +295,9 @@ const agregarTramo = async (id, datos) => {
         fechaCierre: null
       }
     })
-  ])
+    await tx.camion.updateMany({ where: { id: { in: tripUnitIds(viaje) } }, data: { estado: 'EN_RUTA' } })
+    await tx.chofer.update({ where: { id: viaje.choferId }, data: { estado: 'EN_RUTA' } })
+  })
 
   return obtener(id)
 }
@@ -289,18 +308,41 @@ const actualizarParada = async (viajeId, paradaId, estado) => {
   }
   const parada = await prisma.parada.findFirstOrThrow({
     where: { id: paradaId, viajeId },
-    include: { viaje: { select: { estadoLogistico: true } } }
+    include: { viaje: { select: { estadoLogistico: true, estadoFinanciero: true } } }
   })
   if (parada.viaje.estadoLogistico === 'COMPLETADO') {
     throw { status: 409, message: 'No se puede modificar una parada de un viaje cerrado' }
   }
+  if (parada.viaje.estadoFinanciero === 'LIQUIDADO') {
+    throw { status: 409, message: 'No se puede modificar un viaje liquidado' }
+  }
 
-  return prisma.parada.update({
-    where: { id: parada.id },
-    data: {
-      estado,
-      completadaAt: estado === 'COMPLETADA' ? new Date() : null
+  return prisma.$transaction(async (tx) => {
+    const actualizada = await tx.parada.update({
+      where: { id: parada.id },
+      data: {
+        estado,
+        completadaAt: estado === 'COMPLETADA' ? new Date() : null
+      }
+    })
+
+    const viaje = await tx.viaje.findUniqueOrThrow({
+      where: { id: viajeId },
+      include: { paradas: { orderBy: { orden: 'asc' } }, unidades: true }
+    })
+    const unidadIds = tripUnitIds(viaje)
+    const tienePendientes = viaje.paradas.some((item) => item.estado !== 'COMPLETADA')
+
+    if (tienePendientes) {
+      await tx.viaje.update({ where: { id: viajeId }, data: { estadoLogistico: 'EN_CURSO', fechaCierre: null } })
+      await tx.camion.updateMany({ where: { id: { in: unidadIds }, estado: { not: 'EN_TALLER' } }, data: { estado: 'EN_RUTA' } })
+      await tx.chofer.update({ where: { id: viaje.choferId }, data: { estado: 'EN_RUTA' } })
+    } else {
+      await tx.viaje.update({ where: { id: viajeId }, data: { estadoLogistico: 'EN_CURSO', fechaCierre: viaje.fechaCierre || new Date() } })
+      await recalcularEstadoRecursos(tx, viaje.choferId, unidadIds, obtenerUltimaUbicacionLogistica(viaje))
     }
+
+    return actualizada
   })
 }
 
@@ -332,10 +374,7 @@ const confirmarDocumentacion = async (id) => {
 const listarPendientesLiquidacion = async (filtros = {}) => {
   const page = Math.max(1, Number(filtros.page) || 1)
   const pageSize = Math.min(50, Math.max(1, Number(filtros.pageSize) || 10))
-  const where = {
-    estadoLogistico: 'COMPLETADO',
-    estadoFinanciero: 'PENDIENTE'
-  }
+  const where = estaPendienteDeLiquidacionWhere
 
   const [items, total] = await prisma.$transaction([
     prisma.viaje.findMany({
@@ -358,17 +397,19 @@ const cerrar = async (id, soloLogistica = false, numeroGuia = null) => {
   }
   const viaje = await prisma.viaje.findUniqueOrThrow({
     where: { id },
-    include: { gastos: true, unidades: true }
+    include: { gastos: true, unidades: true, paradas: { orderBy: { orden: 'asc' } } }
   })
   if (viaje.estadoFinanciero === 'LIQUIDADO') {
     throw { status: 409, message: 'El viaje ya fue liquidado' }
   }
-  if (soloLogistica && viaje.estadoLogistico === 'COMPLETADO') {
-    throw { status: 409, message: 'La logistica del viaje ya fue completada' }
+  const yaCompletoParadas = viaje.paradas.every((parada) => parada.estado === 'COMPLETADA')
+  if (soloLogistica && yaCompletoParadas) {
+    throw { status: 409, message: 'El tramo logistico ya fue completado' }
   }
 
   const totalGastado = viaje.gastos.reduce((acc, g) => acc + Number(g.monto), 0)
   const guia = numeroGuia?.trim() || viaje.numeroGuia
+  const ultimaUbicacion = obtenerUltimaUbicacionLogistica(viaje)
 
   return prisma.$transaction(async (tx) => {
     await tx.parada.updateMany({
@@ -379,7 +420,7 @@ const cerrar = async (id, soloLogistica = false, numeroGuia = null) => {
     const actualizado = await tx.viaje.update({
       where: { id },
       data: {
-        estadoLogistico: 'COMPLETADO',
+        estadoLogistico: soloLogistica ? 'EN_CURSO' : 'COMPLETADO',
         numeroGuia: guia,
         viaticosGastados: totalGastado,
         estadoFinanciero: soloLogistica ? 'PENDIENTE' : 'LIQUIDADO',
@@ -388,21 +429,21 @@ const cerrar = async (id, soloLogistica = false, numeroGuia = null) => {
       }
     })
 
-    await recalcularEstadoRecursos(tx, viaje.choferId, tripUnitIds(viaje))
+    await recalcularEstadoRecursos(tx, viaje.choferId, tripUnitIds(viaje), ultimaUbicacion)
     return actualizado
   })
 }
 
-const recalcularEstadoRecursos = async (tx, choferId, camionIds) => {
+const recalcularEstadoRecursos = async (tx, choferId, camionIds, ubicacion = null) => {
   const unidadIds = Array.isArray(camionIds) ? camionIds : [camionIds]
   const [viajesChofer, camiones] = await Promise.all([
-    tx.viaje.count({ where: { choferId, estadoLogistico: 'EN_CURSO' } }),
+    tx.viaje.count({ where: { choferId, estadoLogistico: 'EN_CURSO', ...tieneTrabajoLogisticoPendienteWhere } }),
     tx.camion.findMany({ where: { id: { in: unidadIds } }, select: { id: true, estado: true } })
   ])
 
   await tx.chofer.update({
     where: { id: choferId },
-    data: { estado: viajesChofer > 0 ? 'EN_RUTA' : 'DISPONIBLE' }
+    data: { estado: viajesChofer > 0 ? 'EN_RUTA' : 'DISPONIBLE', ubicacionActual: ubicacion || undefined }
   })
 
   const disponibles = camiones.filter((camion) => camion.estado !== 'EN_TALLER').map((camion) => camion.id)
@@ -410,6 +451,7 @@ const recalcularEstadoRecursos = async (tx, choferId, camionIds) => {
     const viajesCamion = await tx.viaje.count({
       where: {
         estadoLogistico: 'EN_CURSO',
+        ...tieneTrabajoLogisticoPendienteWhere,
         OR: [
           { camionId },
           { unidades: { some: { camionId } } }
@@ -418,7 +460,7 @@ const recalcularEstadoRecursos = async (tx, choferId, camionIds) => {
     })
     await tx.camion.update({
       where: { id: camionId },
-      data: { estado: viajesCamion > 0 ? 'EN_RUTA' : 'DISPONIBLE' }
+      data: { estado: viajesCamion > 0 ? 'EN_RUTA' : 'DISPONIBLE', ubicacionActual: ubicacion || undefined }
     })
   }
 }

@@ -148,6 +148,7 @@ const includeChoferConViajes = () => ({
     include: {
       paradas: { orderBy: { orden: 'asc' } },
       camion: true,
+      unidades: { include: { camion: true } },
     },
   },
 })
@@ -323,7 +324,7 @@ const procesarReporte = async ({
       if (paradasPendientes === 0) {
         await tx.viaje.update({
           where: { id: viaje.id },
-          data: { estadoLogistico: 'COMPLETADO', fechaCierre: new Date() },
+          data: { estadoLogistico: 'EN_CURSO', fechaCierre: new Date() },
         })
         viajesCompletados = [viaje.id]
       }
@@ -337,7 +338,7 @@ const procesarReporte = async ({
       })
       await tx.viaje.updateMany({
         where: { id: { in: ids } },
-        data: { estadoLogistico: 'COMPLETADO', fechaCierre: new Date() },
+        data: { estadoLogistico: 'EN_CURSO', fechaCierre: new Date() },
       })
       viajesCompletados = ids
     }
@@ -350,7 +351,7 @@ const procesarReporte = async ({
     if (viajesActualizados.length > 0 && viajesActualizados.every((v) => v.paradas.every((p) => p.estado === 'COMPLETADA'))) {
       await tx.viaje.updateMany({
         where: { id: { in: viajesActualizados.map((v) => v.id) } },
-        data: { estadoLogistico: 'COMPLETADO', fechaCierre: new Date() },
+        data: { estadoLogistico: 'EN_CURSO', fechaCierre: new Date() },
       })
       viajesCompletados = [...new Set([...viajesCompletados, ...viajesActualizados.map((v) => v.id)])]
     }
@@ -360,8 +361,17 @@ const procesarReporte = async ({
       ultimoReporteAt: new Date(),
     }
     const [viajesChoferRestantes, viajesCamionRestantes] = await Promise.all([
-      tx.viaje.count({ where: { choferId: chofer.id, estadoLogistico: 'EN_CURSO' } }),
-      tx.viaje.count({ where: { camionId: viaje.camionId, estadoLogistico: 'EN_CURSO' } }),
+      tx.viaje.count({ where: { choferId: chofer.id, estadoLogistico: 'EN_CURSO', paradas: { some: { estado: { not: 'COMPLETADA' } } } } }),
+      tx.viaje.count({
+        where: {
+          estadoLogistico: 'EN_CURSO',
+          paradas: { some: { estado: { not: 'COMPLETADA' } } },
+          OR: [
+            { camionId: viaje.camionId },
+            { unidades: { some: { camionId: viaje.camionId } } }
+          ]
+        }
+      }),
     ])
 
     if (resultado.tipo === 'LIBRE' || resultado.tipo === 'ESPERANDO_INSTRUCCIONES' || viajesChoferRestantes === 0) {
@@ -374,8 +384,9 @@ const procesarReporte = async ({
       data: dataChofer,
     })
 
-    await tx.camion.update({
-      where: { id: viaje.camionId },
+    const unidadIds = [...new Set([(viaje.camionId), ...(viaje.unidades || []).map((unidad) => unidad.camionId)].filter(Boolean))]
+    await tx.camion.updateMany({
+      where: { id: { in: unidadIds }, estado: { not: 'EN_TALLER' } },
       data: {
         ubicacionActual: ubicacion || chofer.ubicacionActual,
         estado:
@@ -390,8 +401,8 @@ const procesarReporte = async ({
         ? await tx.viaje.count({
             where: {
               choferId: chofer.id,
-              estadoLogistico: 'COMPLETADO',
               estadoFinanciero: 'PENDIENTE',
+              paradas: { every: { estado: 'COMPLETADA' } },
             },
           })
         : 0

@@ -2365,9 +2365,9 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
       return
     }
     const result = await confirmAction(
-      'Completar solo la logistica',
-      'El viaje seguira apareciendo como pendiente de liquidacion hasta registrar su cierre financiero.',
-      'Completar logistica'
+      'Completar tramo logistico',
+      'El chofer y las unidades quedaran disponibles en la ultima descarga. El viaje seguira abierto para liquidacion o nuevo tramo.',
+      'Completar tramo'
     )
     if (!result.isConfirmed) return
     await ejecutarCierre(true)
@@ -2590,10 +2590,10 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
                 Recargar viaticos
               </button>
             )}
-            {viaje.estadoLogistico !== 'COMPLETADO' && (
+            {hasPendingLogistics(viaje) && (
               <button onClick={() => cerrar(true)} disabled={Boolean(saving)} className="btn-secondary">
                 <FileCheck size={16} />
-                Solo completar logistica
+                Completar tramo
               </button>
             )}
             {isAdmin && viaje.estadoFinanciero !== 'LIQUIDADO' && (
@@ -2854,6 +2854,18 @@ function tripUnits(viaje) {
   const byId = new Map([...fallback, ...unidades].filter(Boolean).map((camion) => [camion.id, camion]))
   return [...byId.values()]
 }
+function hasPendingLogistics(viaje) {
+  return (viaje.paradas || []).some((parada) => parada.estado !== 'COMPLETADA')
+}
+
+function isOperationallyActive(viaje) {
+  return viaje.estadoLogistico === 'EN_CURSO' && hasPendingLogistics(viaje)
+}
+
+function isPendingSettlement(viaje) {
+  return viaje.estadoFinanciero === 'PENDIENTE' && !hasPendingLogistics(viaje)
+}
+
 function buildOperationalStatusMaps(viajesActivos) {
   const choferes = new Map()
   const camiones = new Map()
@@ -2919,12 +2931,12 @@ function buildOperationalData({ viajes, choferes, camiones, retornables = [], qu
       .some((value) => normalize(value).includes(q))
   })
 
-  const activos = filteredViajes.filter((viaje) => viaje.estadoLogistico === 'EN_CURSO')
-  const pendientesLiquidacion = filteredViajes.filter((viaje) => viaje.estadoLogistico === 'COMPLETADO' && viaje.estadoFinanciero === 'PENDIENTE')
-  const completados = filteredViajes.filter((viaje) => viaje.estadoLogistico === 'COMPLETADO')
+  const activos = filteredViajes.filter(isOperationallyActive)
+  const pendientesLiquidacion = filteredViajes.filter(isPendingSettlement)
+  const completados = filteredViajes.filter((viaje) => viaje.estadoLogistico === 'COMPLETADO' || isPendingSettlement(viaje))
   const liquidados = filteredViajes.filter((viaje) => viaje.estadoFinanciero === 'LIQUIDADO')
   const esperando = activos.filter((viaje) => viaje.reportes?.some((reporte) => reporte.tipoReporte === 'ESPERANDO_INSTRUCCIONES'))
-  const activosGlobales = viajes.filter((viaje) => viaje.estadoLogistico === 'EN_CURSO')
+  const activosGlobales = viajes.filter(isOperationallyActive)
   const estadosOperativos = buildOperationalStatusMaps(activosGlobales)
   const estadosChoferes = estadosOperativos.choferes
   const estadosCamiones = estadosOperativos.camiones
@@ -3076,10 +3088,10 @@ function filterTripPickerOptions(viajes = [], query = '', selectedId = '') {
       const searchable = normalizeText([viaje.codigo, viaje.chofer?.nombre, formatRoute(viaje), formatStatus(viaje.estadoLogistico), formatDate(viaje.fechaInicio || viaje.createdAt)].filter(Boolean).join(' '))
       if (q) return searchable.includes(q)
       const dateValue = new Date(viaje.fechaInicio || viaje.fechaCierre || viaje.createdAt || 0).getTime()
-      return viaje.estadoLogistico === 'EN_CURSO' || viaje.estadoFinanciero === 'PENDIENTE' || dateValue >= cutoff
+      return isOperationallyActive(viaje) || viaje.estadoFinanciero === 'PENDIENTE' || dateValue >= cutoff
     })
     .sort((a, b) => {
-      const priority = (viaje) => (viaje.estadoLogistico === 'EN_CURSO' ? 0 : viaje.estadoFinanciero === 'PENDIENTE' ? 1 : 2)
+      const priority = (viaje) => (isOperationallyActive(viaje) ? 0 : viaje.estadoFinanciero === 'PENDIENTE' ? 1 : 2)
       const diff = priority(a) - priority(b)
       if (diff !== 0) return diff
       return new Date(b.fechaInicio || b.fechaCierre || b.createdAt || 0) - new Date(a.fechaInicio || a.fechaCierre || a.createdAt || 0)
