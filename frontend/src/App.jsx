@@ -1163,7 +1163,7 @@ function RetornablesTripSection({ viaje, onDone }) {
         </button>
       </div>
       {open && (
-        <RetornableForm form={form} setForm={setForm} viajes={[viaje]} choferes={[viaje.chofer].filter(Boolean)} camiones={camionesViaje} onSubmit={submit} compact />
+        <RetornableForm form={form} setForm={setForm} viajes={[viaje]} choferes={[viaje.chofer].filter(Boolean)} camiones={camionesViaje} onSubmit={submit} compact lockViaje />
       )}
       <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">
         {pageItems.map((item) => {
@@ -1188,7 +1188,19 @@ function RetornablesTripSection({ viaje, onDone }) {
   )
 }
 
-function RetornableForm({ form, setForm, viajes, choferes, camiones, onSubmit, compact = false }) {
+function RetornableForm({ form, setForm, viajes, choferes, camiones, onSubmit, compact = false, lockViaje = false }) {
+  const hasViaje = Boolean(form.viajeId)
+  const updateViaje = (viajeId) => {
+    const viaje = viajes.find((item) => item.id === viajeId)
+    setForm({
+      ...form,
+      viajeId,
+      choferId: viaje?.choferId || form.choferId,
+      camionId: viajeId ? '' : form.camionId,
+      ubicacion: viajeId ? 'En viaje' : form.ubicacion,
+    })
+  }
+
   return (
     <form onSubmit={onSubmit} className={`grid gap-3 border-b border-neutral-100 bg-neutral-50 p-4 ${compact ? 'md:grid-cols-3' : 'md:grid-cols-4'}`}>
       <select value={form.tipo} onChange={(event) => setForm({ ...form, tipo: event.target.value })} className="input">
@@ -1199,19 +1211,18 @@ function RetornableForm({ form, setForm, viajes, choferes, camiones, onSubmit, c
       </select>
       <input required value={form.empresa} onChange={(event) => setForm({ ...form, empresa: event.target.value })} className="input" placeholder="Empresa propietaria" />
       <input required type="number" min="1" step="1" value={form.cantidad} onChange={(event) => setForm({ ...form, cantidad: event.target.value })} className="input" placeholder="Cantidad" />
-      <select value={form.viajeId} onChange={(event) => setForm({ ...form, viajeId: event.target.value })} className="input">
-        <option value="">Sin viaje</option>
-        {viajes.map((viaje) => <option key={viaje.id} value={viaje.id}>{viaje.codigo}</option>)}
-      </select>
-      <select value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value })} className="input">
+      <TripPicker viajes={viajes} value={form.viajeId} onChange={updateViaje} disabled={lockViaje} />
+      <select value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value })} className="input" disabled={hasViaje}>
         <option value="">Sin chofer</option>
         {choferes.map((chofer) => <option key={chofer.id} value={chofer.id}>{chofer.nombre}</option>)}
       </select>
-      <select value={form.camionId} onChange={(event) => setForm({ ...form, camionId: event.target.value })} className="input">
-        <option value="">Sin unidad</option>
-        {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)}</option>)}
-      </select>
-      <input value={form.ubicacion} onChange={(event) => setForm({ ...form, ubicacion: event.target.value })} className="input" placeholder="Ubicacion actual" />
+      {!hasViaje && (
+        <select value={form.camionId} onChange={(event) => setForm({ ...form, camionId: event.target.value })} className="input">
+          <option value="">Sin unidad</option>
+          {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)}</option>)}
+        </select>
+      )}
+      <input value={form.ubicacion} onChange={(event) => setForm({ ...form, ubicacion: event.target.value })} className="input" placeholder={hasViaje ? 'Ubicacion dentro del viaje' : 'Sede, unidad u otro lugar'} />
       <input value={form.observacion} onChange={(event) => setForm({ ...form, observacion: event.target.value })} className="input" placeholder="Observacion" />
       <button className="btn-primary md:col-span-full">
         <Check size={16} />
@@ -1221,8 +1232,39 @@ function RetornableForm({ form, setForm, viajes, choferes, camiones, onSubmit, c
   )
 }
 
+function TripPicker({ viajes, value, onChange, disabled = false }) {
+  const [query, setQuery] = useState('')
+  const selected = viajes.find((viaje) => viaje.id === value)
+  const visible = useMemo(() => filterTripPickerOptions(viajes, query, value), [viajes, query, value])
+
+  if (disabled) {
+    return <input className="input bg-neutral-100" value={selected ? tripPickerLabel(selected) : 'Sin viaje'} disabled />
+  }
+
+  return (
+    <div className="space-y-2 md:col-span-2">
+      <input value={query} onChange={(event) => setQuery(event.target.value)} className="input" placeholder="Buscar viaje por codigo, chofer o ruta" />
+      <select value={value} onChange={(event) => onChange(event.target.value)} className="input">
+        <option value="">Sin viaje</option>
+        {visible.map((viaje) => <option key={viaje.id} value={viaje.id}>{tripPickerLabel(viaje)}</option>)}
+      </select>
+      <p className="text-xs text-neutral-500">Muestra viajes recientes de 15 dias. Puedes buscar por codigo para ubicar anteriores.</p>
+    </div>
+  )
+}
 function RetornableDrawer({ item, viajes, choferes, camiones, onClose, onDone }) {
   const [form, setForm] = useState({ tipoMovimiento: 'DEVOLUCION_PARCIAL', cantidad: item.cantidadPendiente || '', viajeId: '', choferId: '', camionId: '', ubicacion: '', origen: '', destino: '', observacion: '' })
+  const hasViaje = Boolean(form.viajeId)
+  const updateViaje = (viajeId) => {
+    const viaje = viajes.find((item) => item.id === viajeId)
+    setForm({
+      ...form,
+      viajeId,
+      choferId: viaje?.choferId || form.choferId,
+      camionId: viajeId ? '' : form.camionId,
+      ubicacion: viajeId ? 'En viaje' : form.ubicacion,
+    })
+  }
 
   const submit = async (event) => {
     event.preventDefault()
@@ -1230,6 +1272,7 @@ function RetornableDrawer({ item, viajes, choferes, camiones, onClose, onDone })
       await api.post(`/retornables/${item.id}/movimientos`, {
         ...form,
         cantidad: Number(form.cantidad),
+        camionId: form.viajeId ? null : form.camionId || null,
       })
       await notifySuccess('Movimiento registrado')
       onClose()
@@ -1244,7 +1287,7 @@ function RetornableDrawer({ item, viajes, choferes, camiones, onClose, onDone })
       <aside className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-xl">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white px-5 py-4">
           <div>
-            <p className="text-xs text-neutral-500">{labelRetornableTipo(item.tipo)} · {formatStatus(item.estado)}</p>
+            <p className="text-xs text-neutral-500">{labelRetornableTipo(item.tipo)} - {formatStatus(item.estado)}</p>
             <h3 className="text-lg font-semibold">{item.empresa}</h3>
           </div>
           <button onClick={onClose} className="grid h-9 w-9 place-items-center rounded-md hover:bg-neutral-100"><X size={16} /></button>
@@ -1265,18 +1308,17 @@ function RetornableDrawer({ item, viajes, choferes, camiones, onClose, onDone })
               <option value="AJUSTE">Ajuste de saldo</option>
             </select>
             <input required type="number" min="1" step="1" value={form.cantidad} onChange={(event) => setForm({ ...form, cantidad: event.target.value })} className="input" placeholder="Cantidad" />
-            <select value={form.viajeId} onChange={(event) => setForm({ ...form, viajeId: event.target.value })} className="input">
-              <option value="">Sin viaje</option>
-              {viajes.map((viaje) => <option key={viaje.id} value={viaje.id}>{viaje.codigo}</option>)}
-            </select>
-            <select value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value })} className="input">
+            <TripPicker viajes={viajes} value={form.viajeId} onChange={updateViaje} />
+            <select value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value })} className="input" disabled={hasViaje}>
               <option value="">Sin chofer</option>
               {choferes.map((chofer) => <option key={chofer.id} value={chofer.id}>{chofer.nombre}</option>)}
             </select>
-            <select value={form.camionId} onChange={(event) => setForm({ ...form, camionId: event.target.value })} className="input">
-              <option value="">Sin unidad</option>
-              {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)}</option>)}
-            </select>
+            {!hasViaje && (
+              <select value={form.camionId} onChange={(event) => setForm({ ...form, camionId: event.target.value })} className="input">
+                <option value="">Sin unidad</option>
+                {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)}</option>)}
+              </select>
+            )}
             <input value={form.ubicacion} onChange={(event) => setForm({ ...form, ubicacion: event.target.value })} className="input" placeholder="Ubicacion" />
             <input value={form.origen} onChange={(event) => setForm({ ...form, origen: event.target.value })} className="input" placeholder="Origen" />
             <input value={form.destino} onChange={(event) => setForm({ ...form, destino: event.target.value })} className="input" placeholder="Destino" />
@@ -1289,10 +1331,10 @@ function RetornableDrawer({ item, viajes, choferes, camiones, onClose, onDone })
             {(item.movimientos || []).map((movimiento) => (
               <div key={movimiento.id} className="border-b border-neutral-100 px-4 py-3 text-sm last:border-b-0">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-medium">{formatStatus(movimiento.tipoMovimiento)} · {movimiento.cantidad}</p>
+                  <p className="font-medium">{formatStatus(movimiento.tipoMovimiento)} - {movimiento.cantidad}</p>
                   <p className="text-xs text-neutral-500">{formatDate(movimiento.createdAt)}</p>
                 </div>
-                <p className="mt-1 text-xs text-neutral-500">{[movimiento.chofer?.nombre, movimiento.camion?.placa, movimiento.viaje?.codigo].filter(Boolean).join(' · ') || 'Sin responsable vinculado'}</p>
+                <p className="mt-1 text-xs text-neutral-500">{[movimiento.chofer?.nombre, movimiento.camion?.placa, movimiento.viaje?.codigo].filter(Boolean).join(' - ') || 'Sin responsable vinculado'}</p>
                 <p className="mt-1 text-xs text-neutral-500">{movimiento.destino || movimiento.ubicacion || movimiento.origen || movimiento.observacion || 'Sin detalle'}</p>
               </div>
             ))}
@@ -1313,7 +1355,7 @@ function normalizarRetornablePayload(form) {
     cantidad: Number(form.cantidad),
     viajeId: form.viajeId || null,
     choferId: form.choferId || null,
-    camionId: form.camionId || null,
+    camionId: form.viajeId ? null : form.camionId || null,
   }
 }
 function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
@@ -2976,6 +3018,34 @@ function getProgress(viaje) {
   const total = viaje.paradas?.length || 0
   const completadas = viaje.paradas?.filter((parada) => parada.estado === 'COMPLETADA').length || 0
   return { total, completadas, percent: total ? Math.round((completadas / total) * 100) : 0 }
+}
+
+function filterTripPickerOptions(viajes = [], query = '', selectedId = '') {
+  const q = normalizeText(query)
+  const cutoff = Date.now() - 15 * 24 * 60 * 60 * 1000
+  return [...viajes]
+    .filter((viaje) => {
+      if (viaje.id === selectedId) return true
+      const searchable = normalizeText([viaje.codigo, viaje.chofer?.nombre, formatRoute(viaje), formatStatus(viaje.estadoLogistico), formatDate(viaje.fechaInicio || viaje.createdAt)].filter(Boolean).join(' '))
+      if (q) return searchable.includes(q)
+      const dateValue = new Date(viaje.fechaInicio || viaje.fechaCierre || viaje.createdAt || 0).getTime()
+      return viaje.estadoLogistico === 'EN_CURSO' || viaje.estadoFinanciero === 'PENDIENTE' || dateValue >= cutoff
+    })
+    .sort((a, b) => {
+      const priority = (viaje) => (viaje.estadoLogistico === 'EN_CURSO' ? 0 : viaje.estadoFinanciero === 'PENDIENTE' ? 1 : 2)
+      const diff = priority(a) - priority(b)
+      if (diff !== 0) return diff
+      return new Date(b.fechaInicio || b.fechaCierre || b.createdAt || 0) - new Date(a.fechaInicio || a.fechaCierre || a.createdAt || 0)
+    })
+    .slice(0, q ? 30 : 15)
+}
+
+function tripPickerLabel(viaje) {
+  return [viaje.codigo, viaje.chofer?.nombre || 'Sin chofer', formatRoute(viaje)].join(' - ')
+}
+
+function normalizeText(value = '') {
+  return String(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
 function formatRoute(viaje) {
