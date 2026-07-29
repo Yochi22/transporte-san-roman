@@ -37,7 +37,8 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
   : [...new Set([...configuredOrigins, 'http://localhost:5173', 'http://127.0.0.1:5173'])]
 
 app.disable('x-powered-by')
-if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1)
+const trustProxy = process.env.TRUST_PROXY || (process.env.NODE_ENV === 'production' ? '1' : '')
+if (trustProxy) app.set('trust proxy', Number.isNaN(Number(trustProxy)) ? trustProxy : Number(trustProxy))
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
