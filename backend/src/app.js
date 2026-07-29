@@ -8,6 +8,7 @@ const morgan = require('morgan')
 const cookieParser = require('cookie-parser')
 const path = require('path')
 const fs = require('fs')
+const crypto = require('crypto')
 
 const { manejarErrores } = require('./middlewares/error.middleware')
 const { apiLimiter, requerirJson, protegerCsrf } = require('./middlewares/security.middleware')
@@ -91,6 +92,8 @@ app.get('/whatsapp-qr/status', ...(demoPublicQr ? [] : [autenticar, soloAdmin]),
 
 app.get('/whatsapp-qr', ...(demoPublicQr ? [] : [autenticar, soloAdmin]), (req, res) => {
   res.set('Cache-Control', 'no-store')
+  const nonce = crypto.randomBytes(16).toString('base64')
+  res.set('Content-Security-Policy', `default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'nonce-${nonce}'; base-uri 'self'; frame-ancestors 'self'`)
   const estado = obtenerEstadoWhatsApp()
 
   res.type('html').send(`<!doctype html>
@@ -119,7 +122,7 @@ app.get('/whatsapp-qr', ...(demoPublicQr ? [] : [autenticar, soloAdmin]), (req, 
     <p id="message">${estado.conectado ? 'La sesion esta activa. Ya puedes volver al panel.' : estado.qrDataUrl ? 'Abre WhatsApp, ve a Dispositivos vinculados y escanea este codigo.' : 'Preparando codigo de vinculacion.'}</p>
     <small>Esta vista se actualiza automaticamente.</small>
   </main>
-  <script>
+  <script nonce="${nonce}">
     async function actualizar() {
       try {
         var response = await fetch('/whatsapp-qr/status', { cache: 'no-store' })

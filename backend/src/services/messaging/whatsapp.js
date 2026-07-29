@@ -59,16 +59,12 @@ const programarInicioWhatsApp = (delayMs = 3000) => {
   }, delayMs)
 }
 
-const limpiarSesionWhatsApp = async () => {
-  const authPath = obtenerAuthPath()
+const borrarRutaConReintentos = async (targetPath) => {
   let lastError = null
   for (let intento = 1; intento <= AUTH_CLEANUP_RETRIES; intento += 1) {
     try {
-      await fs.rm(authPath, { recursive: true, force: true })
-      ultimoQr = null
-      ultimoQrDataUrl = null
-      whatsappConectado = false
-      return
+      await fs.rm(targetPath, { recursive: true, force: true })
+      return true
     } catch (err) {
       lastError = err
       if (!['EBUSY', 'ENOTEMPTY', 'EPERM'].includes(err.code) || intento === AUTH_CLEANUP_RETRIES) break
@@ -76,6 +72,23 @@ const limpiarSesionWhatsApp = async () => {
     }
   }
   throw lastError
+}
+
+const limpiarSesionWhatsApp = async () => {
+  const authPath = obtenerAuthPath()
+  await fs.mkdir(authPath, { recursive: true })
+  const entries = await fs.readdir(authPath, { withFileTypes: true }).catch((err) => {
+    if (err.code === 'ENOENT') return []
+    throw err
+  })
+
+  for (const entry of entries) {
+    await borrarRutaConReintentos(path.join(authPath, entry.name))
+  }
+
+  ultimoQr = null
+  ultimoQrDataUrl = null
+  whatsappConectado = false
 }
 
 const iniciarWhatsApp = async (io) => {
@@ -119,7 +132,11 @@ const iniciarWhatsApp = async (io) => {
         programarInicioWhatsApp(3000)
       } else {
         console.log('Sesion cerrada. Limpiando credenciales para generar un QR nuevo.')
-        await limpiarSesionWhatsApp()
+        try {
+          await limpiarSesionWhatsApp()
+        } catch (err) {
+          console.error('No se pudo limpiar la sesion de WhatsApp:', err.message)
+        }
         programarInicioWhatsApp(1000)
       }
     }
