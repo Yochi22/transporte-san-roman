@@ -23,11 +23,13 @@ const MAX_AUDIO_BYTES = 20 * 1024 * 1024
 const AUTH_CLEANUP_RETRIES = 8
 const AUTH_CLEANUP_DELAY_MS = 350
 
-const obtenerAuthPath = () => (
+const obtenerAuthRootPath = () => (
   process.env.WHATSAPP_AUTH_PATH
     ? path.resolve(process.env.WHATSAPP_AUTH_PATH)
     : path.join(__dirname, '../../../.whatsapp-auth')
 )
+
+const obtenerAuthPath = () => path.join(obtenerAuthRootPath(), 'session')
 
 const enmascararJid = (jid = '') => {
   if (!jid) return null
