@@ -107,11 +107,11 @@ export default function GpsMap({ truckId, truckIds = [], initialPositions = [] }
       <div>
         <p className="text-sm font-medium">Rastreo satelital</p>
         <p className="text-xs text-neutral-500">
-            {currentPosition ? `${currentPosition.latitude.toFixed(6)}, ${currentPosition.longitude.toFixed(6)}${currentPositions.length > 1 ? ` · ${currentPositions.length} unidades` : ''}` : 'Sin posicion recibida'}
+            {currentPosition ? `${currentPosition.latitude.toFixed(6)}, ${currentPosition.longitude.toFixed(6)}${currentPositions.length > 1 ? ` · ${currentPositions.length} unidades` : ''}` : 'Sin posición recibida'}
         </p>
       </div>
       <span className={`rounded-md px-2 py-1 text-xs font-medium ${status === 'online' ? 'bg-emerald-50 text-emerald-700' : status === 'error' ? 'bg-red-50 text-red-700' : 'bg-neutral-100 text-neutral-600'}`}>
-          {currentPosition && status === 'online' ? 'EN VIVO' : status === 'error' ? 'ERROR' : 'SIN SENAL'}
+          {currentPosition && status === 'online' ? 'EN VIVO' : status === 'error' ? 'ERROR' : 'SIN SEÑAL'}
       </span>
       </div>
       {mobileMap ? (
@@ -128,7 +128,7 @@ export default function GpsMap({ truckId, truckIds = [], initialPositions = [] }
 }
 
 function MobileMap({ position }) {
-  if (!position) return <MapState text="Sin posicion recibida." />
+  if (!position) return <MapState text="Sin posición recibida." />
 
   return (
     <div>
@@ -149,13 +149,13 @@ function MobileMap({ position }) {
 }
 
 function PositionFallback({ position }) {
-  if (!position) return <MapState text="Sin posicion recibida." />
+  if (!position) return <MapState text="Sin posición recibida." />
   const mapsUrl = `https://maps.apple.com/?ll=${position.latitude},${position.longitude}`
 
   return (
     <div className="grid min-h-[260px] place-items-center bg-neutral-50 px-4 text-center">
       <div>
-        <p className="text-sm font-medium">Ubicacion recibida</p>
+        <p className="text-sm font-medium">Ubicación recibida</p>
         <p className="mt-1 text-xs text-neutral-500">{position.latitude.toFixed(6)}, {position.longitude.toFixed(6)}</p>
         <a href={mapsUrl} target="_blank" rel="noreferrer" className="mt-3 inline-flex h-9 items-center rounded-md bg-neutral-950 px-3 text-[13px] font-medium text-white">
           Abrir en Mapas

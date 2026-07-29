@@ -74,7 +74,7 @@ const confirmAction = (title, text, confirmButtonText = 'Confirmar') => Swal.fir
   ...alertOptions,
   imageUrl: logo,
   imageWidth: 112,
-  imageAlt: 'Transporte San Roman',
+  imageAlt: 'Transporte San Román',
   title,
   text,
   showCancelButton: true,
@@ -154,7 +154,7 @@ export default function App() {
   }, [])
 
   const confirmLogout = async () => {
-    const result = await confirmAction('Cerrar sesion', 'Tendras que ingresar nuevamente para acceder al panel.', 'Salir')
+    const result = await confirmAction('Cerrar sesión', 'Tendrás que ingresar nuevamente para acceder al panel.', 'Salir')
     if (result.isConfirmed) {
       try {
         await api.post('/auth/logout', {})
@@ -222,7 +222,7 @@ export default function App() {
   const reiniciarWhatsapp = useCallback(async () => {
     const result = await confirmAction(
       'Reiniciar WhatsApp',
-      'Se cerrara la sesion actual y se generara un QR nuevo para vincular el telefono.',
+      'Se cerrará la sesión actual y se generará un QR nuevo para vincular el teléfono.',
       'Reiniciar'
     )
     if (!result.isConfirmed) return
@@ -347,16 +347,16 @@ export default function App() {
     <div className="min-h-screen bg-stone-50 text-neutral-950">
       <div className="flex min-h-screen">
         <aside className={`fixed inset-y-0 left-0 z-40 w-72 border-r border-neutral-200 bg-white transition-transform lg:static lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-          <div className="flex h-full flex-col px-5 py-5">
+          <div className="flex h-full flex-col px-5 py-6">
             <div className="flex items-center gap-3 px-2 py-2">
-              <img src={logo} alt="Transporte San Roman" className="h-12 w-20 rounded-md object-cover object-center" />
+              <img src={logo} alt="Transporte San Román" className="h-12 w-20 rounded-md object-cover object-center" />
               <div>
-                <p className="text-sm font-semibold tracking-wide">San Roman</p>
+                <p className="text-sm font-semibold tracking-wide">San Román</p>
                 <p className="text-xs text-neutral-500">Control operativo</p>
               </div>
             </div>
 
-            <nav className="mt-8 space-y-1">
+            <nav className="mt-8 space-y-1.5">
               {visibleTabs.map((tab) => {
                 const Icon = tab.icon
                 const active = activeTab === tab.id
@@ -392,14 +392,14 @@ export default function App() {
         {menuOpen && <button className="fixed inset-0 z-30 bg-neutral-950/20 lg:hidden" onClick={() => setMenuOpen(false)} />}
 
         <main className="min-w-0 flex-1">
-          <header className="sticky top-0 z-20 border-b border-neutral-200 bg-stone-50/95 backdrop-blur">
-            <div className="flex min-h-16 items-center gap-3 px-4 sm:px-6 lg:px-8">
+          <header className="sticky top-0 z-20 border-b border-neutral-200 bg-stone-50/90 backdrop-blur-xl">
+            <div className="flex min-h-[72px] items-center gap-3 px-4 sm:px-6 lg:px-8">
               <button onClick={() => setMenuOpen(true)} className="grid h-10 w-10 place-items-center rounded-md border border-neutral-200 bg-white lg:hidden">
                 <Menu size={18} />
               </button>
               <div className="min-w-0 flex-1">
                 <h1 className="truncate text-base font-semibold">{pageTitle(activeTab)}</h1>
-                <p className="hidden text-xs text-neutral-500 sm:block">{data.activos.length} viajes en curso  -  {data.pendientesLiquidacion.length} por liquidar</p>
+                <p className="hidden text-xs text-neutral-500 sm:block">{data.activos.length} viajes en curso · {data.pendientesLiquidacion.length} por liquidar</p>
               </div>
               <div className="relative hidden w-full max-w-sm md:block">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={16} />
@@ -413,7 +413,7 @@ export default function App() {
             </div>
           </header>
 
-          <div className="px-4 py-5 sm:px-6 lg:px-8">
+          <div className="px-4 py-6 sm:px-6 lg:px-8">
             <div className="relative mb-4 md:hidden">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={16} />
               <input
@@ -552,7 +552,7 @@ function Monitor({
         </div>
 
         <div className="space-y-3">
-          <SectionTitle title="Ultimos reportes" subtitle="Mensajes recibidos de choferes" />
+          <SectionTitle title="Últimos reportes" subtitle="Mensajes recibidos de choferes" />
           <div className="rounded-md border border-neutral-200 bg-white">
             {latestReports.map((reporte) => (
               <ReportRow key={reporte.id} reporte={reporte} compact />
@@ -582,8 +582,8 @@ function WhatsAppStatusCard({ status, onOpenQr, onReset, onRefresh }) {
           </div>
           <p className="mt-1 text-xs text-neutral-500">
             {conectado
-              ? 'La sesion esta activa para recibir reportes.'
-              : 'Abre el QR para vincular el telefono operativo.'}
+              ? 'La sesión está activa para recibir reportes.'
+              : 'Abre el QR para vincular el teléfono operativo.'}
           </p>
         </div>
 
@@ -612,7 +612,7 @@ function WhatsAppStatusCard({ status, onOpenQr, onReset, onRefresh }) {
             className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-neutral-950 px-3 text-[13px] font-medium text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <RefreshCw size={16} />
-            Reiniciar vinculacion
+            Reiniciar vinculación
           </button>
         </div>
       </div>
@@ -642,7 +642,7 @@ function ReportesTableView({ reportes, onSelectViaje }) {
       <section className="border border-neutral-200 bg-white">
         <div className="flex flex-col gap-3 border-b border-neutral-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <SectionTitle title="Reportes de choferes" subtitle={`${reportes.length} registros recientes`} />
-          <span className="text-xs text-neutral-500">Conservacion automatica: 5 dias</span>
+          <span className="text-xs text-neutral-500">Conservación automática: 5 días</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -737,7 +737,7 @@ function ReportesView({ reportes, onSelectViaje }) {
       <section className="rounded-md border border-neutral-200 bg-white">
         <div className="flex flex-col gap-3 border-b border-neutral-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
           <SectionTitle title="Reportes de choferes" subtitle={`${reportes.length} registros recientes`} />
-          <span className="text-xs text-neutral-500">Conservacion automatica: 5 dias</span>
+          <span className="text-xs text-neutral-500">Conservación automática: 5 días</span>
         </div>
 
         <div className="divide-y divide-neutral-100">
@@ -2671,13 +2671,13 @@ function Login({ onLogin }) {
 
   return (
     <div className="grid min-h-screen place-items-center bg-stone-50 px-4">
-      <form onSubmit={submit} className="w-full max-w-sm rounded-md border border-neutral-200 bg-white p-6 shadow-sm">
+      <form onSubmit={submit} className="w-full max-w-sm rounded-md border border-neutral-200 bg-white p-6 shadow-sm sm:p-7">
         <div className="mb-6 flex items-center gap-3">
           <div className="grid h-11 w-11 place-items-center rounded-md bg-neutral-950 text-white">
-            <img src={logo} alt="Transporte San Roman" className="h-11 w-16 rounded-md object-cover" />
+            <img src={logo} alt="Transporte San Román" className="h-11 w-16 rounded-md object-cover" />
           </div>
           <div>
-            <h1 className="text-base font-semibold">San Roman</h1>
+            <h1 className="text-base font-semibold">San Román</h1>
             <p className="text-xs text-neutral-500">Panel operativo</p>
           </div>
         </div>
@@ -2715,7 +2715,7 @@ function Metric({ title, value, icon: Icon, tone = 'neutral' }) {
           <Icon size={16} />
         </div>
       </div>
-      <p className="mt-3 text-2xl font-semibold">{value}</p>
+      <p className="mt-4 text-3xl font-semibold tabular-nums">{value}</p>
     </div>
   )
 }
@@ -3258,7 +3258,7 @@ function Pagination({ page, total, pageSize, onChange }) {
 
   return (
     <div className="flex flex-col gap-3 text-xs text-neutral-500 sm:flex-row sm:items-center sm:justify-between">
-      <span>Mostrando {from}-{to} de {total} registros  -  Pagina {safePage} de {pages}</span>
+      <span>Mostrando {from}-{to} de {total} registros · Página {safePage} de {pages}</span>
       <div className="flex flex-wrap gap-2">
         <button disabled={safePage <= 1} onClick={() => onChange(1)} className="btn-secondary h-8 px-3">Primera</button>
         <button disabled={safePage <= 1} onClick={() => onChange(safePage - 1)} className="btn-secondary h-8 px-3">Anterior</button>
