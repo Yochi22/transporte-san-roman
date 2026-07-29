@@ -1,16 +1,18 @@
 const prisma = require('../../config/database')
+
 const TIPOS_GASTO = new Set(['PEAJE', 'COMIDA', 'HOSPEDAJE', 'REPARACION', 'OTRO'])
+const MONEDAS = new Set(['VES', 'USD'])
 
 const crear = async (datos, origen = 'ADMIN') => {
-  const { viajeId, tipo, monto, descripcion } = datos
+  const { viajeId, tipo, descripcion } = datos
   const viaje = await prisma.viaje.findUniqueOrThrow({ where: { id: viajeId } })
-  const montoNumerico = Number(monto)
   const descripcionNormalizada = descripcion?.trim() || null
+  const moneda = normalizarMoneda(datos.moneda || (tipo === 'COMIDA' ? 'USD' : 'VES'))
+  const montoOriginal = normalizarMonto(datos.monto, 'Monto de gasto')
+  const tasaBcv = moneda === 'USD' ? normalizarMonto(datos.tasaBcv, 'Tasa BCV') : null
+  const montoNumerico = moneda === 'USD' ? redondearMonto(montoOriginal * tasaBcv) : montoOriginal
 
   if (!TIPOS_GASTO.has(tipo)) throw { status: 400, message: 'Tipo de gasto invalido' }
-  if (!Number.isFinite(montoNumerico) || montoNumerico <= 0 || montoNumerico > 1_000_000_000) {
-    throw { status: 400, message: 'Monto de gasto invalido' }
-  }
   if (descripcionNormalizada?.length > 500) {
     throw { status: 400, message: 'Descripcion demasiado larga' }
   }
@@ -26,6 +28,9 @@ const crear = async (datos, origen = 'ADMIN') => {
         tipo,
         origen,
         monto: montoNumerico,
+        moneda,
+        montoOriginal,
+        tasaBcv,
         descripcion: descripcionNormalizada
       }
     })
@@ -49,5 +54,21 @@ const eliminar = async (id) => {
     return gasto
   })
 }
+
+const normalizarMoneda = (moneda) => {
+  const value = String(moneda || '').trim().toUpperCase()
+  if (!MONEDAS.has(value)) throw { status: 400, message: 'Moneda invalida' }
+  return value
+}
+
+const normalizarMonto = (valor, campo) => {
+  const monto = Number(valor)
+  if (!Number.isFinite(monto) || monto <= 0 || monto > 1_000_000_000) {
+    throw { status: 400, message: campo + ' invalido' }
+  }
+  return monto
+}
+
+const redondearMonto = (valor) => Math.round(Number(valor) * 100) / 100
 
 module.exports = { crear, eliminar }

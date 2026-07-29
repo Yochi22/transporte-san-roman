@@ -351,13 +351,6 @@ const listarPendientesLiquidacion = async (filtros = {}) => {
   return { items, total, page, pageSize }
 }
 
-const actualizarHonorarios = async (id, honorariosChofer) => {
-  const monto = validarMonto(honorariosChofer, 'Monto de honorarios')
-  return prisma.viaje.update({
-    where: { id },
-    data: { honorariosChofer: monto }
-  })
-}
 
 const cerrar = async (id, soloLogistica = false, numeroGuia = null) => {
   if (numeroGuia !== null && (typeof numeroGuia !== 'string' || numeroGuia.trim().length > 100)) {
@@ -439,7 +432,6 @@ module.exports = {
   recargarViaticos,
   confirmarDocumentacion,
   listarPendientesLiquidacion,
-  actualizarHonorarios,
   agregarTramo,
   actualizarParada
 }

@@ -1491,7 +1491,7 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
       )}
 
       <section className="rounded-md border border-neutral-200 bg-white p-4 sm:p-5">
-        <SectionTitle title="Nuevo despacho" subtitle="Chofer, unidad, viaticos y ruta" />
+        <SectionTitle title="Nuevo despacho" subtitle="Chofer, unidad, viaticos en Bs y ruta" />
         <div className="mt-4 grid gap-4 md:grid-cols-3">
           <Field label="Chofer">
             <select required value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value, camionIds: [] })} className="input">
@@ -1514,8 +1514,8 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
               ))}
             </div>
           </Field>
-          <Field label="Viaticos (opcional)">
-            <input type="number" min="0" step="0.01" value={form.viaticosDepositados} onChange={(event) => setForm({ ...form, viaticosDepositados: event.target.value })} className="input" placeholder="Sin viaticos" />
+          <Field label="Viaticos en Bs (opcional)">
+            <input type="number" min="0" step="0.01" value={form.viaticosDepositados} onChange={(event) => setForm({ ...form, viaticosDepositados: event.target.value })} className="input" placeholder="Sin viaticos en Bs" />
           </Field>
         </div>
       </section>
@@ -2148,22 +2148,9 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
     return fecha >= desde && (!choferId || viaje.choferId === choferId)
   })
   const pageItems = paginate(filtrados, page, pageSize)
-  const totalHonorarios = filtrados.reduce((total, viaje) => total + Number(viaje.honorariosChofer || 0), 0)
   const totalGastos = filtrados.reduce((total, viaje) => total + Number(viaje.viaticosGastados || 0), 0)
   const totalDepositado = filtrados.reduce((total, viaje) => total + Number(viaje.viaticosDepositados || 0), 0)
   useClampPage(page, filtrados.length, pageSize, setPage)
-
-  const editarHonorarios = async (viaje) => {
-    const result = await requestNumber(`Honorarios para ${viaje.chofer?.nombre}`, Number(viaje.honorariosChofer || 0))
-    if (!result.isConfirmed) return
-    try {
-      await api.patch(`/viajes/${viaje.id}/honorarios`, { honorariosChofer: Number(result.value) })
-      await notifySuccess('Honorarios actualizados')
-      onDone()
-    } catch (err) {
-      await notifyError(err.response?.data?.mensaje || 'No se pudieron actualizar los honorarios.')
-    }
-  }
 
   const descargarPdf = async () => {
     const [{ jsPDF }, { default: autoTable }] = await Promise.all([
@@ -2185,7 +2172,7 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
     autoTable(doc, {
       startY: 38,
       theme: 'grid',
-      head: [['Viaje', 'Guia', 'Chofer', 'Unidad', 'Ruta', 'Liquidado', 'Viaticos', 'Gastos', 'Honorarios']],
+      head: [['Viaje', 'Guia', 'Chofer', 'Unidad', 'Ruta', 'Liquidado', 'Viaticos Bs', 'Gastos Bs']],
       body: filtrados.map((viaje) => [
         viaje.codigo,
         viaje.numeroGuia || 'Sin guia',
@@ -2195,7 +2182,6 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
         formatDate(viaje.fechaLiquidacion || viaje.fechaCierre),
         money(viaje.viaticosDepositados),
         money(viaje.viaticosGastados),
-        money(viaje.honorariosChofer),
       ]),
       styles: { fontSize: 7, cellPadding: 2 },
       headStyles: { fillColor: [24, 24, 27], textColor: 255 },
@@ -2208,7 +2194,7 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
         gasto.tipo,
         gasto.origen || 'ADMIN',
         gasto.descripcion || '',
-        money(gasto.monto),
+        gasto.moneda === 'USD' ? `${usd(gasto.montoOriginal || gasto.monto)} / ${money(gasto.monto)}` : money(gasto.monto),
       ])
     )
 
@@ -2231,23 +2217,21 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
     doc.text(`Viajes: ${filtrados.length}`, 20, y + 7)
     doc.text(`Viaticos: ${money(totalDepositado)}`, 65, y + 7)
     doc.text(`Gastos: ${money(totalGastos)}`, 130, y + 7)
-    doc.text(`Honorarios: ${money(totalHonorarios)}`, 190, y + 7)
-    doc.text(`Total egresos: ${money(totalGastos + totalHonorarios)}`, 20, y + 14)
+    doc.text(`Total gastos: ${money(totalGastos)}`, 20, y + 14)
     doc.save(`liquidaciones-${periodo}-${new Date().toISOString().slice(0, 10)}.pdf`)
     await notifySuccess('PDF generado', 'El resumen de liquidaciones fue descargado.')
   }
 
   return (
     <div className="space-y-5">
-      <section className="grid gap-3 sm:grid-cols-3">
+      <section className="grid gap-3 sm:grid-cols-2">
         <Metric title="Viajes liquidados" value={filtrados.length} icon={FileCheck} />
-        <Metric title="Honorarios choferes" value={money(totalHonorarios)} icon={User} tone="blue" />
         <Metric title="Gastos liquidados" value={money(totalGastos)} icon={Wallet} tone="emerald" />
       </section>
 
       <section className="rounded-md border border-neutral-200 bg-white">
         <div className="flex flex-col gap-3 border-b border-neutral-100 px-4 py-4 md:flex-row md:items-center md:justify-between">
-          <SectionTitle title="Liquidaciones" subtitle="Honorarios por viaje y chofer" />
+          <SectionTitle title="Liquidaciones" subtitle="Viaticos en Bs, gastos y equivalencias BCV" />
           <div className="flex flex-wrap gap-2">
             <button onClick={descargarPdf} disabled={filtrados.length === 0} className="btn-primary">
               <Download size={16} />
@@ -2275,8 +2259,6 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
                 <th className="px-4 py-3">Guia</th>
                 <th className="px-4 py-3">Fecha</th>
                 <th className="px-4 py-3">Gastos</th>
-                <th className="px-4 py-3">Honorarios</th>
-                <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody>
@@ -2287,13 +2269,6 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
                   <td className="px-4 py-3">{viaje.numeroGuia || 'Sin guia'}</td>
                   <td className="px-4 py-3 text-neutral-500">{formatDate(viaje.fechaLiquidacion || viaje.fechaCierre)}</td>
                   <td className="px-4 py-3">{money(viaje.viaticosGastados)}</td>
-                  <td className="px-4 py-3 font-medium">{money(viaje.honorariosChofer)}</td>
-                  <td className="px-4 py-3 text-right">
-                    <button onClick={() => editarHonorarios(viaje)} className="btn-secondary">
-                      <Edit3 size={14} />
-                      Honorarios
-                    </button>
-                  </td>
                 </tr>
               ))}
             </tbody>
@@ -2310,7 +2285,8 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
 
 function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   const [saving, setSaving] = useState('')
-  const [gastoForm, setGastoForm] = useState({ tipo: 'PEAJE', monto: '', descripcion: '' })
+  const [gastoForm, setGastoForm] = useState({ tipo: 'PEAJE', monto: '', moneda: 'VES', tasaBcv: '', descripcion: '' })
+  const [tasaBcv, setTasaBcv] = useState(null)
   const [showGastoForm, setShowGastoForm] = useState(false)
   const [reportPage, setReportPage] = useState(1)
   const [noveltyPage, setNoveltyPage] = useState(1)
@@ -2330,13 +2306,28 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   useClampPage(noveltyPage, novedades.length, detailPageSize, setNoveltyPage)
   useClampPage(expensePage, viaje.gastos?.length || 0, detailPageSize, setExpensePage)
 
+  const cargarTasaBcv = async () => {
+    try {
+      const response = await api.get('/tasas/bcv')
+      const tasa = response.data?.data?.tasa
+      if (tasa) {
+        setTasaBcv(tasa)
+        setGastoForm((current) => current.tasaBcv ? current : { ...current, tasaBcv: String(tasa) })
+      }
+    } catch (error) {}
+  }
+
+  useEffect(() => {
+    if (showGastoForm) cargarTasaBcv()
+  }, [showGastoForm])
+
   const recargar = async () => {
-    const result = await requestNumber('Recargar viaticos')
+    const result = await requestNumber('Recargar viaticos en Bs')
     if (!result.isConfirmed) return
     setSaving('recarga')
     try {
       await api.patch(`/viajes/${viaje.id}/recarga`, { monto: Number(result.value) })
-      await notifySuccess('Viaticos recargados')
+      await notifySuccess('Viaticos en Bs recargados')
       onDone()
     } catch (err) {
       await notifyError(err.response?.data?.mensaje || 'No se pudieron recargar los viaticos.')
@@ -2402,9 +2393,11 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
         viajeId: viaje.id,
         tipo: gastoForm.tipo,
         monto: Number(gastoForm.monto),
+        moneda: gastoForm.moneda,
+        tasaBcv: gastoForm.moneda === 'USD' ? Number(gastoForm.tasaBcv) : null,
         descripcion: gastoForm.descripcion,
       })
-      setGastoForm({ tipo: 'PEAJE', monto: '', descripcion: '' })
+      setGastoForm({ tipo: 'PEAJE', monto: '', moneda: 'VES', tasaBcv: tasaBcv ? String(tasaBcv) : '', descripcion: '' })
       setShowGastoForm(false)
       await notifySuccess('Gasto registrado')
       onDone()
@@ -2449,7 +2442,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
             <Fact icon={User} label="Chofer" value={viaje.chofer?.nombre || 'Sin chofer'} />
             <Fact icon={Truck} label="Unidades" value={formatTripUnits(viaje) || 'Sin unidades'} />
             <Fact icon={MapPin} label="Ultima ubicacion" value={<LocationValue data={ultimaUbicacion} />} />
-            <Fact icon={Banknote} label="Disponible" value={money(balance(viaje))} />
+            <Fact icon={Banknote} label="Disponible en Bs" value={money(balance(viaje))} />
           </section>
           {viaje.numeroGuia && <Banner tone="neutral" icon={FileCheck} text={`Guia entregada: ${viaje.numeroGuia}`} />}
 
@@ -2500,9 +2493,9 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
 
           {isAdmin && (
             <section className="grid gap-3 sm:grid-cols-3">
-              <Fact icon={Wallet} label="Viaticos depositados" value={money(viaje.viaticosDepositados)} />
-              <Fact icon={Banknote} label="Gastos acumulados" value={money(totalGastado)} />
-              <Fact icon={Check} label="Disponible" value={money(balance(viaje))} />
+              <Fact icon={Wallet} label="Viaticos en Bs" value={money(viaje.viaticosDepositados)} />
+              <Fact icon={Banknote} label="Gastos en Bs" value={money(totalGastado)} />
+              <Fact icon={Check} label="Disponible en Bs" value={money(balance(viaje))} />
             </section>
           )}
 
@@ -2533,14 +2526,32 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
               </div>
               {showGastoForm && (
                 <form onSubmit={registrarGasto} className="grid gap-2 rounded-md border border-neutral-200 bg-neutral-50 p-3">
-                  <select value={gastoForm.tipo} onChange={(event) => setGastoForm({ ...gastoForm, tipo: event.target.value })} className="input">
+                  <select value={gastoForm.tipo} onChange={(event) => {
+                    const tipo = event.target.value
+                    setGastoForm({ ...gastoForm, tipo, moneda: tipo === 'COMIDA' ? 'USD' : gastoForm.moneda })
+                  }} className="input">
                     <option value="PEAJE">Peaje</option>
                     <option value="COMIDA">Comida</option>
                     <option value="HOSPEDAJE">Hospedaje</option>
                     <option value="REPARACION">Reparacion</option>
                     <option value="OTRO">Otro</option>
                   </select>
-                  <input required type="number" min="0.01" step="0.01" value={gastoForm.monto} onChange={(event) => setGastoForm({ ...gastoForm, monto: event.target.value })} className="input" placeholder="Monto" />
+                  <div className="grid gap-2 sm:grid-cols-[1fr_120px]">
+                    <input required type="number" min="0.01" step="0.01" value={gastoForm.monto} onChange={(event) => setGastoForm({ ...gastoForm, monto: event.target.value })} className="input" placeholder={gastoForm.moneda === 'USD' ? 'Monto USD' : 'Monto Bs'} />
+                    <select value={gastoForm.moneda} onChange={(event) => setGastoForm({ ...gastoForm, moneda: event.target.value })} className="input">
+                      <option value="VES">Bs</option>
+                      <option value="USD">USD</option>
+                    </select>
+                  </div>
+                  {gastoForm.moneda === 'USD' && (
+                    <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                      <input required type="number" min="0.01" step="0.0001" value={gastoForm.tasaBcv} onChange={(event) => setGastoForm({ ...gastoForm, tasaBcv: event.target.value })} className="input" placeholder="Tasa BCV" />
+                      <button type="button" onClick={cargarTasaBcv} className="btn-secondary">BCV</button>
+                    </div>
+                  )}
+                  {gastoForm.moneda === 'USD' && gastoForm.monto && gastoForm.tasaBcv && (
+                    <p className="text-xs text-neutral-500">Equivalente: {money(Number(gastoForm.monto) * Number(gastoForm.tasaBcv))}</p>
+                  )}
                   <input value={gastoForm.descripcion} onChange={(event) => setGastoForm({ ...gastoForm, descripcion: event.target.value })} className="input" placeholder="Descripcion" />
                   <button disabled={Boolean(saving)} className="btn-primary">
                     <Check size={16} />
@@ -2553,7 +2564,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
                   <div key={gasto.id} className="flex items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3 last:border-b-0">
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{gasto.tipo}  -  {gasto.origen || 'ADMIN'}</p>
-                      <p className="truncate text-xs text-neutral-500">{gasto.descripcion || 'Gasto'}</p>
+                      <p className="truncate text-xs text-neutral-500">{formatExpenseDetail(gasto)}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-red-600">-{money(gasto.monto)}</span>
@@ -3147,6 +3158,13 @@ function formatParadasRoute(paradas) {
   return `${paradas[0].ciudad} -> ${paradas[paradas.length - 1].ciudad}`
 }
 
+function formatExpenseDetail(gasto) {
+  const descripcion = gasto.descripcion || 'Gasto'
+  if (gasto.moneda === 'USD') {
+    return descripcion + ' - ' + usd(gasto.montoOriginal || gasto.monto) + ' a BCV ' + money(gasto.tasaBcv || 0)
+  }
+  return descripcion
+}
 function balance(viaje) {
   const depositado = Number(viaje.viaticosDepositados) || 0
   const gastado = (viaje.gastos || []).reduce((acc, gasto) => acc + Number(gasto.monto), 0)

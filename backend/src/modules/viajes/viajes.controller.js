@@ -11,7 +11,6 @@ const filtrarFinanzas = (valor, rol) => {
   const {
     viaticosDepositados,
     viaticosGastados,
-    honorariosChofer,
     fechaLiquidacion,
     numeroGuia,
     gastos,
@@ -97,7 +96,7 @@ const actualizarParada = async (req, res) => {
 const recargarViaticos = async (req, res) => {
   const { monto } = req.body
   const viaje = await service.recargarViaticos(req.params.id, monto)
-  return ok(res, viaje, 'Viaticos recargados')
+  return ok(res, viaje, 'Viaticos en Bs recargados')
 }
 
 const confirmarDocumentacion = async (req, res) => {
@@ -121,11 +120,6 @@ const listarPendientesLiquidacion = async (req, res) => {
   return ok(res, pendientes)
 }
 
-const actualizarHonorarios = async (req, res) => {
-  const viaje = await service.actualizarHonorarios(req.params.id, req.body.honorariosChofer)
-  return ok(res, viaje, 'Honorarios actualizados')
-}
-
 module.exports = {
   listar,
   listarArchivo,
@@ -134,7 +128,6 @@ module.exports = {
   actualizarParada,
   cerrar,
   listarPendientesLiquidacion,
-  actualizarHonorarios,
   recargarViaticos,
   confirmarDocumentacion
 }

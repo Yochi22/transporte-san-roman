@@ -14,6 +14,5 @@ router.patch('/:id/paradas/:paradaId', ctrl.actualizarParada)
 router.patch('/:id/recarga', soloAdmin, ctrl.recargarViaticos)
 router.patch('/:id/confirmar-documentacion', soloAdmin, ctrl.confirmarDocumentacion)
 router.post('/:id/cerrar', ctrl.cerrar)
-router.patch('/:id/honorarios', soloAdmin, ctrl.actualizarHonorarios)
 
 module.exports = router
