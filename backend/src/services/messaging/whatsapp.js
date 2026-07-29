@@ -45,6 +45,23 @@ const enviarMensaje = async (destino, texto) => {
   }
 }
 
+const programarInicioWhatsApp = (delayMs = 3000) => {
+  if (reconnectTimer) clearTimeout(reconnectTimer)
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null
+    iniciarWhatsApp(socketIO).catch((err) => {
+      console.error('No se pudo iniciar WhatsApp:', err.message)
+    })
+  }, delayMs)
+}
+
+const limpiarSesionWhatsApp = async () => {
+  await fs.rm(obtenerAuthPath(), { recursive: true, force: true })
+  ultimoQr = null
+  ultimoQrDataUrl = null
+  whatsappConectado = false
+}
+
 const iniciarWhatsApp = async (io) => {
   socketIO = io || socketIO
   const authPath = obtenerAuthPath()
@@ -76,20 +93,18 @@ const iniciarWhatsApp = async (io) => {
     if (connection === 'close') {
       whatsappConectado = false
       if (reinicioManual) return
-      const shouldReconnect =
-        lastDisconnect?.error instanceof Boom
-          ? lastDisconnect.error.output?.statusCode !== DisconnectReason.loggedOut
-          : true
+      const statusCode = lastDisconnect?.error instanceof Boom
+        ? lastDisconnect.error.output?.statusCode
+        : null
+      const shouldReconnect = statusCode !== DisconnectReason.loggedOut
 
       console.log('WhatsApp desconectado. Reconectando:', shouldReconnect)
       if (shouldReconnect) {
-        if (reconnectTimer) clearTimeout(reconnectTimer)
-        reconnectTimer = setTimeout(() => {
-          reconnectTimer = null
-          iniciarWhatsApp(socketIO)
-        }, 3000)
+        programarInicioWhatsApp(3000)
       } else {
-        console.log('Sesión cerrada. Escanea el QR nuevamente.')
+        console.log('Sesion cerrada. Limpiando credenciales para generar un QR nuevo.')
+        await limpiarSesionWhatsApp()
+        programarInicioWhatsApp(1000)
       }
     }
 
@@ -159,12 +174,12 @@ const iniciarWhatsApp = async (io) => {
           if (transcripcion) {
             texto = transcripcion
           } else {
-            await enviarMensaje(remoteJid, '⚠️ No pude entender el audio. Por favor intenta de nuevo o escribe el reporte.')
+            await enviarMensaje(remoteJid, 'No pude entender el audio. Por favor intenta de nuevo o escribe el reporte.')
             continue
           }
         } catch (err) {
           console.error('[WhatsApp] Error procesando audio:', err.message)
-          await enviarMensaje(remoteJid, '❌ Hubo un error al procesar tu nota de voz.')
+          await enviarMensaje(remoteJid, 'Hubo un error al procesar tu nota de voz.')
           continue
         }
       }
@@ -221,7 +236,7 @@ const reiniciarWhatsApp = async () => {
       }
     }
 
-    await fs.rm(obtenerAuthPath(), { recursive: true, force: true })
+    await limpiarSesionWhatsApp()
   } finally {
     reinicioManual = false
   }
