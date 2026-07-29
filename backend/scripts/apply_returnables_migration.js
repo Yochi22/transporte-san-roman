@@ -8,7 +8,8 @@ const createEnum = async (name, values) => {
 }
 
 const main = async () => {
-  await createEnum('TipoRetornable', ['CARTON', 'PALETA', 'OTRO'])
+  await createEnum('TipoRetornable', ['CARTON', 'PALETA', 'SEPARADOR', 'OTRO'])
+  await exec(`ALTER TYPE "TipoRetornable" ADD VALUE IF NOT EXISTS 'SEPARADOR'`)
   await createEnum('EstadoRetornable', ['PENDIENTE', 'PARCIAL', 'DEVUELTO', 'AJUSTADO'])
   await createEnum('TipoMovimientoRetornable', ['REGISTRO', 'UBICACION', 'TRANSFERENCIA', 'DEVOLUCION_PARCIAL', 'DEVOLUCION_TOTAL', 'AJUSTE'])
 

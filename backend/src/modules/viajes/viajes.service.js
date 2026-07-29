@@ -156,7 +156,6 @@ const crear = async (datos, creadoPorId) => {
   }
   const paradas = validarParadas(datos.paradas)
   const viaticosDepositados = validarMonto(datos.viaticosDepositados, 'Monto de viaticos')
-  const odometroInicial = validarNumeroOpcional(datos.odometroInicial, 'Odometro inicial', { entero: true })
   const chofer = await prisma.chofer.findUniqueOrThrow({
     where: { id: choferId },
     include: {
@@ -221,7 +220,6 @@ const crear = async (datos, creadoPorId) => {
       choferId,
       creadoPorId,
       viaticosDepositados,
-      odometroInicial,
       estadoLogistico: 'EN_CURSO',
       fechaInicio: primeraCarga ? new Date(primeraCarga.fechaProgramada) : null,
       unidades: {
@@ -361,7 +359,7 @@ const actualizarHonorarios = async (id, honorariosChofer) => {
   })
 }
 
-const cerrar = async (id, soloLogistica = false, numeroGuia = null, control = {}) => {
+const cerrar = async (id, soloLogistica = false, numeroGuia = null) => {
   if (numeroGuia !== null && (typeof numeroGuia !== 'string' || numeroGuia.trim().length > 100)) {
     throw { status: 400, message: 'Numero de guia invalido' }
   }
@@ -378,7 +376,6 @@ const cerrar = async (id, soloLogistica = false, numeroGuia = null, control = {}
 
   const totalGastado = viaje.gastos.reduce((acc, g) => acc + Number(g.monto), 0)
   const guia = numeroGuia?.trim() || viaje.numeroGuia
-  const odometroFinal = validarNumeroOpcional(control.odometroFinal, 'Odometro final', { entero: true })
 
   return prisma.$transaction(async (tx) => {
     await tx.parada.updateMany({
@@ -394,8 +391,7 @@ const cerrar = async (id, soloLogistica = false, numeroGuia = null, control = {}
         viaticosGastados: totalGastado,
         estadoFinanciero: soloLogistica ? 'PENDIENTE' : 'LIQUIDADO',
         fechaLiquidacion: soloLogistica ? null : new Date(),
-        fechaCierre: new Date(),
-        odometroFinal: odometroFinal ?? viaje.odometroFinal
+        fechaCierre: new Date()
       }
     })
 

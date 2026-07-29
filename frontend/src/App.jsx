@@ -12,6 +12,7 @@ import {
   Check,
   ChevronRight,
   ClipboardList,
+  Package,
   Calculator,
   Download,
   Edit3,
@@ -100,7 +101,7 @@ const tabs = [
   { id: 'monitor', label: 'Resumen', icon: LayoutDashboard },
   { id: 'viajes', label: 'Viajes', icon: Route },
   { id: 'reportes', label: 'Reportes', icon: ClipboardList },
-  { id: 'retornables', label: 'Retornables', icon: ClipboardList },
+  { id: 'retornables', label: 'Retornables', icon: Package },
   { id: 'despacho', label: 'Agendamiento', icon: Send },
   { id: 'recursos', label: 'Recursos', icon: Users },
   { id: 'taller', label: 'Taller', icon: Wrench },
@@ -398,7 +399,7 @@ export default function App() {
               </button>
               <div className="min-w-0 flex-1">
                 <h1 className="truncate text-base font-semibold">{pageTitle(activeTab)}</h1>
-                <p className="hidden text-xs text-neutral-500 sm:block">{data.activos.length} viajes en curso Ãƒâ€šÃ‚Â· {data.pendientesLiquidacion.length} por liquidar</p>
+                <p className="hidden text-xs text-neutral-500 sm:block">{data.activos.length} viajes en curso  -  {data.pendientesLiquidacion.length} por liquidar</p>
               </div>
               <div className="relative hidden w-full max-w-sm md:block">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={16} />
@@ -705,7 +706,7 @@ function ReportesTableView({ reportes, onSelectViaje }) {
                           <div className="grid gap-4 text-sm md:grid-cols-[1.4fr_0.8fr_1fr]">
                             <InfoBlock label="Mensaje recibido" value={mensaje} />
                             <InfoBlock label="Ubicacion" value={reporte.ubicacion || 'Sin ubicacion reportada'} />
-                            <InfoBlock label="Viaje" value={viaje ? `${viaje.codigo} Ãƒâ€šÃ‚Â· ${formatRoute(viaje)}` : 'Sin viaje asociado'} />
+                            <InfoBlock label="Viaje" value={viaje ? `${viaje.codigo}  -  ${formatRoute(viaje)}` : 'Sin viaje asociado'} />
                           </div>
                         </td>
                       </tr>
@@ -757,7 +758,7 @@ function ReportesView({ reportes, onSelectViaje }) {
                     </div>
                     <h3 className="truncate text-sm font-semibold">{formatReportTitle(reporte)}</h3>
                     <p className="mt-1 text-xs text-neutral-500">
-                      {chofer}{viaje?.codigo ? ` Ãƒâ€šÃ‚Â· ${viaje.codigo}` : ''}
+                      {chofer}{viaje?.codigo ? `  -  ${viaje.codigo}` : ''}
                     </p>
                     {reporte.ubicacion && (
                       <p className="mt-1 truncate text-xs text-neutral-400">{reporte.ubicacion}</p>
@@ -789,7 +790,7 @@ function ReportesView({ reportes, onSelectViaje }) {
                   <div className="mt-4 grid gap-3 rounded-md border border-neutral-200 bg-stone-50 p-3 text-sm lg:grid-cols-3">
                     <InfoBlock label="Mensaje recibido" value={reporte.mensajeOriginal || 'Sin mensaje'} />
                     <InfoBlock label="Ubicacion" value={reporte.ubicacion || 'Sin ubicacion reportada'} />
-                    <InfoBlock label="Viaje" value={viaje ? `${viaje.codigo} Ãƒâ€šÃ‚Â· ${formatRoute(viaje)}` : 'Sin viaje asociado'} />
+                    <InfoBlock label="Viaje" value={viaje ? `${viaje.codigo}  -  ${formatRoute(viaje)}` : 'Sin viaje asociado'} />
                   </div>
                 )}
               </article>
@@ -935,7 +936,7 @@ function ArchivoLogistico({ onSelect }) {
             <StatusDot estado={viaje.estadoLogistico} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{viaje.codigo}</p>
-              <p className="truncate text-xs text-neutral-500">{viaje.chofer?.nombre || 'Sin chofer'} Ãƒâ€šÃ‚Â· {formatRoute(viaje)}</p>
+              <p className="truncate text-xs text-neutral-500">{viaje.chofer?.nombre || 'Sin chofer'}  -  {formatRoute(viaje)}</p>
             </div>
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium">{formatDate(viaje.fechaCierre)}</p>
@@ -967,7 +968,7 @@ function TripList({ title, viajes, onSelect }) {
             <StatusDot estado={viaje.estadoLogistico} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{viaje.codigo}</p>
-              <p className="truncate text-xs text-neutral-500">{viaje.chofer?.nombre || 'Sin chofer'} Ãƒâ€šÃ‚Â· {formatRoute(viaje)}</p>
+              <p className="truncate text-xs text-neutral-500">{viaje.chofer?.nombre || 'Sin chofer'}  -  {formatRoute(viaje)}</p>
             </div>
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium">{money(balance(viaje))}</p>
@@ -1122,6 +1123,10 @@ function RetornablesTripSection({ viaje, onDone }) {
   const [selected, setSelected] = useState(null)
   const [form, setForm] = useState(() => ({ ...emptyRetornableForm(), viajeId: viaje.id, choferId: viaje.choferId || '', camionId: tripUnitIds(viaje)[0] || '', ubicacion: 'En unidad' }))
   const camionesViaje = tripUnits(viaje)
+  const [page, setPage] = useState(1)
+  const pageSize = 6
+  const pageItems = paginate(items, page, pageSize)
+  useClampPage(page, items.length, pageSize, setPage)
 
   const cargar = useCallback(async () => {
     try {
@@ -1161,7 +1166,7 @@ function RetornablesTripSection({ viaje, onDone }) {
         <RetornableForm form={form} setForm={setForm} viajes={[viaje]} choferes={[viaje.chofer].filter(Boolean)} camiones={camionesViaje} onSubmit={submit} compact />
       )}
       <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">
-        {items.map((item) => {
+        {pageItems.map((item) => {
           const ultimo = item.movimientos?.[0]
           return (
             <button key={item.id} type="button" onClick={() => setSelected(item)} className="grid w-full gap-2 border-b border-neutral-100 px-4 py-3 text-left text-sm last:border-b-0 md:grid-cols-[1fr_110px_120px_1fr]">
@@ -1177,6 +1182,7 @@ function RetornablesTripSection({ viaje, onDone }) {
         })}
         {items.length === 0 && <Empty text="Sin retornables vinculados a este viaje." />}
       </div>
+      <Pagination page={page} total={items.length} pageSize={pageSize} onChange={setPage} />
       {selected && <RetornableDrawer item={selected} viajes={[viaje]} choferes={[viaje.chofer].filter(Boolean)} camiones={camionesViaje} onClose={() => setSelected(null)} onDone={async () => { await cargar(); onDone() }} />}
     </section>
   )
@@ -1188,6 +1194,7 @@ function RetornableForm({ form, setForm, viajes, choferes, camiones, onSubmit, c
       <select value={form.tipo} onChange={(event) => setForm({ ...form, tipo: event.target.value })} className="input">
         <option value="CARTON">Cartones</option>
         <option value="PALETA">Paletas</option>
+        <option value="SEPARADOR">Separadores</option>
         <option value="OTRO">Otro</option>
       </select>
       <input required value={form.empresa} onChange={(event) => setForm({ ...form, empresa: event.target.value })} className="input" placeholder="Empresa propietaria" />
@@ -1310,7 +1317,7 @@ function normalizarRetornablePayload(form) {
   }
 }
 function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
-  const [form, setForm] = useState({ choferId: '', camionIds: [], viaticosDepositados: '', odometroInicial: '' })
+  const [form, setForm] = useState({ choferId: '', camionIds: [], viaticosDepositados: '' })
   const [paradas, setParadas] = useState([
     { id: createClientId(), tipo: 'CARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
     { id: createClientId(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
@@ -1370,7 +1377,6 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
         camionIds: form.camionIds,
         choferId: form.choferId,
         viaticosDepositados: Number(form.viaticosDepositados) || 0,
-        odometroInicial: form.odometroInicial || null,
         paradas: paradas.map(({ tipo, lugar, ciudad, fechaProgramada, programacion }) => ({
           tipo,
           lugar,
@@ -1379,7 +1385,7 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
           cargarAlDescargar: tipo === 'CARGA' && programacion === 'AL_DESCARGAR',
         })),
       })
-      setForm({ choferId: '', camionIds: [], viaticosDepositados: '', odometroInicial: '' })
+      setForm({ choferId: '', camionIds: [], viaticosDepositados: '' })
       setParadas([
         { id: createClientId(), tipo: 'CARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
         { id: createClientId(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
@@ -1415,7 +1421,7 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
           <Field label="Chofer">
             <select required value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value, camionIds: [] })} className="input">
               <option value="">Seleccionar</option>
-              {choferes.map((chofer) => <option key={chofer.id} value={chofer.id}>{chofer.nombre} Ãƒâ€šÃ‚Â· {formatStatus(chofer.estadoCalculado)}</option>)}
+              {choferes.map((chofer) => <option key={chofer.id} value={chofer.id}>{chofer.nombre}  -  {formatStatus(chofer.estadoCalculado)}</option>)}
             </select>
           </Field>
           <Field label="Unidades del viaje">
@@ -1435,9 +1441,6 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
           </Field>
           <Field label="Viaticos (opcional)">
             <input type="number" min="0" step="0.01" value={form.viaticosDepositados} onChange={(event) => setForm({ ...form, viaticosDepositados: event.target.value })} className="input" placeholder="Sin viaticos" />
-          </Field>
-          <Field label="Km inicial (opcional)">
-            <input type="number" min="0" step="1" value={form.odometroInicial} onChange={(event) => setForm({ ...form, odometroInicial: event.target.value })} className="input" placeholder="Odometro" />
           </Field>
         </div>
       </section>
@@ -1659,7 +1662,7 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
               <input required value={form.cedula} onChange={(event) => setForm({ ...form, cedula: event.target.value })} className="input" placeholder="Cedula" />
               <input required value={form.telefono} onChange={(event) => setForm({ ...form, telefono: event.target.value })} className="input" placeholder="Telefono" />
               <select multiple value={form.unidadIds} onChange={(event) => setForm({ ...form, unidadIds: Array.from(event.target.selectedOptions).map((option) => option.value) })} className="input md:col-span-3 min-h-28">
-                {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)} Ãƒâ€šÃ‚Â· {formatStatus(camion.estadoCalculado)}</option>)}
+                {camiones.map((camion) => <option key={camion.id} value={camion.id}>{vehicleLabel(camion)}  -  {formatStatus(camion.estadoCalculado)}</option>)}
               </select>
             </>
           ) : (
@@ -2239,7 +2242,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   const [expensePage, setExpensePage] = useState(1)
   const [showLiquidarModal, setShowLiquidarModal] = useState(false)
   const [numeroGuia, setNumeroGuia] = useState(viaje.numeroGuia || '')
-  const [cierreForm, setCierreForm] = useState({ odometroFinal: viaje.odometroFinal || '' })
+  const [cierreForm, setCierreForm] = useState({})
   const detailPageSize = 8
   const tramos = groupByTramo(viaje.paradas || [])
   const totalGastado = (viaje.gastos || []).reduce((total, gasto) => total + Number(gasto.monto), 0)
@@ -2273,7 +2276,6 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
       const response = await api.post(`/viajes/${viaje.id}/cerrar`, {
         soloLogistica,
         numeroGuia: guia?.trim() || null,
-        odometroFinal: cierreForm.odometroFinal || null,
       })
       const actualizado = response.data?.data
       if (!soloLogistica && actualizado?.estadoFinanciero !== 'LIQUIDADO') {
@@ -2359,7 +2361,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
       <aside className="relative h-screen min-h-[100svh] w-full max-w-3xl overflow-y-auto bg-white shadow-xl">
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-4 sm:px-6">
           <div className="min-w-0">
-            <p className="text-xs font-medium text-neutral-500">{formatStatus(viaje.estadoLogistico)} Ãƒâ€šÃ‚Â· {formatStatus(viaje.estadoFinanciero)}</p>
+            <p className="text-xs font-medium text-neutral-500">{formatStatus(viaje.estadoLogistico)}  -  {formatStatus(viaje.estadoFinanciero)}</p>
             <h2 className="truncate text-lg font-semibold">{viaje.codigo}</h2>
           </div>
           <button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-md hover:bg-neutral-100">
@@ -2426,8 +2428,6 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
               <Fact icon={Wallet} label="Viaticos depositados" value={money(viaje.viaticosDepositados)} />
               <Fact icon={Banknote} label="Gastos acumulados" value={money(totalGastado)} />
               <Fact icon={Check} label="Disponible" value={money(balance(viaje))} />
-              <Fact icon={Truck} label="Km inicial" value={viaje.odometroInicial ?? 'Sin registro'} />
-              <Fact icon={Truck} label="Km final" value={viaje.odometroFinal ?? 'Sin registro'} />
             </section>
           )}
 
@@ -2450,7 +2450,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
 
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <SectionTitle title="Gastos" subtitle={`${viaje.gastos?.length || 0} registros Ãƒâ€šÃ‚Â· ${money(totalGastado)}`} />
+                <SectionTitle title="Gastos" subtitle={`${viaje.gastos?.length || 0} registros  -  ${money(totalGastado)}`} />
                 <button onClick={() => setShowGastoForm((value) => !value)} className="btn-secondary">
                   <Plus size={16} />
                   Registrar
@@ -2477,7 +2477,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
                 {paginate(viaje.gastos || [], expensePage, detailPageSize).map((gasto) => (
                   <div key={gasto.id} className="flex items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3 last:border-b-0">
                     <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{gasto.tipo} Ãƒâ€šÃ‚Â· {gasto.origen || 'ADMIN'}</p>
+                      <p className="truncate text-sm font-medium">{gasto.tipo}  -  {gasto.origen || 'ADMIN'}</p>
                       <p className="truncate text-xs text-neutral-500">{gasto.descripcion || 'Gasto'}</p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -2540,19 +2540,6 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
                 placeholder="Ej. GUIA-2026-001"
               />
             </Field>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Field label="Km final (opcional)">
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={cierreForm.odometroFinal}
-                  onChange={(event) => setCierreForm({ ...cierreForm, odometroFinal: event.target.value })}
-                  className="input"
-                  placeholder="Odometro final"
-                />
-              </Field>
-            </div>
             <div className="mt-5 grid gap-2 sm:grid-cols-2">
               <button onClick={() => ejecutarCierre(false, numeroGuia)} disabled={Boolean(saving)} className="btn-primary">
                 <Check size={16} />
@@ -2648,7 +2635,7 @@ function ReportRow({ reporte, compact = false }) {
   const titulo = formatReportTitle(reporte)
   const chofer = reporte.chofer?.nombre || reporte.viaje?.chofer?.nombre || ''
   const viaje = reporte.viaje?.codigo || ''
-  const contexto = [chofer, viaje].filter(Boolean).join(' Ãƒâ€šÃ‚Â· ')
+  const contexto = [chofer, viaje].filter(Boolean).join('  -  ')
 
   return (
     <div className="border-b border-neutral-100 px-4 py-3 last:border-b-0">
@@ -2740,7 +2727,7 @@ function Empty({ text }) {
 function ParadaPill({ parada }) {
   return (
     <div className={`rounded-md border px-2 py-1 text-xs ${paradaStyles[parada.estado] || paradaStyles.PENDIENTE}`}>
-      <span className="font-medium">{parada.tipo}</span> Ãƒâ€šÃ‚Â· {parada.ciudad}
+      <span className="font-medium">{parada.tipo}</span>  -  {parada.ciudad}
     </div>
   )
 }
@@ -2755,7 +2742,7 @@ function LockIcon() {
 }
 
 function labelRetornableTipo(value) {
-  const labels = { CARTON: 'Cartones', PALETA: 'Paletas', OTRO: 'Otro' }
+  const labels = { CARTON: 'Cartones', PALETA: 'Paletas', SEPARADOR: 'Separadores', OTRO: 'Otro' }
   return labels[value] || formatStatus(value)
 }
 
@@ -2971,8 +2958,8 @@ function formatReportTitle(reporte) {
 function formatLastReportLocation(reporte) {
   const ubicacion = reporte.ubicacion || ''
   const texto = formatReportTitle(reporte)
-  if (ubicacion) return `${labelReporte(reporte.tipoReporte)} Ãƒâ€šÃ‚Â· ${ubicacion}`
-  return `${labelReporte(reporte.tipoReporte)} Ãƒâ€šÃ‚Â· ${texto || 'Sin detalle'}`
+  if (ubicacion) return `${labelReporte(reporte.tipoReporte)}  -  ${ubicacion}`
+  return `${labelReporte(reporte.tipoReporte)}  -  ${texto || 'Sin detalle'}`
 }
 
 function coordsFromText(value = '') {
@@ -3135,7 +3122,7 @@ function Pagination({ page, total, pageSize, onChange }) {
 
   return (
     <div className="flex flex-col gap-3 text-xs text-neutral-500 sm:flex-row sm:items-center sm:justify-between">
-      <span>Mostrando {from}-{to} de {total} registros Ãƒâ€šÃ‚Â· Pagina {safePage} de {pages}</span>
+      <span>Mostrando {from}-{to} de {total} registros  -  Pagina {safePage} de {pages}</span>
       <div className="flex flex-wrap gap-2">
         <button disabled={safePage <= 1} onClick={() => onChange(1)} className="btn-secondary h-8 px-3">Primera</button>
         <button disabled={safePage <= 1} onClick={() => onChange(safePage - 1)} className="btn-secondary h-8 px-3">Anterior</button>

@@ -1,6 +1,6 @@
 const prisma = require('../../config/database')
 
-const TIPOS_RETORNABLE = new Set(['CARTON', 'PALETA', 'OTRO'])
+const TIPOS_RETORNABLE = new Set(['CARTON', 'PALETA', 'SEPARADOR', 'OTRO'])
 const TIPOS_MOVIMIENTO = new Set(['REGISTRO', 'UBICACION', 'TRANSFERENCIA', 'DEVOLUCION_PARCIAL', 'DEVOLUCION_TOTAL', 'AJUSTE'])
 const ESTADOS_ABIERTOS = ['PENDIENTE', 'PARCIAL']
 

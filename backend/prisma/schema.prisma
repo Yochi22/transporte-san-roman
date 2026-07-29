@@ -103,6 +103,7 @@ enum EstadoMotor {
 enum TipoRetornable {
   CARTON
   PALETA
+  SEPARADOR
   OTRO
 }
 
