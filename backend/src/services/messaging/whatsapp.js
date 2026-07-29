@@ -78,18 +78,26 @@ const borrarRutaConReintentos = async (targetPath) => {
   throw lastError
 }
 
-const limpiarSesionWhatsApp = async () => {
-  const authPath = obtenerAuthPath()
-  await fs.mkdir(authPath, { recursive: true })
-  const entries = await fs.readdir(authPath, { withFileTypes: true }).catch((err) => {
+const limpiarContenidoDirectorio = async (dirPath) => {
+  await fs.mkdir(dirPath, { recursive: true })
+  const entries = await fs.readdir(dirPath, { withFileTypes: true }).catch((err) => {
     if (err.code === 'ENOENT') return []
     throw err
   })
-
   for (const entry of entries) {
-    await borrarRutaConReintentos(path.join(authPath, entry.name))
+    await borrarRutaConReintentos(path.join(dirPath, entry.name))
   }
+}
 
+const limpiarSesionWhatsApp = async () => {
+  await limpiarContenidoDirectorio(obtenerAuthPath())
+  ultimoQr = null
+  ultimoQrDataUrl = null
+  whatsappConectado = false
+}
+
+const limpiarSesionWhatsAppCompleta = async () => {
+  await limpiarContenidoDirectorio(obtenerAuthRootPath())
   ultimoQr = null
   ultimoQrDataUrl = null
   whatsappConectado = false
@@ -104,6 +112,8 @@ const iniciarWhatsApp = async (io) => {
   auth: state,
   printQRInTerminal: false,
   logger,
+  browser: ['Transporte San Roman', 'Chrome', '1.0.0'],
+  connectTimeoutMs: 60000,
   keepAliveIntervalMs: 30000,
   retryRequestDelayMs: 2000,
 })
@@ -131,14 +141,15 @@ const iniciarWhatsApp = async (io) => {
         ? lastDisconnect.error.output?.statusCode
         : null
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut
+      const reason = lastDisconnect?.error?.message || lastDisconnect?.error?.toString?.() || null
 
-      console.log('WhatsApp desconectado. Reconectando:', shouldReconnect)
+      console.log('WhatsApp desconectado', { statusCode, shouldReconnect, reason })
       if (shouldReconnect) {
         cierresSinQr += 1
         if (cierresSinQr >= MAX_CIERRES_SIN_QR && !ultimoQrDataUrl) {
           console.log('WhatsApp no genero QR tras varios intentos. Forzando vinculacion nueva.')
           try {
-            await limpiarSesionWhatsApp()
+            await limpiarSesionWhatsAppCompleta()
           } catch (err) {
             console.error('No se pudo limpiar la sesion de WhatsApp:', err.message)
           }
@@ -150,7 +161,7 @@ const iniciarWhatsApp = async (io) => {
       } else {
         console.log('Sesion cerrada. Limpiando credenciales para generar un QR nuevo.')
         try {
-          await limpiarSesionWhatsApp()
+          await limpiarSesionWhatsAppCompleta()
         } catch (err) {
           console.error('No se pudo limpiar la sesion de WhatsApp:', err.message)
         }
@@ -289,7 +300,7 @@ const reiniciarWhatsApp = async () => {
       }
     }
 
-    await limpiarSesionWhatsApp()
+    await limpiarSesionWhatsAppCompleta()
   } finally {
     reinicioManual = false
   }
