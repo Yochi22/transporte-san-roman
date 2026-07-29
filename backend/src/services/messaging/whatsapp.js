@@ -3,7 +3,9 @@ const {
   DisconnectReason, 
   useMultiFileAuthState,
   downloadMediaMessage,
-  normalizeMessageContent
+  normalizeMessageContent,
+  fetchLatestBaileysVersion,
+  Browsers
 } = require('@whiskeysockets/baileys')
 const { Boom } = require('@hapi/boom')
 const QRCode = require('qrcode')
@@ -103,16 +105,29 @@ const limpiarSesionWhatsAppCompleta = async () => {
   whatsappConectado = false
 }
 
+const obtenerVersionBaileys = async () => {
+  try {
+    const { version, isLatest } = await fetchLatestBaileysVersion()
+    console.log('WhatsApp Web version', { version, isLatest })
+    return version
+  } catch (err) {
+    console.warn('No se pudo consultar la version de WhatsApp Web. Usando version local de Baileys:', err.message)
+    return undefined
+  }
+}
+
 const iniciarWhatsApp = async (io) => {
   socketIO = io || socketIO
   const authPath = obtenerAuthPath()
   const { state, saveCreds } = await useMultiFileAuthState(authPath)
+  const version = await obtenerVersionBaileys()
 
  sock = makeWASocket({
   auth: state,
+  version,
   printQRInTerminal: false,
   logger,
-  browser: ['Transporte San Roman', 'Chrome', '1.0.0'],
+  browser: Browsers.ubuntu('Chrome'),
   connectTimeoutMs: 60000,
   keepAliveIntervalMs: 30000,
   retryRequestDelayMs: 2000,
