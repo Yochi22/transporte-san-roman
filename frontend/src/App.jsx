@@ -3190,6 +3190,10 @@ function money(value) {
   return `$${Number(value || 0).toFixed(2)}`
 }
 
+function usd(value) {
+  return `USD ${Number(value || 0).toFixed(2)}`
+}
+
 function formatDate(value) {
   if (!value) return ''
   return new Date(value).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' })
