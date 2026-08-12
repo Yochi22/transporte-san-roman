@@ -222,10 +222,6 @@ const procesarMensajeChofer = async ({ remoteJid, texto, mensaje = null, socketI
         }
         return
       }
-      await enviarMensaje(
-        remoteJid,
-        `Hola ${chofer.nombre}, no tienes un viaje activo en este momento. Contacta a operaciones si hay algun error.`
-      )
       return
     }
 
