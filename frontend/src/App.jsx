@@ -845,7 +845,7 @@ function PendientesLiquidacion({ onSelect }) {
               <p className="truncate text-xs text-neutral-500">{formatTripUnits(viaje)}</p>
             </div>
             <div>
-              <p className="text-sm font-medium">{money(balance(viaje))}</p>
+              <p className="text-sm font-medium">{ves(balance(viaje))}</p>
               <p className="text-xs text-neutral-500">Balance</p>
             </div>
             <div>
@@ -971,7 +971,7 @@ function TripList({ title, viajes, onSelect }) {
               <p className="truncate text-xs text-neutral-500">{viaje.chofer?.nombre || 'Sin chofer'}  -  {formatRoute(viaje)}</p>
             </div>
             <div className="hidden text-right sm:block">
-              <p className="text-sm font-medium">{money(balance(viaje))}</p>
+              <p className="text-sm font-medium">{ves(balance(viaje))}</p>
               <p className="text-xs text-neutral-500">{formatStatus(viaje.estadoFinanciero)}</p>
             </div>
             <ChevronRight className="text-neutral-400" size={18} />
@@ -2180,8 +2180,8 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
         formatTripUnits(viaje),
         formatRoute(viaje),
         formatDate(viaje.fechaLiquidacion || viaje.fechaCierre),
-        money(viaje.viaticosDepositados),
-        money(viaje.viaticosGastados),
+        ves(viaje.viaticosDepositados),
+        ves(viaje.viaticosGastados),
       ]),
       styles: { fontSize: 7, cellPadding: 2 },
       headStyles: { fillColor: [24, 24, 27], textColor: 255 },
@@ -2194,7 +2194,7 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
         gasto.tipo,
         gasto.origen || 'ADMIN',
         gasto.descripcion || '',
-        gasto.moneda === 'USD' ? `${usd(gasto.montoOriginal || gasto.monto)} / ${money(gasto.monto)}` : money(gasto.monto),
+        gasto.moneda === 'USD' ? `${usd(gasto.montoOriginal || gasto.monto)} / ${ves(gasto.monto)}` : money(gasto.monto),
       ])
     )
 
@@ -2215,9 +2215,9 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
     doc.setTextColor(24)
     doc.setFont('helvetica', 'bold')
     doc.text(`Viajes: ${filtrados.length}`, 20, y + 7)
-    doc.text(`Viaticos: ${money(totalDepositado)}`, 65, y + 7)
-    doc.text(`Gastos: ${money(totalGastos)}`, 130, y + 7)
-    doc.text(`Total gastos: ${money(totalGastos)}`, 20, y + 14)
+    doc.text(`Viaticos: ${ves(totalDepositado)}`, 65, y + 7)
+    doc.text(`Gastos: ${ves(totalGastos)}`, 130, y + 7)
+    doc.text(`Total gastos: ${ves(totalGastos)}`, 20, y + 14)
     doc.save(`liquidaciones-${periodo}-${new Date().toISOString().slice(0, 10)}.pdf`)
     await notifySuccess('PDF generado', 'El resumen de liquidaciones fue descargado.')
   }
@@ -2226,7 +2226,7 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
     <div className="space-y-5">
       <section className="grid gap-3 sm:grid-cols-2">
         <Metric title="Viajes liquidados" value={filtrados.length} icon={FileCheck} />
-        <Metric title="Gastos liquidados" value={money(totalGastos)} icon={Wallet} tone="emerald" />
+        <Metric title="Gastos liquidados" value={ves(totalGastos)} icon={Wallet} tone="emerald" />
       </section>
 
       <section className="rounded-md border border-neutral-200 bg-white">
@@ -2268,7 +2268,7 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
                   <td className="px-4 py-3">{viaje.chofer?.nombre}</td>
                   <td className="px-4 py-3">{viaje.numeroGuia || 'Sin guia'}</td>
                   <td className="px-4 py-3 text-neutral-500">{formatDate(viaje.fechaLiquidacion || viaje.fechaCierre)}</td>
-                  <td className="px-4 py-3">{money(viaje.viaticosGastados)}</td>
+                  <td className="px-4 py-3">{ves(viaje.viaticosGastados)}</td>
                 </tr>
               ))}
             </tbody>
@@ -2445,7 +2445,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
             <Fact icon={User} label="Chofer" value={viaje.chofer?.nombre || 'Sin chofer'} />
             <Fact icon={Truck} label="Unidades" value={formatTripUnits(viaje) || 'Sin unidades'} />
             <Fact icon={MapPin} label="Ultima ubicacion" value={<LocationValue data={ultimaUbicacion} />} />
-            <Fact icon={Banknote} label="Disponible en Bs" value={money(balance(viaje))} />
+            <Fact icon={Banknote} label="Disponible en Bs" value={ves(balance(viaje))} />
           </section>
           {viaje.numeroGuia && <Banner tone="neutral" icon={FileCheck} text={`Guia entregada: ${viaje.numeroGuia}`} />}
 
@@ -2496,9 +2496,9 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
 
           {isAdmin && (
             <section className="grid gap-3 sm:grid-cols-3">
-              <Fact icon={Wallet} label="Viaticos en Bs" value={money(viaje.viaticosDepositados)} />
-              <Fact icon={Banknote} label="Gastos en Bs" value={money(totalGastado)} />
-              <Fact icon={Check} label="Disponible en Bs" value={money(balance(viaje))} />
+              <Fact icon={Wallet} label="Viaticos en Bs" value={ves(viaje.viaticosDepositados)} />
+              <Fact icon={Banknote} label="Gastos en Bs" value={ves(totalGastado)} />
+              <Fact icon={Check} label="Disponible en Bs" value={ves(balance(viaje))} />
             </section>
           )}
 
@@ -2521,7 +2521,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
 
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <SectionTitle title="Gastos" subtitle={`${viaje.gastos?.length || 0} registros  -  ${money(totalGastado)}`} />
+                <SectionTitle title="Gastos" subtitle={`${viaje.gastos?.length || 0} registros  -  ${ves(totalGastado)}`} />
                 <button onClick={() => setShowGastoForm((value) => !value)} className="btn-secondary">
                   <Plus size={16} />
                   Registrar
@@ -2553,7 +2553,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
                     </div>
                   )}
                   {gastoForm.moneda === 'USD' && gastoForm.monto && gastoForm.tasaBcv && (
-                    <p className="text-xs text-neutral-500">Equivalente: {money(Number(gastoForm.monto) * Number(gastoForm.tasaBcv))}{gastoForm.tasaFuente ? ` - ${gastoForm.tasaFuente}` : ''}</p>
+                    <p className="text-xs text-neutral-500">Equivalente: {ves(Number(gastoForm.monto) * Number(gastoForm.tasaBcv))}{gastoForm.tasaFuente ? ` - ${gastoForm.tasaFuente}` : ''}</p>
                   )}
                   <input value={gastoForm.descripcion} onChange={(event) => setGastoForm({ ...gastoForm, descripcion: event.target.value })} className="input" placeholder="Descripcion" />
                   <button disabled={Boolean(saving)} className="btn-primary">
@@ -2570,7 +2570,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
                       <p className="truncate text-xs text-neutral-500">{formatExpenseDetail(gasto)}</p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-red-600">-{money(gasto.monto)}</span>
+                      <span className="text-sm font-medium text-red-600">-{ves(gasto.monto)}</span>
                       <button onClick={() => eliminarGasto(gasto.id)} disabled={Boolean(saving)} className="grid h-8 w-8 place-items-center rounded-md text-neutral-400 hover:bg-red-50 hover:text-red-600">
                         <X size={14} />
                       </button>
@@ -3176,7 +3176,7 @@ function formatParadasRoute(paradas) {
 function formatExpenseDetail(gasto) {
   const descripcion = gasto.descripcion || 'Gasto'
   if (gasto.moneda === 'USD') {
-    return descripcion + ' - ' + usd(gasto.montoOriginal || gasto.monto) + ' a BCV ' + money(gasto.tasaBcv || 0) + (gasto.tasaFuente ? ' - ' + gasto.tasaFuente : '')
+    return descripcion + ' - ' + usd(gasto.montoOriginal || gasto.monto) + ' a BCV ' + ves(gasto.tasaBcv || 0) + (gasto.tasaFuente ? ' - ' + gasto.tasaFuente : '')
   }
   return descripcion
 }
@@ -3187,7 +3187,11 @@ function balance(viaje) {
 }
 
 function money(value) {
-  return `$${Number(value || 0).toFixed(2)}`
+  return ves(value)
+}
+
+function ves(value) {
+  return `Bs ${Number(value || 0).toFixed(2)}`
 }
 
 function usd(value) {
