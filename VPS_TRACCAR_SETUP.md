@@ -134,6 +134,56 @@ docker compose logs -f --tail=120
 
 Reemplazar `TU_GPS_WEBHOOK_TOKEN` por el valor real configurado en Render.
 
+
+## Agregar SinoTrack al VPS
+
+SinoTrack queda aislado del flujo Baanool usando el puerto público `5014`. Traccar escucha internamente `h02` en `5013` y el proxy reenvía a la plataforma original definida en `.env`.
+
+Configurar destino original:
+
+```bash
+cd /opt/sanroman
+nano .env
+```
+
+Agregar o ajustar:
+
+```env
+SINOTRACK_MIRROR_HOST=host_o_ip_original
+SINOTRACK_MIRROR_PORT=puerto_original
+```
+
+Aplicar en el VPS:
+
+```bash
+cd /opt/sanroman
+git pull origin main
+ufw allow 5014/tcp
+docker compose -f docker-compose.traccar.yml up -d
+docker compose -f docker-compose.traccar.yml logs -f --tail=120 tcp-tee-sinotrack traccar
+```
+
+Registrar cada IMEI real en Traccar y en la unidad correspondiente del panel Transporte San Román.
+
+SMS de prueba para una unidad:
+
+```text
+8040000 104.251.219.40 5014
+```
+
+Si el modelo usa formato `SERVER`:
+
+```text
+SERVER,1,104.251.219.40,5014,0#
+```
+
+Rollback:
+
+```text
+8040000 HOST_ORIGINAL PUERTO_ORIGINAL
+```
+
+No migrar los 33 equipos a la vez. Primero una unidad en sitio controlado, luego 2 o 3, y finalmente el resto.
 ## SMS para el GPS actual
 
 Para duplicar hacia Traccar y Baanool, dejar el GPS apuntando al proxy en `5002`:

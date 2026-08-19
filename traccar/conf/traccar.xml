@@ -13,6 +13,7 @@
     <!-- Puertos TCP de protocolos GPS usados en pruebas -->
     <entry key="gps103.port">5001</entry>
     <entry key="coban.port">5002</entry>
+    <entry key="h02.port">5013</entry>
 
     <!-- Reenvio JSON al backend si controlas esta instancia -->
     <entry key="forward.enable">true</entry>

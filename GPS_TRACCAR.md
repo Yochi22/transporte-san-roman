@@ -144,6 +144,88 @@ Esto reemplaza `forward.link`, porque en la prueba no mantuvo el vehiculo activo
 
 Los comandos completos estan en `VPS_TRACCAR_SETUP.md`.
 
+
+## SinoTrack en VPS sin perder plataforma original
+
+El principio es el mismo usado con Baanool: el GPS no apunta directo a Traccar, apunta a un proxy TCP nuestro. El proxy copia el paquete crudo a Traccar y a la plataforma original, y devuelve al GPS la respuesta de la plataforma original.
+
+```text
+GPS SinoTrack -> VPS:5014 -> Traccar interno h02:5013
+                           -> Plataforma original SinoTrack:PUERTO_ORIGINAL
+```
+
+Esto permite que Transporte San Román reciba posición en Traccar/Supabase y que la plataforma original conserve sus comandos remotos.
+
+### Datos que se extraen del SMS config
+
+Del mensaje de configuración actual del equipo necesitamos:
+
+```text
+Servidor/IP actual de la plataforma original
+Puerto actual de la plataforma original
+IMEI del equipo
+APN de la SIM
+Modo de reporte/frecuencia
+```
+
+Con ese servidor y puerto se configura el `.env` del VPS:
+
+```env
+SINOTRACK_MIRROR_HOST=host_o_ip_de_la_plataforma_original
+SINOTRACK_MIRROR_PORT=puerto_de_la_plataforma_original
+```
+
+No guardes estos valores reales en Git si pertenecen al proveedor o al cliente.
+
+### Puerto público para SinoTrack
+
+El repositorio deja listo:
+
+- Proxy público SinoTrack: `5014/tcp`
+- Traccar interno protocolo h02: `5013/tcp`
+- Respuesta al GPS desde mirror: `RESPONSE_SOURCE=mirror`
+
+En el VPS:
+
+```bash
+ufw allow 5014/tcp
+```
+
+### SMS para apuntar una unidad al VPS
+
+El comando exacto depende del modelo SinoTrack. Para varios SinoTrack el formato típico es:
+
+```text
+8040000 104.251.219.40 5014
+```
+
+Algunos modelos aceptan formato tipo:
+
+```text
+SERVER,1,104.251.219.40,5014,0#
+```
+
+Prueba una sola unidad primero. No migres toda la flota hasta verificar:
+
+1. Entra paquete al proxy `tcp-tee-sinotrack`.
+2. Aparece posición en Traccar.
+3. Aparece posición en Transporte San Román.
+4. La plataforma original sigue viendo el vehículo.
+5. Los comandos de la plataforma original siguen funcionando.
+
+### Rollback
+
+Si algo falla, devuelve esa unidad al servidor original usando el mismo formato de SMS pero con el host y puerto anteriores:
+
+```text
+8040000 HOST_ORIGINAL PUERTO_ORIGINAL
+```
+
+O:
+
+```text
+SERVER,1,HOST_ORIGINAL,PUERTO_ORIGINAL,0#
+```
 ## Base de datos
 
 La migracion agrega:
