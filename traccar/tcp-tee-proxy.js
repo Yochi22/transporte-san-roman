@@ -6,10 +6,29 @@ const primaryPort = Number(process.env.PRIMARY_PORT || 5002)
 const mirrorHost = process.env.MIRROR_HOST || 'tracker.baanooliot.com'
 const mirrorPort = Number(process.env.MIRROR_PORT || 8090)
 const responseSource = process.env.RESPONSE_SOURCE || 'mirror'
+const debugHex = String(process.env.DEBUG_HEX || '').toLowerCase() === 'true'
+const debugBytes = Math.max(8, Math.min(Number(process.env.DEBUG_BYTES || 48), 160))
 
 let connectionId = 0
 
 const label = (id, message) => `[${id}] ${message}`
+
+const previewAscii = (chunk) => chunk
+  .subarray(0, debugBytes)
+  .toString('latin1')
+  .replace(/[\x00-\x1f\x7f-\x9f]/g, '.')
+
+const previewHex = (chunk) => chunk
+  .subarray(0, debugBytes)
+  .toString('hex')
+  .replace(/(.{2})/g, '$1 ')
+  .trim()
+
+const logPreview = (id, source, chunk) => {
+  if (!debugHex) return
+  console.log(label(id, `${source} ascii[${Math.min(chunk.length, debugBytes)}]: ${previewAscii(chunk)}`))
+  console.log(label(id, `${source} hex[${Math.min(chunk.length, debugBytes)}]: ${previewHex(chunk)}`))
+}
 
 const server = net.createServer((client) => {
   const id = ++connectionId
@@ -36,6 +55,7 @@ const server = net.createServer((client) => {
 
   client.on('data', (chunk) => {
     console.log(label(id, `GPS -> ${chunk.length} bytes`))
+    logPreview(id, 'GPS', chunk)
     if (!primary.destroyed) {
       primary.write(chunk)
       console.log(label(id, `enviado a Traccar ${chunk.length} bytes`))
@@ -48,11 +68,13 @@ const server = net.createServer((client) => {
 
   primary.on('data', (chunk) => {
     console.log(label(id, `Traccar -> ${chunk.length} bytes`))
+    logPreview(id, 'Traccar', chunk)
     if (responseSource === 'primary' && !client.destroyed) client.write(chunk)
   })
 
   mirror.on('data', (chunk) => {
     console.log(label(id, `espejo -> ${chunk.length} bytes`))
+    logPreview(id, 'espejo', chunk)
     if (responseSource === 'mirror' && !client.destroyed) client.write(chunk)
   })
 
@@ -79,5 +101,5 @@ server.on('error', (err) => {
 })
 
 server.listen(listenPort, '0.0.0.0', () => {
-  console.log(`TCP tee escuchando ${listenPort}. Primario ${primaryHost}:${primaryPort}. Espejo ${mirrorHost}:${mirrorPort}. Respuesta: ${responseSource}`)
+  console.log(`TCP tee escuchando ${listenPort}. Primario ${primaryHost}:${primaryPort}. Espejo ${mirrorHost}:${mirrorPort}. Respuesta: ${responseSource}. Debug HEX: ${debugHex ? `on/${debugBytes}` : 'off'}`)
 })

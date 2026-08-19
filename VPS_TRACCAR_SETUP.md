@@ -184,6 +184,38 @@ Rollback:
 ```
 
 No migrar los 33 equipos a la vez. Primero una unidad en sitio controlado, luego 2 o 3, y finalmente el resto.
+### Debug temporal de protocolo
+
+Si el proxy recibe bytes pero Traccar no pone el dispositivo online, activa debug temporal para identificar el protocolo real del paquete:
+
+```bash
+cd /opt/sanroman
+nano .env
+```
+
+Agregar temporalmente:
+
+```env
+SINOTRACK_DEBUG_HEX=true
+SINOTRACK_DEBUG_BYTES=48
+```
+
+Recrear solo el proxy:
+
+```bash
+docker compose -f docker-compose.traccar.yml up -d --force-recreate tcp-tee-sinotrack
+docker compose -f docker-compose.traccar.yml logs -f --tail=120 tcp-tee-sinotrack
+```
+
+El log mostrara una vista corta en ASCII y HEX, suficiente para saber que protocolo de Traccar usar. No dejes este debug activo en operacion normal.
+
+Para apagarlo:
+
+```env
+SINOTRACK_DEBUG_HEX=false
+```
+
+Y recrea nuevamente `tcp-tee-sinotrack`.
 ## SMS para el GPS actual
 
 Para duplicar hacia Traccar y Baanool, dejar el GPS apuntando al proxy en `5002`:
