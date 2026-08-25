@@ -346,6 +346,92 @@ const actualizarParada = async (viajeId, paradaId, estado) => {
   })
 }
 
+const actualizarRuta = async (viajeId, paradasInput) => {
+  const paradas = validarParadas(paradasInput)
+  const viaje = await prisma.viaje.findUniqueOrThrow({
+    where: { id: viajeId },
+    include: {
+      paradas: {
+        include: { _count: { select: { reportes: true } } },
+        orderBy: { orden: 'asc' }
+      },
+      unidades: true
+    }
+  })
+
+  if (viaje.estadoFinanciero === 'LIQUIDADO') {
+    throw { status: 409, message: 'No se puede editar la ruta de un viaje liquidado' }
+  }
+
+  const actualesPorId = new Map(viaje.paradas.map((parada) => [parada.id, parada]))
+  const idsRecibidos = new Set(paradas.map((parada) => parada.id).filter(Boolean))
+
+  for (const parada of paradas) {
+    if (parada.id && !actualesPorId.has(parada.id)) {
+      throw { status: 400, message: 'La ruta contiene una parada que no pertenece al viaje' }
+    }
+  }
+
+  const omitidas = viaje.paradas.filter((parada) => !idsRecibidos.has(parada.id))
+  for (const parada of omitidas) {
+    if (parada.estado !== 'PENDIENTE' || parada._count.reportes > 0) {
+      throw { status: 409, message: 'No se pueden eliminar paradas con avance o reportes. Ajusta sus datos o agrega una nueva parada.' }
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    for (const parada of omitidas) {
+      await tx.parada.delete({ where: { id: parada.id } })
+    }
+
+    for (const [index, parada] of paradas.entries()) {
+      const actual = parada.id ? actualesPorId.get(parada.id) : null
+      const data = {
+        orden: index + 1,
+        tramo: actual?.tramo || parada.tramo || 1,
+        tipo: actual && actual.estado !== 'PENDIENTE' ? actual.tipo : parada.tipo,
+        lugar: parada.lugar,
+        ciudad: parada.ciudad,
+        fechaProgramada: parada.tipo === 'CARGA' ? parada.fechaProgramada : null,
+        cargarAlDescargar: parada.tipo === 'CARGA' && !!parada.cargarAlDescargar
+      }
+
+      if (actual) {
+        await tx.parada.update({ where: { id: actual.id }, data })
+      } else {
+        await tx.parada.create({
+          data: {
+            ...data,
+            viajeId,
+            estado: 'PENDIENTE'
+          }
+        })
+      }
+    }
+
+    const tienePendientes = paradas.some((parada) => {
+      const actual = parada.id ? actualesPorId.get(parada.id) : null
+      return !actual || actual.estado !== 'COMPLETADA'
+    })
+
+    await tx.viaje.update({
+      where: { id: viajeId },
+      data: {
+        estadoLogistico: 'EN_CURSO',
+        fechaCierre: tienePendientes ? null : viaje.fechaCierre
+      }
+    })
+
+    if (tienePendientes) {
+      const unidadIds = tripUnitIds(viaje)
+      await tx.camion.updateMany({ where: { id: { in: unidadIds }, estado: { not: 'EN_TALLER' } }, data: { estado: 'EN_RUTA' } })
+      await tx.chofer.update({ where: { id: viaje.choferId }, data: { estado: 'EN_RUTA' } })
+    }
+  })
+
+  return obtener(viajeId)
+}
+
 const recargarViaticos = async (id, monto) => {
   const montoNumerico = validarMonto(monto, 'Monto de recarga')
   if (montoNumerico === 0) throw { status: 400, message: 'La recarga debe ser mayor que cero' }
@@ -475,5 +561,6 @@ module.exports = {
   confirmarDocumentacion,
   listarPendientesLiquidacion,
   agregarTramo,
+  actualizarRuta,
   actualizarParada
 }

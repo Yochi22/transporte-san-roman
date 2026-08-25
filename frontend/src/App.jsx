@@ -2292,6 +2292,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   const [noveltyPage, setNoveltyPage] = useState(1)
   const [expensePage, setExpensePage] = useState(1)
   const [showLiquidarModal, setShowLiquidarModal] = useState(false)
+  const [showRutaEditor, setShowRutaEditor] = useState(false)
   const [numeroGuia, setNumeroGuia] = useState(viaje.numeroGuia || '')
   const [cierreForm, setCierreForm] = useState({})
   const detailPageSize = 8
@@ -2454,7 +2455,15 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
           <RetornablesTripSection viaje={viaje} onDone={onDone} />
 
           <section className="space-y-3">
-            <SectionTitle title="Ruta" subtitle={formatRoute(viaje)} />
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <SectionTitle title="Ruta" subtitle={formatRoute(viaje)} />
+              {viaje.estadoFinanciero !== 'LIQUIDADO' && (
+                <button type="button" onClick={() => setShowRutaEditor(true)} className="btn-secondary sm:self-start">
+                  <Edit3 size={16} />
+                  Editar ruta
+                </button>
+              )}
+            </div>
             <div className="space-y-3">
               {tramos.map(([tramo, paradas]) => (
                 <div key={tramo} className="overflow-hidden rounded-md border border-neutral-200">
@@ -2606,6 +2615,18 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
         </div>
       </aside>
 
+      {showRutaEditor && (
+        <RutaEditorModal
+          viaje={viaje}
+          onClose={() => setShowRutaEditor(false)}
+          onSaved={async () => {
+            setShowRutaEditor(false)
+            await notifySuccess('Ruta actualizada')
+            onDone()
+          }}
+        />
+      )}
+
       {isAdmin && showLiquidarModal && (
         <div className="absolute inset-0 z-20 grid place-items-center bg-neutral-950/40 px-4">
           <div className="w-full max-w-md rounded-md border border-neutral-200 bg-white p-5 shadow-xl">
@@ -2641,6 +2662,148 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+
+function RutaEditorModal({ viaje, onClose, onSaved }) {
+  const [paradas, setParadas] = useState(() => (viaje.paradas || []).map((parada) => ({
+    ...parada,
+    clientId: parada.id,
+    fechaProgramada: toDateTimeLocal(parada.fechaProgramada),
+    programacion: parada.fechaProgramada ? 'FECHA_HORA' : parada.cargarAlDescargar ? 'AL_DESCARGAR' : 'SIN_PROGRAMAR',
+  })))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const updateParada = (clientId, patch) => {
+    setParadas((current) => current.map((parada) => (parada.clientId === clientId ? { ...parada, ...patch } : parada)))
+  }
+
+  const addParada = () => {
+    const ultimoTramo = paradas.reduce((max, parada) => Math.max(max, Number(parada.tramo) || 1), 1)
+    setParadas((current) => [...current, {
+      clientId: createClientId(),
+      tipo: 'DESCARGA',
+      lugar: '',
+      ciudad: '',
+      estado: 'PENDIENTE',
+      tramo: ultimoTramo,
+      fechaProgramada: '',
+      programacion: 'SIN_PROGRAMAR',
+    }])
+  }
+
+  const removeParada = (clientId) => {
+    setParadas((current) => current.length > 2 ? current.filter((parada) => parada.clientId !== clientId) : current)
+  }
+
+  const submit = async (event) => {
+    event.preventDefault()
+    setSaving(true)
+    setError('')
+    try {
+      await api.patch(`/viajes/${viaje.id}/ruta`, {
+        paradas: paradas.map((parada) => ({
+          id: parada.id && !String(parada.id).startsWith('tmp-') ? parada.id : undefined,
+          tipo: parada.tipo,
+          lugar: parada.lugar,
+          ciudad: parada.ciudad,
+          tramo: parada.tramo || 1,
+          fechaProgramada: parada.tipo === 'CARGA' && parada.programacion === 'FECHA_HORA' ? parada.fechaProgramada : null,
+          cargarAlDescargar: parada.tipo === 'CARGA' && parada.programacion === 'AL_DESCARGAR',
+        }))
+      })
+      await onSaved()
+    } catch (err) {
+      const message = err.response?.data?.mensaje || 'No se pudo actualizar la ruta.'
+      setError(message)
+      await notifyError(message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="absolute inset-0 z-20 grid place-items-center bg-neutral-950/40 px-3 py-6">
+      <form onSubmit={submit} className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-md border border-neutral-200 bg-white shadow-xl">
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-neutral-200 bg-white px-4 py-4 sm:px-5">
+          <div>
+            <p className="text-xs font-medium text-neutral-500">{viaje.codigo}</p>
+            <h3 className="text-base font-semibold">Editar ruta</h3>
+            <p className="mt-1 text-xs text-neutral-500">Las paradas con avance conservan su estado e historial.</p>
+          </div>
+          <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-md hover:bg-neutral-100">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="space-y-4 p-4 sm:p-5">
+          {error && <Banner tone="danger" icon={AlertTriangle} text={error} />}
+          <div className="space-y-3">
+            {paradas.map((parada, index) => {
+              const avanzada = parada.estado && parada.estado !== 'PENDIENTE'
+              return (
+                <div key={parada.clientId} className="grid gap-3 rounded-md border border-neutral-200 p-3 lg:grid-cols-[52px_130px_1fr_1fr_220px_92px_40px]">
+                  <div className="flex h-10 items-center text-[13px] font-medium text-neutral-500">#{index + 1}</div>
+                  <select
+                    value={parada.tipo}
+                    disabled={avanzada}
+                    onChange={(event) => updateParada(parada.clientId, { tipo: event.target.value, fechaProgramada: event.target.value === 'CARGA' ? parada.fechaProgramada : '', programacion: 'SIN_PROGRAMAR' })}
+                    className="input"
+                  >
+                    <option value="CARGA">Carga</option>
+                    <option value="DESCARGA">Descarga</option>
+                    <option value="PERNOCTA">Pernocta</option>
+                  </select>
+                  <input required value={parada.lugar} onChange={(event) => updateParada(parada.clientId, { lugar: event.target.value })} className="input" placeholder="Lugar" />
+                  <input required value={parada.ciudad} onChange={(event) => updateParada(parada.clientId, { ciudad: event.target.value })} className="input" placeholder="Ciudad" />
+                  {parada.tipo === 'CARGA' ? (
+                    <div className="space-y-2">
+                      <select value={parada.programacion} onChange={(event) => updateParada(parada.clientId, { programacion: event.target.value, fechaProgramada: event.target.value === 'FECHA_HORA' ? parada.fechaProgramada : '' })} className="input">
+                        <option value="SIN_PROGRAMAR">Sin programar</option>
+                        <option value="FECHA_HORA">Fecha y hora</option>
+                        <option value="AL_DESCARGAR">Al descargar</option>
+                      </select>
+                      {parada.programacion === 'FECHA_HORA' && (
+                        <input required type="datetime-local" value={parada.fechaProgramada} onChange={(event) => updateParada(parada.clientId, { fechaProgramada: event.target.value })} className="input" />
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex h-10 items-center text-xs text-neutral-400">Sin hora programada</div>
+                  )}
+                  <div className="flex h-10 items-center">
+                    <span className={`rounded-md px-2 py-1 text-xs font-medium ${paradaStyles[parada.estado] || paradaStyles.PENDIENTE}`}>{formatStatus(parada.estado || 'PENDIENTE')}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeParada(parada.clientId)}
+                    disabled={paradas.length <= 2 || avanzada}
+                    title={avanzada ? 'Solo se pueden quitar paradas pendientes' : 'Quitar parada'}
+                    className="grid h-10 w-10 place-items-center rounded-md text-neutral-400 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-neutral-400"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="flex flex-col-reverse gap-2 border-t border-neutral-200 pt-4 sm:flex-row sm:justify-between">
+            <button type="button" onClick={addParada} className="btn-secondary">
+              <Plus size={16} />
+              Agregar parada
+            </button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button type="button" onClick={onClose} className="btn-secondary">Cancelar</button>
+              <button disabled={saving} className="btn-primary">
+                <Check size={16} />
+                {saving ? 'Guardando' : 'Guardar ruta'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </form>
     </div>
   )
 }
@@ -3201,6 +3364,14 @@ function usd(value) {
 function formatDate(value) {
   if (!value) return ''
   return new Date(value).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short' })
+}
+
+function toDateTimeLocal(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  date.setMinutes(date.getMinutes() - date.getTimezoneOffset())
+  return date.toISOString().slice(0, 16)
 }
 
 function formatStatus(value) {

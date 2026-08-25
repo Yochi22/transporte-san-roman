@@ -93,6 +93,11 @@ const actualizarParada = async (req, res) => {
   return ok(res, parada, 'Estado de parada actualizado')
 }
 
+const actualizarRuta = async (req, res) => {
+  const viaje = await service.actualizarRuta(req.params.id, req.body.paradas)
+  return ok(res, filtrarFinanzas(viaje, req.usuario.rol), 'Ruta actualizada')
+}
+
 const recargarViaticos = async (req, res) => {
   const { monto } = req.body
   const viaje = await service.recargarViaticos(req.params.id, monto)
@@ -125,6 +130,7 @@ module.exports = {
   listarArchivo,
   obtener,
   crear,
+  actualizarRuta,
   actualizarParada,
   cerrar,
   listarPendientesLiquidacion,
