@@ -106,7 +106,12 @@ const listar = async (filtros = {}) => {
 const listarArchivo = async (filtros = {}) => {
   const page = Math.max(1, Number(filtros.page) || 1)
   const pageSize = Math.min(50, Math.max(1, Number(filtros.pageSize) || 10))
-  const where = { OR: [{ estadoLogistico: { in: ['COMPLETADO', 'CANCELADO'] } }, estaPendienteDeLiquidacionWhere] }
+  const where = {
+    OR: [
+      { estadoLogistico: { notIn: ['PENDIENTE', 'EN_CURSO'] } },
+      estaPendienteDeLiquidacionWhere
+    ]
+  }
   const rango = construirRangoArchivo(filtros.periodo, filtros.fecha)
 
   if (rango) {

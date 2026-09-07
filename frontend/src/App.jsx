@@ -173,20 +173,30 @@ export default function App() {
     setError('')
 
     try {
-      const [viajesRes, choferesRes, camionesRes, retornablesRes] = await Promise.all([
+      const resultados = await Promise.allSettled([
         api.get('/viajes'),
         api.get('/choferes', { params: { estado: 'todos' } }),
         api.get('/camiones', { params: { estado: 'todos' } }),
         api.get('/retornables', { params: { estado: 'todos', pageSize: 500 } }),
       ])
+      const [viajesResult, choferesResult, camionesResult, retornablesResult] = resultados
+      const rechazado = resultados.find((resultado) => resultado.status === 'rejected')
+      if (rechazado?.reason?.response?.status === 401) {
+        logout()
+        return
+      }
 
-      const nextViajes = viajesRes.data?.data || []
-      setViajes(nextViajes)
-      setChoferes(choferesRes.data?.data || [])
-      setCamiones(camionesRes.data?.data || [])
-      setRetornables(retornablesRes.data?.data?.items || retornablesRes.data?.data || [])
+      const nextViajes = viajesResult.status === 'fulfilled' ? viajesResult.value.data?.data || [] : null
+      if (nextViajes) setViajes(nextViajes)
+      if (choferesResult.status === 'fulfilled') setChoferes(choferesResult.value.data?.data || [])
+      if (camionesResult.status === 'fulfilled') setCamiones(camionesResult.value.data?.data || [])
+      if (retornablesResult.status === 'fulfilled') {
+        const dataRetornables = retornablesResult.value.data?.data
+        setRetornables(dataRetornables?.items || dataRetornables || [])
+      }
+      if (rechazado) setError('Parte de la informacion no pudo cargarse. Revisa el detalle e intenta actualizar.')
 
-      if (refreshSelected) {
+      if (refreshSelected && nextViajes) {
         setSelectedViaje((current) => {
           if (!current) return current
           return nextViajes.find((viaje) => viaje.id === current.id) || current
@@ -815,17 +825,21 @@ function PendientesLiquidacion({ onSelect }) {
   const [page, setPage] = useState(1)
   const [data, setData] = useState({ items: [], total: 0, pageSize: 10 })
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState('')
   useClampPage(page, data.total, data.pageSize, setPage)
 
   useEffect(() => {
     let active = true
     const cargar = async () => {
       setLoading(true)
+      setLoadError('')
       try {
         const response = await api.get('/viajes/pendientes-liquidacion/listado', {
           params: { page, pageSize: data.pageSize },
         })
         if (active) setData(response.data?.data || { items: [], total: 0, pageSize: 10 })
+      } catch (err) {
+        if (active) setLoadError(err.response?.data?.mensaje || 'No se pudieron consultar los viajes pendientes.')
       } finally {
         if (active) setLoading(false)
       }
@@ -839,6 +853,7 @@ function PendientesLiquidacion({ onSelect }) {
   return (
     <section className="space-y-3">
       <SectionTitle title="Pendientes de liquidacion" subtitle={`${data.total} registros`} />
+      {loadError && <Banner tone="danger" icon={AlertTriangle} text={loadError} />}
       <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">
         {data.items.map((viaje) => (
           <button key={viaje.id} onClick={() => onSelect(viaje)} className="grid w-full gap-2 border-b border-neutral-100 px-4 py-3 text-left last:border-b-0 hover:bg-neutral-50 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_140px_120px_24px] sm:items-center">
@@ -861,7 +876,7 @@ function PendientesLiquidacion({ onSelect }) {
             <ChevronRight className="hidden text-neutral-400 sm:block" size={18} />
           </button>
         ))}
-        {!loading && data.items.length === 0 && <Empty text="Sin viajes pendientes de liquidacion." />}
+        {!loading && !loadError && data.items.length === 0 && <Empty text="Sin viajes pendientes de liquidacion." />}
         {loading && <Empty text="Cargando pendientes..." />}
       </div>
       <Pagination page={page} total={data.total} pageSize={data.pageSize} onChange={setPage} />
@@ -875,17 +890,21 @@ function ArchivoLogistico({ onSelect }) {
   const [page, setPage] = useState(1)
   const [archivo, setArchivo] = useState({ items: [], total: 0, pageSize: 10 })
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState('')
   useClampPage(page, archivo.total, archivo.pageSize, setPage)
 
   useEffect(() => {
     let active = true
     const cargar = async () => {
       setLoading(true)
+      setLoadError('')
       try {
         const response = await api.get('/viajes/archivo/listado', {
           params: { periodo, fecha, page, pageSize: archivo.pageSize },
         })
         if (active) setArchivo(response.data?.data || { items: [], total: 0, pageSize: 10 })
+      } catch (err) {
+        if (active) setLoadError(err.response?.data?.mensaje || 'No se pudo consultar el archivo logistico.')
       } finally {
         if (active) setLoading(false)
       }
@@ -936,6 +955,7 @@ function ArchivoLogistico({ onSelect }) {
           )}
         </div>
       </div>
+      {loadError && <Banner tone="danger" icon={AlertTriangle} text={loadError} />}
       <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">
         {archivo.items.map((viaje) => (
           <button key={viaje.id} onClick={() => onSelect(viaje)} className="flex w-full items-center gap-3 border-b border-neutral-100 px-4 py-3 text-left last:border-b-0 hover:bg-neutral-50">
@@ -951,7 +971,7 @@ function ArchivoLogistico({ onSelect }) {
             <ChevronRight className="text-neutral-400" size={18} />
           </button>
         ))}
-        {!loading && archivo.items.length === 0 && <Empty text="Sin registros para este periodo." />}
+        {!loading && !loadError && archivo.items.length === 0 && <Empty text="Sin registros para este periodo." />}
         {loading && <Empty text="Cargando archivo..." />}
       </div>
       <Pagination page={page} total={archivo.total} pageSize={archivo.pageSize} onChange={setPage} />
