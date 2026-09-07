@@ -7,6 +7,7 @@ const app = require('./app')
 const { crearUsuarioInicial } = require('./modules/auth/auth.service')
 const { iniciarWhatsApp } = require('./services/messaging/whatsapp')
 const { depurarReportesAntiguos } = require('./modules/reportes/reportes.service')
+const { depurarDevueltosAntiguos } = require('./modules/retornables/retornables.service')
 const { iniciarSincronizacionTraccar } = require('./modules/gps/traccar-sync.service')
 const { verificarToken } = require('./config/jwt')
 const prisma = require('./config/database')
@@ -23,6 +24,7 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
 
 const server = http.createServer(app)
 const DIAS_RETENCION_REPORTES = Math.max(1, Number(process.env.DIAS_RETENCION_REPORTES) || 5)
+const DIAS_RETENCION_RETORNABLES = Math.max(1, Number(process.env.DIAS_RETENCION_RETORNABLES) || 30)
 const INTERVALO_DEPURACION = 24 * 60 * 60 * 1000
 
 const ejecutarDepuracionReportes = async () => {
@@ -31,6 +33,15 @@ const ejecutarDepuracionReportes = async () => {
     if (resultado.count > 0) console.log(`Reportes antiguos eliminados: ${resultado.count}`)
   } catch (error) {
     console.error('No se pudieron depurar los reportes antiguos:', error.message)
+  }
+}
+
+const ejecutarDepuracionRetornables = async () => {
+  try {
+    const resultado = await depurarDevueltosAntiguos(DIAS_RETENCION_RETORNABLES)
+    if (resultado.count > 0) console.log(`Retornables devueltos eliminados: ${resultado.count}`)
+  } catch (error) {
+    console.error('No se pudieron depurar los retornables devueltos:', error.message)
   }
 }
 
@@ -89,7 +100,9 @@ server.listen(PORT, async () => {
   try {
     await crearUsuarioInicial()
     await ejecutarDepuracionReportes()
+    await ejecutarDepuracionRetornables()
     setInterval(ejecutarDepuracionReportes, INTERVALO_DEPURACION).unref()
+    setInterval(ejecutarDepuracionRetornables, INTERVALO_DEPURACION).unref()
     iniciarSincronizacionTraccar()
     await iniciarWhatsApp(io)
   } catch (error) {

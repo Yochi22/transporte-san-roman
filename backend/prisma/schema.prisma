@@ -348,6 +348,7 @@ model Retornable {
   estado            EstadoRetornable   @default(PENDIENTE)
   viajeOrigenId     String?            @map("viaje_origen_id")
   observacion       String?
+  fechaDevolucionTotal DateTime?       @map("fecha_devolucion_total")
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
 
@@ -355,6 +356,7 @@ model Retornable {
   movimientos  RetornableMovimiento[]
 
   @@index([estado, createdAt])
+  @@index([estado, fechaDevolucionTotal])
   @@index([empresa])
   @@index([viajeOrigenId])
   @@map("retornables")

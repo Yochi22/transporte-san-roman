@@ -3,6 +3,7 @@ const prisma = require('../../config/database')
 const TIPOS_RETORNABLE = new Set(['CARTON', 'PALETA', 'SEPARADOR', 'OTRO'])
 const TIPOS_MOVIMIENTO = new Set(['REGISTRO', 'UBICACION', 'TRANSFERENCIA', 'DEVOLUCION_PARCIAL', 'DEVOLUCION_TOTAL', 'AJUSTE'])
 const ESTADOS_ABIERTOS = ['PENDIENTE', 'PARCIAL']
+const DIAS_RETENCION_DEVUELTOS = Math.max(1, Number(process.env.DIAS_RETENCION_RETORNABLES) || 30)
 
 const includeRetornable = {
   viajeOrigen: { select: { id: true, codigo: true, paradas: { orderBy: { orden: 'asc' }, select: { ciudad: true, lugar: true, orden: true } } } },
@@ -115,9 +116,26 @@ const mover = async (id, datos, usuarioId) => {
 
     return tx.retornable.update({
       where: { id },
-      data: { cantidadPendiente, estado },
+      data: {
+        cantidadPendiente,
+        estado,
+        fechaDevolucionTotal: estado === 'DEVUELTO' ? new Date() : null
+      },
       include: includeRetornable
     })
+  })
+}
+
+const depurarDevueltosAntiguos = async (dias = DIAS_RETENCION_DEVUELTOS) => {
+  const retencion = Math.max(1, Number(dias) || DIAS_RETENCION_DEVUELTOS)
+  const limite = new Date()
+  limite.setDate(limite.getDate() - retencion)
+
+  return prisma.retornable.deleteMany({
+    where: {
+      estado: 'DEVUELTO',
+      fechaDevolucionTotal: { lte: limite }
+    }
   })
 }
 
@@ -183,4 +201,4 @@ const normalizarTextoOpcional = (valor, max) => {
   return texto
 }
 
-module.exports = { listar, listarPorViaje, crear, mover }
+module.exports = { listar, listarPorViaje, crear, mover, depurarDevueltosAntiguos }

@@ -1099,7 +1099,11 @@ function RetornablesView({ retornables, viajes, choferes, camiones, onDone }) {
                     <td className="px-4 py-3"><span className={`rounded-md px-2 py-1 text-xs font-medium ${retornableStatusClass(item.estado)}`}>{formatStatus(item.estado)}</span></td>
                     <td className="px-4 py-3 text-neutral-500">{item.viajeOrigen?.codigo || 'Sin viaje'}</td>
                     <td className="px-4 py-3 text-neutral-500">{ultimo?.destino || ultimo?.ubicacion || ultimo?.camion?.placa || 'Sin ubicacion'}</td>
-                    <td className="px-4 py-3 text-neutral-500">{daysSince(item.createdAt)} dias</td>
+                    <td className="px-4 py-3 text-neutral-500">
+                      {item.estado === 'DEVUELTO' && item.fechaDevolucionTotal
+                        ? `Devuelto hace ${daysSince(item.fechaDevolucionTotal)} dias`
+                        : `${daysSince(item.createdAt)} dias`}
+                    </td>
                   </tr>
                 )
               })}
