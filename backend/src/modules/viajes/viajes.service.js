@@ -106,7 +106,7 @@ const listar = async (filtros = {}) => {
 const listarArchivo = async (filtros = {}) => {
   const page = Math.max(1, Number(filtros.page) || 1)
   const pageSize = Math.min(50, Math.max(1, Number(filtros.pageSize) || 10))
-  const where = { OR: [{ estadoLogistico: 'COMPLETADO' }, estaPendienteDeLiquidacionWhere] }
+  const where = { OR: [{ estadoLogistico: { in: ['COMPLETADO', 'CANCELADO'] } }, estaPendienteDeLiquidacionWhere] }
   const rango = construirRangoArchivo(filtros.periodo, filtros.fecha)
 
   if (rango) {
@@ -166,6 +166,13 @@ const obtener = async (id) => {
 
 const crear = async (datos, creadoPorId) => {
   const { choferId } = datos
+  const tipoAgendamiento = datos.tipoAgendamiento === 'CONTINUAR' ? 'CONTINUAR' : 'NUEVO'
+  const viajeContinuacionId = typeof datos.viajeContinuacionId === 'string' && datos.viajeContinuacionId.trim()
+    ? datos.viajeContinuacionId.trim()
+    : null
+  if (tipoAgendamiento === 'CONTINUAR' && !viajeContinuacionId) {
+    throw { status: 400, message: 'Selecciona el viaje pendiente que deseas continuar' }
+  }
   let unidadIds = normalizarUnidadIdsViaje(datos)
   if (typeof choferId !== 'string') {
     throw { status: 400, message: 'Chofer es requerido' }
@@ -217,14 +224,24 @@ const crear = async (datos, creadoPorId) => {
     throw { status: 409, message: 'El chofer o la unidad ya tienen otra asignacion activa' }
   }
 
-  const viajesActivosChofer = await prisma.viaje.findMany({
-    where: { choferId, estadoLogistico: 'EN_CURSO', estadoFinanciero: 'PENDIENTE' },
-    include: { paradas: { orderBy: { orden: 'asc' } }, unidades: true }
-  })
-  const viajeActivo = viajesActivosChofer.find((viaje) => sameSet(unidadIds, tripUnitIds(viaje)))
-
-  if (viajeActivo) {
-    return agregarTramo(viajeActivo.id, { paradas, viaticosDepositados })
+  if (tipoAgendamiento === 'CONTINUAR') {
+    const viajeContinuacion = await prisma.viaje.findUniqueOrThrow({
+      where: { id: viajeContinuacionId },
+      include: { paradas: { orderBy: { orden: 'asc' } }, unidades: true }
+    })
+    if (viajeContinuacion.choferId !== choferId) {
+      throw { status: 409, message: 'El viaje seleccionado no pertenece al chofer' }
+    }
+    if (viajeContinuacion.estadoFinanciero !== 'PENDIENTE' || viajeContinuacion.estadoLogistico === 'CANCELADO') {
+      throw { status: 409, message: 'El viaje seleccionado ya no admite nuevos tramos' }
+    }
+    if (viajeContinuacion.paradas.some((parada) => parada.estado !== 'COMPLETADA')) {
+      throw { status: 409, message: 'Completa el tramo actual antes de agregar uno nuevo' }
+    }
+    if (!sameSet(unidadIds, tripUnitIds(viajeContinuacion))) {
+      throw { status: 409, message: 'Las unidades deben coincidir con las del viaje que se continuara' }
+    }
+    return agregarTramo(viajeContinuacion.id, { paradas, viaticosDepositados })
   }
 
   const codigo = generarCodigoViaje()
@@ -299,7 +316,8 @@ const agregarTramo = async (id, datos) => {
     await tx.chofer.update({ where: { id: viaje.choferId }, data: { estado: 'EN_RUTA' } })
   })
 
-  return obtener(id)
+  const actualizado = await obtener(id)
+  return { ...actualizado, tramoAgregado: nuevoTramo }
 }
 
 const actualizarParada = async (viajeId, paradaId, estado) => {
@@ -432,6 +450,43 @@ const actualizarRuta = async (viajeId, paradasInput) => {
   return obtener(viajeId)
 }
 
+const cancelar = async (id) => {
+  const viaje = await prisma.viaje.findUniqueOrThrow({
+    where: { id },
+    include: {
+      paradas: true,
+      reportes: { select: { id: true }, take: 1 },
+      gastos: { select: { id: true }, take: 1 },
+      unidades: true,
+      chofer: { select: { ubicacionActual: true } },
+      retornablesOrigen: { select: { id: true }, take: 1 },
+      retornableMovimientos: { select: { id: true }, take: 1 }
+    }
+  })
+
+  if (viaje.estadoFinanciero === 'LIQUIDADO') {
+    throw { status: 409, message: 'No se puede cancelar un viaje liquidado' }
+  }
+  if (viaje.estadoLogistico === 'CANCELADO') {
+    throw { status: 409, message: 'El viaje ya fue cancelado' }
+  }
+  if (viaje.paradas.some((parada) => parada.estado !== 'PENDIENTE')) {
+    throw { status: 409, message: 'Solo se puede cancelar antes de iniciar la carga o cualquier parada' }
+  }
+  if (viaje.reportes.length || viaje.gastos.length || viaje.retornablesOrigen.length || viaje.retornableMovimientos.length) {
+    throw { status: 409, message: 'No se puede cancelar un viaje con reportes, gastos o retornables vinculados' }
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const actualizado = await tx.viaje.update({
+      where: { id },
+      data: { estadoLogistico: 'CANCELADO', fechaCierre: new Date() }
+    })
+    await recalcularEstadoRecursos(tx, viaje.choferId, tripUnitIds(viaje), viaje.chofer?.ubicacionActual || null)
+    return actualizado
+  })
+}
+
 const recargarViaticos = async (id, monto) => {
   const montoNumerico = validarMonto(monto, 'Monto de recarga')
   if (montoNumerico === 0) throw { status: 400, message: 'La recarga debe ser mayor que cero' }
@@ -562,5 +617,6 @@ module.exports = {
   listarPendientesLiquidacion,
   agregarTramo,
   actualizarRuta,
+  cancelar,
   actualizarParada
 }

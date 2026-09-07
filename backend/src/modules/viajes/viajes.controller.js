@@ -46,16 +46,19 @@ const notificarAgendamiento = async (viaje) => {
     select: { whatsappChatId: true }
   })
   if (!chofer?.whatsappChatId) return
-  const cargas = viaje.paradas.filter((parada) => parada.tipo === 'CARGA')
-  const paradas = cargas.map((parada, index) => {
+  const numeroTramo = viaje.tramoAgregado || 1
+  const esNuevoTramo = Boolean(viaje.tramoAgregado)
+  const paradasDelAviso = viaje.paradas.filter((parada) => (parada.tramo || 1) === numeroTramo)
+  const paradas = paradasDelAviso.map((parada, index) => {
     const hora = parada.fechaProgramada
       ? ` - ${new Date(parada.fechaProgramada).toLocaleString('es-VE', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Caracas' })}`
       : parada.cargarAlDescargar
         ? ' - AL DESCARGAR el viaje anterior'
         : ''
-    return `${index + 1}. Carga: ${parada.lugar}, ${parada.ciudad}${hora}`
+    const tipo = parada.tipo === 'CARGA' ? 'Carga' : parada.tipo === 'DESCARGA' ? 'Descarga' : 'Pernocta'
+    return `${index + 1}. ${tipo}: ${parada.lugar}, ${parada.ciudad}${hora}`
   })
-  if (paradas.length === 0) paradas.push('Carga: por confirmar')
+  if (paradas.length === 0) paradas.push('Ruta por confirmar')
 
   const unidades = (viaje.unidades || [])
     .map((unidad) => `${unidad.camion?.placa || ''}${unidad.camion?.tipoVehiculo ? ` (${unidad.camion.tipoVehiculo})` : ''}`.trim())
@@ -63,12 +66,16 @@ const notificarAgendamiento = async (viaje) => {
   if (unidades.length === 0 && viaje.camion?.placa) unidades.push(viaje.camion.placa)
 
   const mensaje = [
-    `Nuevo viaje agendado: ${viaje.codigo}`,
+    esNuevoTramo ? 'NUEVO TRAMO ASIGNADO' : 'NUEVO VIAJE ASIGNADO',
+    '--------------------',
+    `Viaje: ${viaje.codigo}`,
+    `Tramo: ${numeroTramo}`,
     `Unidades: ${unidades.length > 0 ? unidades.join(' + ') : 'Por confirmar'}`,
     '',
-    'Lugar de carga:',
+    esNuevoTramo ? 'Ruta del nuevo tramo:' : 'Ruta del viaje:',
     ...paradas,
     '',
+    '--------------------',
     'Opciones de reporte:',
     '1 - Cargando',
     '2 - Lista la carga',
@@ -96,6 +103,11 @@ const actualizarParada = async (req, res) => {
 const actualizarRuta = async (req, res) => {
   const viaje = await service.actualizarRuta(req.params.id, req.body.paradas)
   return ok(res, filtrarFinanzas(viaje, req.usuario.rol), 'Ruta actualizada')
+}
+
+const cancelar = async (req, res) => {
+  const viaje = await service.cancelar(req.params.id)
+  return ok(res, filtrarFinanzas(viaje, req.usuario.rol), 'Viaje cancelado')
 }
 
 const recargarViaticos = async (req, res) => {
@@ -131,6 +143,7 @@ module.exports = {
   obtener,
   crear,
   actualizarRuta,
+  cancelar,
   actualizarParada,
   cerrar,
   listarPendientesLiquidacion,

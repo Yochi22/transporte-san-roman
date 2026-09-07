@@ -16,6 +16,8 @@ import {
   Calculator,
   Download,
   Edit3,
+  Eye,
+  EyeOff,
   FileCheck,
   LayoutDashboard,
   LogOut,
@@ -104,6 +106,7 @@ const tabs = [
   { id: 'retornables', label: 'Retornables', icon: Package },
   { id: 'despacho', label: 'Agendamiento', icon: Send },
   { id: 'recursos', label: 'Recursos', icon: Users },
+  { id: 'usuarios', label: 'Usuarios', icon: User },
   { id: 'taller', label: 'Taller', icon: Wrench },
   { id: 'liquidaciones', label: 'Liquidaciones', icon: Calculator },
 ]
@@ -327,7 +330,7 @@ export default function App() {
   }, [cargarWhatsappStatus, isAdmin, isAuthenticated])
 
   const visibleTabs = useMemo(
-    () => tabs.filter((tab) => tab.id !== 'liquidaciones' || isAdmin),
+    () => tabs.filter((tab) => !['liquidaciones', 'usuarios'].includes(tab.id) || isAdmin),
     [isAdmin]
   )
 
@@ -448,10 +451,13 @@ export default function App() {
               <RetornablesView retornables={data.retornables} viajes={viajes} choferes={choferes} camiones={camiones} onDone={() => fetchData({ refreshSelected: true })} />
             )}
             {activeTab === 'despacho' && (
-              <DespachoView choferes={data.choferesOperativos} camiones={data.camionesOperativos.filter((camion) => camion.estado !== 'EN_TALLER')} viajesActivos={data.activos} onDone={() => fetchData()} />
+              <DespachoView choferes={data.choferesOperativos} viajesPendientes={data.pendientesLiquidacion} onDone={() => fetchData()} />
             )}
             {activeTab === 'recursos' && (
               <RecursosView data={data} isAdmin={isAdmin} onDone={() => fetchData()} />
+            )}
+            {isAdmin && activeTab === 'usuarios' && (
+              <UsuariosView currentUser={usuario} />
             )}
             {activeTab === 'taller' && (
               <TallerView camiones={data.camionesOperativos} onDone={() => fetchData()} />
@@ -1391,8 +1397,8 @@ function normalizarRetornablePayload(form) {
     camionId: form.viajeId ? null : form.camionId || null,
   }
 }
-function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
-  const [form, setForm] = useState({ choferId: '', camionIds: [], viaticosDepositados: '' })
+function DespachoView({ choferes, viajesPendientes, onDone }) {
+  const [form, setForm] = useState({ choferId: '', camionIds: [], viaticosDepositados: '', tipoAgendamiento: 'NUEVO', viajeContinuacionId: '' })
   const [paradas, setParadas] = useState([
     { id: createClientId(), tipo: 'CARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
     { id: createClientId(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
@@ -1406,7 +1412,11 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
       .filter((camion) => camion?.activo !== false && camion.estado !== 'EN_TALLER'),
     [selectedChofer]
   )
-  const viajeExistente = viajesActivos.find((viaje) => viaje.choferId === form.choferId && sameIdSet(tripUnitIds(viaje), form.camionIds))
+  const continuacionesDisponibles = useMemo(
+    () => viajesPendientes.filter((viaje) => viaje.choferId === form.choferId),
+    [form.choferId, viajesPendientes]
+  )
+  const viajeExistente = continuacionesDisponibles.find((viaje) => viaje.id === form.viajeContinuacionId)
 
   useEffect(() => {
     if (!form.choferId) {
@@ -1427,6 +1437,15 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
       else selected.add(camionId)
       return { ...current, camionIds: Array.from(selected) }
     })
+  }
+
+  const seleccionarContinuacion = (viajeId) => {
+    const viaje = continuacionesDisponibles.find((item) => item.id === viajeId)
+    setForm((current) => ({
+      ...current,
+      viajeContinuacionId: viajeId,
+      camionIds: viaje ? tripUnitIds(viaje) : current.camionIds,
+    }))
   }
 
   const updateParada = (id, patch) => {
@@ -1452,6 +1471,8 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
         camionIds: form.camionIds,
         choferId: form.choferId,
         viaticosDepositados: Number(form.viaticosDepositados) || 0,
+        tipoAgendamiento: form.tipoAgendamiento,
+        viajeContinuacionId: form.tipoAgendamiento === 'CONTINUAR' ? form.viajeContinuacionId : null,
         paradas: paradas.map(({ tipo, lugar, ciudad, fechaProgramada, programacion }) => ({
           tipo,
           lugar,
@@ -1460,7 +1481,7 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
           cargarAlDescargar: tipo === 'CARGA' && programacion === 'AL_DESCARGAR',
         })),
       })
-      setForm({ choferId: '', camionIds: [], viaticosDepositados: '' })
+      setForm({ choferId: '', camionIds: [], viaticosDepositados: '', tipoAgendamiento: 'NUEVO', viajeContinuacionId: '' })
       setParadas([
         { id: createClientId(), tipo: 'CARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
         { id: createClientId(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
@@ -1483,7 +1504,7 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
         <Banner
           tone="neutral"
           icon={Route}
-          text={`Esta ruta se agregara como un nuevo tramo de ${viajeExistente.codigo}.`}
+          text={`Se agregara un nuevo tramo a ${viajeExistente.codigo}.`}
         />
       )}
       {form.choferId && unidadesAsignadas.length === 0 && (
@@ -1494,7 +1515,7 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
         <SectionTitle title="Nuevo despacho" subtitle="Chofer, unidad, viaticos en Bs y ruta" />
         <div className="mt-4 grid gap-4 md:grid-cols-3">
           <Field label="Chofer">
-            <select required value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value, camionIds: [] })} className="input">
+            <select required value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value, camionIds: [], tipoAgendamiento: 'NUEVO', viajeContinuacionId: '' })} className="input">
               <option value="">Seleccionar</option>
               {choferes.map((chofer) => <option key={chofer.id} value={chofer.id}>{chofer.nombre}  -  {formatStatus(chofer.estadoCalculado)}</option>)}
             </select>
@@ -1518,6 +1539,27 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
             <input type="number" min="0" step="0.01" value={form.viaticosDepositados} onChange={(event) => setForm({ ...form, viaticosDepositados: event.target.value })} className="input" placeholder="Sin viaticos en Bs" />
           </Field>
         </div>
+        {form.choferId && continuacionesDisponibles.length > 0 && (
+          <div className="mt-4 border-t border-neutral-100 pt-4">
+            <Field label="Este despacho corresponde a">
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => setForm((current) => ({ ...current, tipoAgendamiento: 'NUEVO', viajeContinuacionId: '' }))} className={form.tipoAgendamiento === 'NUEVO' ? 'btn-primary' : 'btn-secondary'}>Viaje nuevo</button>
+                <button type="button" onClick={() => { const id = continuacionesDisponibles[0]?.id || ''; setForm((current) => ({ ...current, tipoAgendamiento: 'CONTINUAR' })); seleccionarContinuacion(id) }} className={form.tipoAgendamiento === 'CONTINUAR' ? 'btn-primary' : 'btn-secondary'}>Nuevo tramo</button>
+              </div>
+            </Field>
+            {form.tipoAgendamiento === 'CONTINUAR' && (
+              <div className="mt-3 max-w-2xl">
+                <Field label="Viaje pendiente que se continuara">
+                  <select required value={form.viajeContinuacionId} onChange={(event) => seleccionarContinuacion(event.target.value)} className="input">
+                    {continuacionesDisponibles.map((viaje) => (
+                      <option key={viaje.id} value={viaje.id}>{viaje.codigo} - {formatRoute(viaje)} - {formatDate(viaje.fechaCierre)}</option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       <section className="rounded-md border border-neutral-200 bg-white p-4 sm:p-5">
@@ -1564,7 +1606,7 @@ function DespachoView({ choferes, camiones, viajesActivos, onDone }) {
         <div className="mt-5 flex justify-end">
           <button disabled={saving || form.camionIds.length === 0} className="btn-primary">
             <Send size={16} />
-            {saving ? 'Guardando' : viajeExistente ? 'Agregar tramo' : 'Despachar'}
+            {saving ? 'Guardando' : form.tipoAgendamiento === 'CONTINUAR' ? 'Agregar tramo' : 'Crear viaje'}
           </button>
         </div>
       </section>
@@ -2295,6 +2337,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   const [showRutaEditor, setShowRutaEditor] = useState(false)
   const [numeroGuia, setNumeroGuia] = useState(viaje.numeroGuia || '')
   const [cierreForm, setCierreForm] = useState({})
+  const puedeCancelar = canCancelTrip(viaje)
   const detailPageSize = 8
   const tramos = groupByTramo(viaje.paradas || [])
   const totalGastado = (viaje.gastos || []).reduce((total, gasto) => total + Number(gasto.monto), 0)
@@ -2372,6 +2415,26 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
     )
     if (!result.isConfirmed) return
     await ejecutarCierre(true)
+  }
+
+  const cancelarViaje = async () => {
+    const result = await confirmAction(
+      'Cancelar viaje',
+      'Solo se permite si no ha iniciado la carga, no hay reportes, gastos ni retornables vinculados.',
+      'Cancelar viaje'
+    )
+    if (!result.isConfirmed) return
+    setSaving('cancelar')
+    try {
+      await api.post(`/viajes/${viaje.id}/cancelar`, {})
+      await notifySuccess('Viaje cancelado')
+      onDone()
+      onClose()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo cancelar el viaje.')
+    } finally {
+      setSaving('')
+    }
   }
 
   const cambiarEstadoParada = async (paradaId, estado) => {
@@ -2479,6 +2542,9 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
                         <p className="text-xs text-neutral-500">{parada.ciudad}</p>
                         {parada.fechaProgramada && (
                           <p className="mt-1 text-xs font-medium text-blue-700">Carga programada: {formatDate(parada.fechaProgramada)}</p>
+                        )}
+                        {parada.tipo === 'DESCARGA' && parada.completadaAt && (
+                          <p className="mt-1 text-xs font-medium text-emerald-700">Descarga completada: {formatDate(parada.completadaAt)}</p>
                         )}
                         {parada.cargarAlDescargar && (
                           <p className="mt-1 text-xs font-medium text-amber-700">Carga: al descargar el viaje anterior</p>
@@ -2597,6 +2663,12 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
               <button onClick={recargar} disabled={Boolean(saving)} className="btn-secondary">
                 <Wallet size={16} />
                 Recargar viaticos
+              </button>
+            )}
+            {puedeCancelar && (
+              <button onClick={cancelarViaje} disabled={Boolean(saving)} className="btn-secondary text-red-700 hover:bg-red-50">
+                <X size={16} />
+                Cancelar viaje
               </button>
             )}
             {hasPendingLogistics(viaje) && (
@@ -2808,9 +2880,210 @@ function RutaEditorModal({ viaje, onClose, onSaved }) {
   )
 }
 
+function UsuariosView({ currentUser }) {
+  const emptyForm = () => ({ nombre: '', email: '', rol: 'OPERACIONES', password: '' })
+  const [usuarios, setUsuarios] = useState([])
+  const [estadoFiltro, setEstadoFiltro] = useState('activos')
+  const [page, setPage] = useState(1)
+  const [open, setOpen] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [form, setForm] = useState(emptyForm)
+  const [showPassword, setShowPassword] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const pageSize = 10
+  const visible = usuarios.filter((usuario) => estadoFiltro === 'inactivos' ? !usuario.activo : usuario.activo)
+  const pageItems = paginate(visible, page, pageSize)
+  useClampPage(page, visible.length, pageSize, setPage)
+
+  const cargar = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const response = await api.get('/usuarios', { params: { estado: 'todos' } })
+      setUsuarios(response.data?.data || [])
+    } catch (err) {
+      const message = err.response?.data?.mensaje || 'No se pudieron cargar los usuarios.'
+      setError(message)
+      await notifyError(message)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  const cerrarModal = () => {
+    setOpen(false)
+    setEditingId(null)
+    setShowPassword(false)
+    setForm(emptyForm())
+    setError('')
+  }
+
+  const crearNuevo = () => {
+    setEditingId(null)
+    setForm(emptyForm())
+    setShowPassword(false)
+    setError('')
+    setOpen(true)
+  }
+
+  const editar = (usuario) => {
+    setEditingId(usuario.id)
+    setForm({ nombre: usuario.nombre, email: usuario.email, rol: usuario.rol, password: '' })
+    setShowPassword(false)
+    setError('')
+    setOpen(true)
+  }
+
+  const submit = async (event) => {
+    event.preventDefault()
+    setError('')
+    try {
+      const payload = { ...form, password: form.password || undefined }
+      if (editingId) await api.put(`/usuarios/${editingId}`, payload)
+      else await api.post('/usuarios', payload)
+      await notifySuccess(editingId ? 'Usuario actualizado' : 'Usuario creado')
+      cerrarModal()
+      await cargar()
+    } catch (err) {
+      const message = err.response?.data?.mensaje || 'No se pudo guardar el usuario.'
+      setError(message)
+      await notifyError(message)
+    }
+  }
+
+  const desactivar = async (usuario) => {
+    const result = await confirmAction('Desactivar usuario', `${usuario.nombre} no podra ingresar al panel.`, 'Desactivar')
+    if (!result.isConfirmed) return
+    try {
+      await api.delete(`/usuarios/${usuario.id}`)
+      await notifySuccess('Usuario desactivado')
+      await cargar()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo desactivar el usuario.')
+    }
+  }
+
+  const reactivar = async (usuario) => {
+    try {
+      await api.patch(`/usuarios/${usuario.id}/reactivar`, {})
+      await notifySuccess('Usuario reactivado')
+      await cargar()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo reactivar el usuario.')
+    }
+  }
+
+  return (
+    <section className="rounded-md border border-neutral-200 bg-white">
+      <div className="flex flex-col gap-3 border-b border-neutral-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-2">
+          <SectionTitle title="Usuarios" subtitle={`${visible.length} registros`} />
+          <div className="flex w-fit rounded-md border border-neutral-200 bg-white p-1">
+            {[
+              ['activos', 'Activos'],
+              ['inactivos', 'Inactivos'],
+            ].map(([value, label]) => (
+              <button key={value} type="button" onClick={() => { setEstadoFiltro(value); setPage(1) }} className={`h-8 px-3 text-xs font-medium ${estadoFiltro === value ? 'rounded bg-neutral-950 text-white' : 'text-neutral-600'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <button onClick={crearNuevo} className="btn-secondary">
+          <Plus size={16} />
+          Nuevo usuario
+        </button>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-left text-sm">
+          <thead className="bg-neutral-50 text-xs text-neutral-500">
+            <tr>
+              <th className="px-4 py-3">Nombre</th>
+              <th className="px-4 py-3">Correo</th>
+              <th className="px-4 py-3">Rol</th>
+              <th className="px-4 py-3">Estado</th>
+              <th className="px-4 py-3 text-right">Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageItems.map((usuario) => (
+              <tr key={usuario.id} className="border-t border-neutral-100">
+                <td className="px-4 py-3 font-medium">{usuario.nombre}</td>
+                <td className="px-4 py-3 text-neutral-600">{usuario.email}</td>
+                <td className="px-4 py-3">{formatStatus(usuario.rol)}</td>
+                <td className="px-4 py-3">
+                  <span className={`rounded-md px-2 py-1 text-xs font-medium ${usuario.activo ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-100 text-neutral-600'}`}>{usuario.activo ? 'ACTIVO' : 'INACTIVO'}</span>
+                </td>
+                <td className="px-4 py-3">
+                  <div className="flex justify-end gap-1">
+                    <button onClick={() => editar(usuario)} title="Editar" className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100"><Edit3 size={14} /></button>
+                    {usuario.activo ? (
+                      <button onClick={() => desactivar(usuario)} disabled={usuario.id === currentUser?.id} title="Desactivar" className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-amber-50 hover:text-amber-700 disabled:opacity-35"><UserX size={14} /></button>
+                    ) : (
+                      <button onClick={() => reactivar(usuario)} title="Reactivar" className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-emerald-50 hover:text-emerald-700"><Check size={14} /></button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {!loading && visible.length === 0 && <Empty text="Sin usuarios en este filtro." />}
+        {loading && <Empty text="Cargando usuarios..." />}
+      </div>
+      <div className="px-4 py-3">
+        <Pagination page={page} total={visible.length} pageSize={pageSize} onChange={setPage} />
+      </div>
+
+      {open && (
+        <div className="fixed inset-0 z-50 grid min-h-[100svh] place-items-center bg-neutral-950/40 p-4">
+          <form onSubmit={submit} className="w-full max-w-lg rounded-md border border-neutral-200 bg-white shadow-xl">
+            <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-4">
+              <SectionTitle title={editingId ? 'Editar usuario' : 'Nuevo usuario'} subtitle="Acceso y permisos del panel" />
+              <button type="button" onClick={cerrarModal} className="grid h-9 w-9 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100"><X size={18} /></button>
+            </div>
+            <div className="grid gap-4 p-5">
+              <Field label="Nombre">
+                <input required value={form.nombre} onChange={(event) => setForm({ ...form, nombre: event.target.value })} className="input" placeholder="Nombre" />
+              </Field>
+              <Field label="Correo">
+                <input required type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} className="input" placeholder="correo@empresa.com" />
+              </Field>
+              <Field label="Rol">
+                <select value={form.rol} onChange={(event) => setForm({ ...form, rol: event.target.value })} className="input">
+                  <option value="OPERACIONES">Operaciones</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+              </Field>
+              <Field label={editingId ? 'Nueva clave (opcional)' : 'Clave'}>
+                <div className="relative">
+                  <input required={!editingId} type={showPassword ? 'text' : 'password'} value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} className="input pr-11" placeholder="Minimo 12 caracteres" autoComplete="new-password" />
+                  <button type="button" onClick={() => setShowPassword((value) => !value)} className="absolute right-1 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100">
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+              </Field>
+              {error && <p className="text-sm text-red-600">{error}</p>}
+            </div>
+            <div className="flex flex-col-reverse gap-2 border-t border-neutral-100 px-5 py-4 sm:flex-row sm:justify-end">
+              <button type="button" onClick={cerrarModal} className="btn-secondary justify-center">Cancelar</button>
+              <button className="btn-primary justify-center"><Check size={16} />Guardar</button>
+            </div>
+          </form>
+        </div>
+      )}
+    </section>
+  )
+}
+
 function Login({ onLogin }) {
   const [email, setEmail] = useState('admin@sanroman.com')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -2849,7 +3122,12 @@ function Login({ onLogin }) {
             <input value={email} onChange={(event) => setEmail(event.target.value)} className="input" autoComplete="email" />
           </Field>
           <Field label="Clave">
-            <input value={password} onChange={(event) => setPassword(event.target.value)} className="input" type="password" autoComplete="current-password" />
+            <div className="relative">
+              <input value={password} onChange={(event) => setPassword(event.target.value)} className="input pr-11" type={showPassword ? 'text' : 'password'} autoComplete="current-password" />
+              <button type="button" onClick={() => setShowPassword((value) => !value)} className="absolute right-1 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100">
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </Field>
           {error && <p className="text-[13px] text-red-600">{error}</p>}
           <button disabled={loading} className="btn-primary w-full">
@@ -3026,7 +3304,13 @@ function isOperationallyActive(viaje) {
 }
 
 function isPendingSettlement(viaje) {
-  return viaje.estadoFinanciero === 'PENDIENTE' && !hasPendingLogistics(viaje)
+  return viaje.estadoFinanciero === 'PENDIENTE' && !hasPendingLogistics(viaje) && viaje.estadoLogistico !== 'CANCELADO'
+}
+
+function canCancelTrip(viaje) {
+  if (!viaje || viaje.estadoLogistico === 'CANCELADO' || viaje.estadoFinanciero === 'LIQUIDADO') return false
+  if ((viaje.reportes || []).length > 0 || (viaje.gastos || []).length > 0) return false
+  return (viaje.paradas || []).length > 0 && viaje.paradas.every((parada) => parada.estado === 'PENDIENTE')
 }
 
 function buildOperationalStatusMaps(viajesActivos) {
@@ -3096,7 +3380,7 @@ function buildOperationalData({ viajes, choferes, camiones, retornables = [], qu
 
   const activos = filteredViajes.filter(isOperationallyActive)
   const pendientesLiquidacion = filteredViajes.filter(isPendingSettlement)
-  const completados = filteredViajes.filter((viaje) => viaje.estadoLogistico === 'COMPLETADO' || isPendingSettlement(viaje))
+  const completados = filteredViajes.filter((viaje) => ['COMPLETADO', 'CANCELADO'].includes(viaje.estadoLogistico) || isPendingSettlement(viaje))
   const liquidados = filteredViajes.filter((viaje) => viaje.estadoFinanciero === 'LIQUIDADO')
   const esperando = activos.filter((viaje) => viaje.reportes?.some((reporte) => reporte.tipoReporte === 'ESPERANDO_INSTRUCCIONES'))
   const activosGlobales = viajes.filter(isOperationallyActive)
@@ -3267,7 +3551,7 @@ function tripPickerLabel(viaje) {
 }
 
 function normalizeText(value = '') {
-  return String(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  return String(value ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
 function formatRoute(viaje) {
@@ -3410,6 +3694,7 @@ function pageTitle(tab) {
     despacho: 'Agendamiento',
     recursos: 'Recursos',
     taller: 'Taller',
+    usuarios: 'Usuarios',
     liquidaciones: 'Liquidaciones',
   }
   return titles[tab] || 'Panel'
@@ -3513,7 +3798,7 @@ function playAlertSound() {
 }
 
 function normalize(value = '') {
-  return value
+  return (value ?? '')
     .toString()
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')

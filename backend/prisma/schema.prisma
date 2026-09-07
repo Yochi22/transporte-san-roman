@@ -38,6 +38,7 @@ enum EstadoLogistico {
   PENDIENTE
   EN_CURSO
   COMPLETADO
+  CANCELADO
 }
 
 enum EstadoFinanciero {

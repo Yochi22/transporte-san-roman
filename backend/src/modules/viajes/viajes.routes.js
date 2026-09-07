@@ -11,6 +11,7 @@ router.get('/pendientes-liquidacion/listado', soloAdmin, ctrl.listarPendientesLi
 router.get('/:id', ctrl.obtener)
 router.post('/', ctrl.crear)
 router.patch('/:id/ruta', ctrl.actualizarRuta)
+router.post('/:id/cancelar', ctrl.cancelar)
 router.patch('/:id/paradas/:paradaId', ctrl.actualizarParada)
 router.patch('/:id/recarga', soloAdmin, ctrl.recargarViaticos)
 router.patch('/:id/confirmar-documentacion', soloAdmin, ctrl.confirmarDocumentacion)

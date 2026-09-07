@@ -2,7 +2,7 @@ const service = require('./usuarios.service')
 const { ok } = require('../../utils/respuesta')
 
 const listar = async (req, res) => {
-  const usuarios = await service.listar()
+  const usuarios = await service.listar(req.query)
   return ok(res, usuarios)
 }
 
@@ -12,13 +12,18 @@ const crear = async (req, res) => {
 }
 
 const actualizar = async (req, res) => {
-  const usuario = await service.actualizar(req.params.id, req.body)
+  const usuario = await service.actualizar(req.params.id, req.body, req.usuario.id)
   return ok(res, usuario, 'Usuario actualizado')
 }
 
 const desactivar = async (req, res) => {
-  await service.desactivar(req.params.id, req.usuario.id)
-  return ok(res, {}, 'Usuario desactivado')
+  const usuario = await service.desactivar(req.params.id, req.usuario.id)
+  return ok(res, usuario, 'Usuario desactivado')
 }
 
-module.exports = { listar, crear, actualizar, desactivar }
+const reactivar = async (req, res) => {
+  const usuario = await service.reactivar(req.params.id)
+  return ok(res, usuario, 'Usuario reactivado')
+}
+
+module.exports = { listar, crear, actualizar, desactivar, reactivar }
