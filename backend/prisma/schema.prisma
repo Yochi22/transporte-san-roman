@@ -124,6 +124,37 @@ enum TipoMovimientoRetornable {
   AJUSTE
 }
 
+model Empresa {
+  id        String        @id @default(uuid())
+  nombre    String        @unique
+  activo    Boolean       @default(true)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+  sedes     EmpresaSede[]
+  viajes    Viaje[]
+
+  @@index([activo, nombre])
+  @@map("empresas")
+}
+
+model EmpresaSede {
+  id        String   @id @default(uuid())
+  empresaId String   @map("empresa_id")
+  nombre    String
+  ciudad    String
+  direccion String?
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  empresa Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  paradas Parada[]
+
+  @@unique([empresaId, nombre, ciudad])
+  @@index([empresaId, activo])
+  @@map("empresas_sedes")
+}
+
 model Usuario {
   id             String   @id @default(uuid())
   nombre         String
@@ -243,6 +274,7 @@ model MantenimientoVehiculo {
 model Viaje {
   id                    String           @id @default(uuid())
   codigo                String           @unique
+  empresaId             String?          @map("empresa_id")
   camionId              String           @map("camion_id")
   choferId              String           @map("chofer_id")
   creadoPorId           String           @map("creado_por_id")
@@ -262,6 +294,7 @@ model Viaje {
   createdAt             DateTime         @default(now()) @map("created_at")
   updatedAt             DateTime         @updatedAt @map("updated_at")
 
+  empresa   Empresa?        @relation(fields: [empresaId], references: [id], onDelete: SetNull)
   camion    Camion          @relation(fields: [camionId], references: [id])
   chofer    Chofer          @relation(fields: [choferId], references: [id])
   creadoPor Usuario         @relation("ViajeCreador", fields: [creadoPorId], references: [id])
@@ -273,6 +306,7 @@ model Viaje {
   retornableMovimientos RetornableMovimiento[]
 
   @@index([estadoLogistico, estadoFinanciero])
+  @@index([empresaId, estadoLogistico, estadoFinanciero])
   @@index([camionId, estadoLogistico])
   @@index([choferId, estadoLogistico])
   @@index([createdAt])
@@ -296,6 +330,7 @@ model ViajeUnidad {
 model Parada {
   id                String       @id @default(uuid())
   viajeId           String       @map("viaje_id")
+  empresaSedeId     String?      @map("empresa_sede_id")
   orden             Int
   tramo             Int          @default(1)
   tipo              TipoParada
@@ -309,10 +344,12 @@ model Parada {
   completadaAt      DateTime?    @map("completada_at")
   createdAt         DateTime     @default(now()) @map("created_at")
 
-  viaje    Viaje           @relation(fields: [viajeId], references: [id])
-  reportes ReporteChofer[]
+  viaje       Viaje        @relation(fields: [viajeId], references: [id])
+  empresaSede EmpresaSede? @relation(fields: [empresaSedeId], references: [id], onDelete: SetNull)
+  reportes    ReporteChofer[]
 
   @@index([viajeId, orden])
+  @@index([empresaSedeId])
   @@index([estado])
   @@map("paradas")
 }

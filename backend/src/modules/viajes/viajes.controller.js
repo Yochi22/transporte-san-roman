@@ -69,6 +69,7 @@ const notificarAgendamiento = async (viaje) => {
     esNuevoTramo ? 'NUEVO TRAMO ASIGNADO' : 'NUEVO VIAJE ASIGNADO',
     '--------------------',
     `Viaje: ${viaje.codigo}`,
+    `Empresa: ${viaje.empresa?.nombre || 'Por confirmar'}`,
     `Tramo: ${numeroTramo}`,
     `Unidades: ${unidades.length > 0 ? unidades.join(' + ') : 'Por confirmar'}`,
     '',

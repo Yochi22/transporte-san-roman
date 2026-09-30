@@ -6,6 +6,8 @@ const prisma = require('../src/config/database')
 const DIAS_RETENCION_REPORTES = Math.max(1, Number(process.env.DIAS_RETENCION_REPORTES) || 5)
 const REQUIRED_RLS_TABLES = [
   'usuarios',
+  'empresas',
+  'empresas_sedes',
   'choferes',
   'camiones',
   'choferes_unidades',

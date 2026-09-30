@@ -9,7 +9,9 @@ import {
   AlertTriangle,
   Banknote,
   Bell,
+  Building2,
   Check,
+  ChevronDown,
   ChevronRight,
   ClipboardList,
   Package,
@@ -22,6 +24,7 @@ import {
   LayoutDashboard,
   LogOut,
   MapPin,
+  MapPinned,
   Menu,
   Plus,
   RefreshCw,
@@ -105,6 +108,7 @@ const tabs = [
   { id: 'reportes', label: 'Reportes', icon: ClipboardList },
   { id: 'retornables', label: 'Retornables', icon: Package },
   { id: 'despacho', label: 'Agendamiento', icon: Send },
+  { id: 'empresas', label: 'Empresas', icon: Building2 },
   { id: 'recursos', label: 'Recursos', icon: Users },
   { id: 'usuarios', label: 'Usuarios', icon: User },
   { id: 'taller', label: 'Taller', icon: Wrench },
@@ -148,6 +152,7 @@ export default function App() {
   const [viajes, setViajes] = useState([])
   const [choferes, setChoferes] = useState([])
   const [camiones, setCamiones] = useState([])
+  const [empresas, setEmpresas] = useState([])
   const [retornables, setRetornables] = useState([])
 
   const logout = useCallback(() => {
@@ -177,9 +182,10 @@ export default function App() {
         api.get('/viajes'),
         api.get('/choferes', { params: { estado: 'todos' } }),
         api.get('/camiones', { params: { estado: 'todos' } }),
+        api.get('/empresas', { params: { estado: 'todos' } }),
         api.get('/retornables', { params: { estado: 'todos', pageSize: 500 } }),
       ])
-      const [viajesResult, choferesResult, camionesResult, retornablesResult] = resultados
+      const [viajesResult, choferesResult, camionesResult, empresasResult, retornablesResult] = resultados
       const rechazado = resultados.find((resultado) => resultado.status === 'rejected')
       if (rechazado?.reason?.response?.status === 401) {
         logout()
@@ -190,6 +196,7 @@ export default function App() {
       if (nextViajes) setViajes(nextViajes)
       if (choferesResult.status === 'fulfilled') setChoferes(choferesResult.value.data?.data || [])
       if (camionesResult.status === 'fulfilled') setCamiones(camionesResult.value.data?.data || [])
+      if (empresasResult.status === 'fulfilled') setEmpresas(empresasResult.value.data?.data || [])
       if (retornablesResult.status === 'fulfilled') {
         const dataRetornables = retornablesResult.value.data?.data
         setRetornables(dataRetornables?.items || dataRetornables || [])
@@ -452,7 +459,7 @@ export default function App() {
               />
             )}
             {activeTab === 'viajes' && (
-              <ViajesView data={data} onSelect={setSelectedViaje} />
+              <ViajesView data={data} empresas={empresas} onSelect={setSelectedViaje} />
             )}
             {activeTab === 'reportes' && (
               <ReportesTableView reportes={data.reportes} onSelectViaje={setSelectedViaje} />
@@ -461,7 +468,10 @@ export default function App() {
               <RetornablesView retornables={data.retornables} viajes={viajes} choferes={choferes} camiones={camiones} onDone={() => fetchData({ refreshSelected: true })} />
             )}
             {activeTab === 'despacho' && (
-              <DespachoView choferes={data.choferesOperativos} viajesPendientes={data.pendientesLiquidacion} onDone={() => fetchData()} />
+              <DespachoView choferes={data.choferesOperativos} empresas={empresas.filter((empresa) => empresa.activo)} viajesPendientes={data.pendientesLiquidacion} onDone={() => fetchData()} />
+            )}
+            {activeTab === 'empresas' && (
+              <EmpresasView empresas={empresas} isAdmin={isAdmin} onDone={() => fetchData()} />
             )}
             {activeTab === 'recursos' && (
               <RecursosView data={data} isAdmin={isAdmin} onDone={() => fetchData()} />
@@ -473,7 +483,7 @@ export default function App() {
               <TallerView camiones={data.camionesOperativos} onDone={() => fetchData()} />
             )}
             {isAdmin && activeTab === 'liquidaciones' && (
-              <LiquidacionesView viajes={data.liquidados} choferes={choferes} onDone={() => fetchData()} />
+              <LiquidacionesView viajes={data.liquidados} choferes={choferes} empresas={empresas} onDone={() => fetchData()} />
             )}
           </div>
         </main>
@@ -636,12 +646,28 @@ function WhatsAppStatusCard({ status, onOpenQr, onReset, onRefresh }) {
   )
 }
 
-function ViajesView({ data, onSelect }) {
+function ViajesView({ data, empresas, onSelect }) {
+  const [empresaId, setEmpresaId] = useState('')
+  const activos = data.activos.filter((viaje) => matchesCompanyFilter(viaje, empresaId))
+  const opciones = companyFilterOptions(empresas)
+
   return (
     <div className="space-y-6">
-      <TripList title="En curso" viajes={data.activos} onSelect={onSelect} />
-      <PendientesLiquidacion onSelect={onSelect} />
-      <ArchivoLogistico onSelect={onSelect} />
+      <section className="border-b border-neutral-200 pb-4">
+        <div className="max-w-md">
+          <Field label="Filtrar viajes por empresa">
+            <SearchableSelect
+              value={empresaId}
+              options={opciones}
+              onChange={setEmpresaId}
+              placeholder="Todas las empresas"
+            />
+          </Field>
+        </div>
+      </section>
+      <TripList title="En curso" viajes={activos} onSelect={onSelect} />
+      <PendientesLiquidacion key={'pendientes-' + empresaId} empresaId={empresaId} onSelect={onSelect} />
+      <ArchivoLogistico key={'archivo-' + empresaId} empresaId={empresaId} onSelect={onSelect} />
     </div>
   )
 }
@@ -821,7 +847,7 @@ function ReportesView({ reportes, onSelectViaje }) {
   )
 }
 
-function PendientesLiquidacion({ onSelect }) {
+function PendientesLiquidacion({ empresaId, onSelect }) {
   const [page, setPage] = useState(1)
   const [data, setData] = useState({ items: [], total: 0, pageSize: 10 })
   const [loading, setLoading] = useState(false)
@@ -835,7 +861,7 @@ function PendientesLiquidacion({ onSelect }) {
       setLoadError('')
       try {
         const response = await api.get('/viajes/pendientes-liquidacion/listado', {
-          params: { page, pageSize: data.pageSize },
+          params: { page, pageSize: data.pageSize, empresaId: empresaId || undefined },
         })
         if (active) setData(response.data?.data || { items: [], total: 0, pageSize: 10 })
       } catch (err) {
@@ -848,7 +874,7 @@ function PendientesLiquidacion({ onSelect }) {
     return () => {
       active = false
     }
-  }, [page, data.pageSize])
+  }, [page, data.pageSize, empresaId])
 
   return (
     <section className="space-y-3">
@@ -859,7 +885,7 @@ function PendientesLiquidacion({ onSelect }) {
           <button key={viaje.id} onClick={() => onSelect(viaje)} className="grid w-full gap-2 border-b border-neutral-100 px-4 py-3 text-left last:border-b-0 hover:bg-neutral-50 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_140px_120px_24px] sm:items-center">
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{viaje.codigo}</p>
-              <p className="truncate text-xs text-neutral-500">{formatRoute(viaje)}</p>
+              <p className="truncate text-xs text-neutral-500">{companyName(viaje)} - {formatRoute(viaje)}</p>
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{viaje.chofer?.nombre || 'Sin chofer'}</p>
@@ -884,7 +910,7 @@ function PendientesLiquidacion({ onSelect }) {
   )
 }
 
-function ArchivoLogistico({ onSelect }) {
+function ArchivoLogistico({ empresaId, onSelect }) {
   const [periodo, setPeriodo] = useState('todos')
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10))
   const [page, setPage] = useState(1)
@@ -900,7 +926,7 @@ function ArchivoLogistico({ onSelect }) {
       setLoadError('')
       try {
         const response = await api.get('/viajes/archivo/listado', {
-          params: { periodo, fecha, page, pageSize: archivo.pageSize },
+          params: { periodo, fecha, page, pageSize: archivo.pageSize, empresaId: empresaId || undefined },
         })
         if (active) setArchivo(response.data?.data || { items: [], total: 0, pageSize: 10 })
       } catch (err) {
@@ -913,7 +939,7 @@ function ArchivoLogistico({ onSelect }) {
     return () => {
       active = false
     }
-  }, [periodo, fecha, page, archivo.pageSize])
+  }, [periodo, fecha, page, archivo.pageSize, empresaId])
 
   const cambiarPeriodo = (value) => {
     setPeriodo(value)
@@ -962,7 +988,7 @@ function ArchivoLogistico({ onSelect }) {
             <StatusDot estado={viaje.estadoLogistico} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{viaje.codigo}</p>
-              <p className="truncate text-xs text-neutral-500">{viaje.chofer?.nombre || 'Sin chofer'}  -  {formatRoute(viaje)}</p>
+              <p className="truncate text-xs text-neutral-500">{companyName(viaje)} - {viaje.chofer?.nombre || 'Sin chofer'} - {formatRoute(viaje)}</p>
             </div>
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium">{formatDate(viaje.fechaCierre)}</p>
@@ -994,7 +1020,7 @@ function TripList({ title, viajes, onSelect }) {
             <StatusDot estado={viaje.estadoLogistico} />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{viaje.codigo}</p>
-              <p className="truncate text-xs text-neutral-500">{viaje.chofer?.nombre || 'Sin chofer'}  -  {formatRoute(viaje)}</p>
+              <p className="truncate text-xs text-neutral-500">{companyName(viaje)} - {viaje.chofer?.nombre || 'Sin chofer'} - {formatRoute(viaje)}</p>
             </div>
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium">{ves(balance(viaje))}</p>
@@ -1020,6 +1046,10 @@ function TripCard({ viaje, onSelect }) {
         <div className="min-w-0">
           <p className="text-xs font-medium text-neutral-500">{formatTripUnits(viaje) || 'Sin placa'}</p>
           <h3 className="mt-1 truncate text-base font-semibold">{viaje.codigo}</h3>
+          <div className="mt-2 flex min-w-0 items-center gap-1.5 text-sm font-semibold text-neutral-800">
+            <Building2 className="shrink-0 text-neutral-500" size={14} />
+            <span className="truncate">Empresa: {companyName(viaje)}</span>
+          </div>
           <p className="mt-1 truncate text-sm text-neutral-600">{viaje.chofer?.nombre || 'Sin chofer'}</p>
         </div>
         <span className="rounded-md bg-neutral-950 px-2 py-1 text-xs font-medium text-white">{formatStatus(viaje.estadoLogistico)}</span>
@@ -1421,15 +1451,17 @@ function normalizarRetornablePayload(form) {
     camionId: form.viajeId ? null : form.camionId || null,
   }
 }
-function DespachoView({ choferes, viajesPendientes, onDone }) {
-  const [form, setForm] = useState({ choferId: '', camionIds: [], viaticosDepositados: '', tipoAgendamiento: 'NUEVO', viajeContinuacionId: '' })
+function DespachoView({ choferes, empresas, viajesPendientes, onDone }) {
+  const [form, setForm] = useState({ empresaId: '', choferId: '', camionIds: [], viaticosDepositados: '', tipoAgendamiento: 'NUEVO', viajeContinuacionId: '' })
   const [paradas, setParadas] = useState([
-    { id: createClientId(), tipo: 'CARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
-    { id: createClientId(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
+    { id: createClientId(), tipo: 'CARGA', empresaSedeId: '', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
+    { id: createClientId(), tipo: 'DESCARGA', empresaSedeId: '', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
   ])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const selectedChofer = choferes.find((chofer) => chofer.id === form.choferId)
+  const selectedEmpresa = empresas.find((empresa) => empresa.id === form.empresaId)
+  const sedesActivas = (selectedEmpresa?.sedes || []).filter((sede) => sede.activo)
   const unidadesAsignadas = useMemo(
     () => (selectedChofer?.unidadesAsignadas || [])
       .map((asignacion) => asignacion.camion)
@@ -1437,8 +1469,11 @@ function DespachoView({ choferes, viajesPendientes, onDone }) {
     [selectedChofer]
   )
   const continuacionesDisponibles = useMemo(
-    () => viajesPendientes.filter((viaje) => viaje.choferId === form.choferId),
-    [form.choferId, viajesPendientes]
+    () => viajesPendientes.filter((viaje) => (
+      viaje.choferId === form.choferId
+      && (!viaje.empresaId || empresas.some((empresa) => empresa.id === viaje.empresaId))
+    )),
+    [empresas, form.choferId, viajesPendientes]
   )
   const viajeExistente = continuacionesDisponibles.find((viaje) => viaje.id === form.viajeContinuacionId)
 
@@ -1469,7 +1504,23 @@ function DespachoView({ choferes, viajesPendientes, onDone }) {
       ...current,
       viajeContinuacionId: viajeId,
       camionIds: viaje ? tripUnitIds(viaje) : current.camionIds,
+      empresaId: viaje?.empresaId || current.empresaId,
     }))
+  }
+
+  const seleccionarEmpresa = (empresaId) => {
+    setForm((current) => ({ ...current, empresaId }))
+    setParadas((current) => current.map((parada) => (
+      parada.empresaSedeId ? { ...parada, empresaSedeId: '' } : parada
+    )))
+  }
+
+  const seleccionarSede = (paradaId, sedeId) => {
+    const sede = sedesActivas.find((item) => item.id === sedeId)
+    updateParada(paradaId, {
+      empresaSedeId: sedeId,
+      ...(sede ? { lugar: sede.nombre, ciudad: sede.ciudad } : {})
+    })
   }
 
   const updateParada = (id, patch) => {
@@ -1477,7 +1528,7 @@ function DespachoView({ choferes, viajesPendientes, onDone }) {
   }
 
   const addParada = () => {
-    setParadas((prev) => [...prev, { id: createClientId(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' }])
+    setParadas((prev) => [...prev, { id: createClientId(), tipo: 'DESCARGA', empresaSedeId: '', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' }])
   }
 
   const removeParada = (id) => {
@@ -1493,22 +1544,24 @@ function DespachoView({ choferes, viajesPendientes, onDone }) {
       await api.post('/viajes', {
         camionId: form.camionIds[0],
         camionIds: form.camionIds,
+        empresaId: form.empresaId,
         choferId: form.choferId,
         viaticosDepositados: Number(form.viaticosDepositados) || 0,
         tipoAgendamiento: form.tipoAgendamiento,
         viajeContinuacionId: form.tipoAgendamiento === 'CONTINUAR' ? form.viajeContinuacionId : null,
-        paradas: paradas.map(({ tipo, lugar, ciudad, fechaProgramada, programacion }) => ({
+        paradas: paradas.map(({ tipo, empresaSedeId, lugar, ciudad, fechaProgramada, programacion }) => ({
           tipo,
+          empresaSedeId: tipo === 'CARGA' ? empresaSedeId || null : null,
           lugar,
           ciudad,
           fechaProgramada: tipo === 'CARGA' && programacion === 'FECHA_HORA' ? fechaProgramada : null,
           cargarAlDescargar: tipo === 'CARGA' && programacion === 'AL_DESCARGAR',
         })),
       })
-      setForm({ choferId: '', camionIds: [], viaticosDepositados: '', tipoAgendamiento: 'NUEVO', viajeContinuacionId: '' })
+      setForm({ empresaId: '', choferId: '', camionIds: [], viaticosDepositados: '', tipoAgendamiento: 'NUEVO', viajeContinuacionId: '' })
       setParadas([
-        { id: createClientId(), tipo: 'CARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
-        { id: createClientId(), tipo: 'DESCARGA', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
+        { id: createClientId(), tipo: 'CARGA', empresaSedeId: '', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
+        { id: createClientId(), tipo: 'DESCARGA', empresaSedeId: '', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
       ])
       await notifySuccess(viajeExistente ? 'Tramo agregado' : 'Viaje agendado', 'El chofer recibira el detalle por WhatsApp.')
       onDone()
@@ -1522,7 +1575,7 @@ function DespachoView({ choferes, viajesPendientes, onDone }) {
   }
 
   return (
-    <form onSubmit={submit} className="mx-auto max-w-5xl space-y-5">
+    <form onSubmit={submit} className="mx-auto max-w-6xl space-y-5">
       {error && <Banner tone="danger" icon={AlertTriangle} text={error} />}
       {viajeExistente && (
         <Banner
@@ -1536,8 +1589,18 @@ function DespachoView({ choferes, viajesPendientes, onDone }) {
       )}
 
       <section className="rounded-md border border-neutral-200 bg-white p-4 sm:p-5">
-        <SectionTitle title="Nuevo despacho" subtitle="Chofer, unidad, viaticos en Bs y ruta" />
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
+        <SectionTitle title="Nuevo despacho" subtitle="Empresa, chofer, unidades, viaticos en Bs y ruta" />
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Field label="Empresa">
+            <SearchableSelect
+              required
+              value={form.empresaId}
+              options={empresas.map((empresa) => ({ value: empresa.id, label: empresa.nombre }))}
+              onChange={seleccionarEmpresa}
+              disabled={Boolean(viajeExistente?.empresaId)}
+              placeholder="Buscar empresa"
+            />
+          </Field>
           <Field label="Chofer">
             <select required value={form.choferId} onChange={(event) => setForm({ ...form, choferId: event.target.value, camionIds: [], tipoAgendamiento: 'NUEVO', viajeContinuacionId: '' })} className="input">
               <option value="">Seleccionar</option>
@@ -1599,7 +1662,7 @@ function DespachoView({ choferes, viajesPendientes, onDone }) {
           {paradas.map((parada, index) => (
             <div key={parada.id} className="grid gap-3 rounded-md border border-neutral-200 p-3 md:grid-cols-[52px_130px_1fr_1fr_220px_40px]">
               <div className="flex h-9 items-center text-[13px] font-medium text-neutral-500">#{index + 1}</div>
-              <select value={parada.tipo} onChange={(event) => updateParada(parada.id, { tipo: event.target.value, fechaProgramada: event.target.value === 'CARGA' ? parada.fechaProgramada : '', programacion: 'SIN_PROGRAMAR' })} className="input">
+              <select value={parada.tipo} onChange={(event) => updateParada(parada.id, { tipo: event.target.value, empresaSedeId: event.target.value === 'CARGA' ? parada.empresaSedeId : '', fechaProgramada: event.target.value === 'CARGA' ? parada.fechaProgramada : '', programacion: 'SIN_PROGRAMAR' })} className="input">
                 <option value="CARGA">Carga</option>
                 <option value="DESCARGA">Descarga</option>
                 <option value="PERNOCTA">Pernocta</option>
@@ -1623,18 +1686,214 @@ function DespachoView({ choferes, viajesPendientes, onDone }) {
               <button type="button" onClick={() => removeParada(parada.id)} className="grid h-10 w-10 place-items-center rounded-md text-neutral-400 hover:bg-red-50 hover:text-red-600">
                 <X size={16} />
               </button>
+              {parada.tipo === 'CARGA' && (
+                <div className="md:col-start-3 md:col-span-4">
+                  <p className="mb-1 text-xs font-medium text-neutral-600">Punto de carga de {selectedEmpresa?.nombre || 'la empresa'}</p>
+                  <SearchableSelect
+                    value={parada.empresaSedeId}
+                    options={sedesActivas.map((sede) => ({
+                      value: sede.id,
+                      label: `${sede.nombre} - ${sede.ciudad}`,
+                      keywords: sede.direccion || ''
+                    }))}
+                    onChange={(sedeId) => seleccionarSede(parada.id, sedeId)}
+                    disabled={!form.empresaId || sedesActivas.length === 0}
+                    placeholder={sedesActivas.length > 0 ? 'Buscar punto de carga' : 'Sin puntos registrados; completa lugar y ciudad'}
+                    allowClear
+                  />
+                </div>
+              )}
             </div>
           ))}
         </div>
 
         <div className="mt-5 flex justify-end">
-          <button disabled={saving || form.camionIds.length === 0} className="btn-primary">
+          <button disabled={saving || !form.empresaId || form.camionIds.length === 0} className="btn-primary">
             <Send size={16} />
             {saving ? 'Guardando' : form.tipoAgendamiento === 'CONTINUAR' ? 'Agregar tramo' : 'Crear viaje'}
           </button>
         </div>
       </section>
     </form>
+  )
+}
+
+function EmpresasView({ empresas, isAdmin, onDone }) {
+  const [query, setQuery] = useState('')
+  const [expandedId, setExpandedId] = useState(null)
+  const [empresaForm, setEmpresaForm] = useState(null)
+  const [sedeForm, setSedeForm] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const q = normalize(query)
+  const filtered = empresas.filter((empresa) => !q || [
+    empresa.nombre,
+    ...(empresa.sedes || []).flatMap((sede) => [sede.nombre, sede.ciudad, sede.direccion]),
+  ].some((value) => normalize(value).includes(q)))
+  const totals = empresas.reduce((acc, empresa) => ({
+    viajes: acc.viajes + Number(empresa.estadisticas?.totalViajes || 0),
+    activos: acc.activos + Number(empresa.estadisticas?.activos || 0),
+    finalizados: acc.finalizados + Number(empresa.estadisticas?.finalizados || 0),
+    liquidados: acc.liquidados + Number(empresa.estadisticas?.liquidados || 0),
+  }), { viajes: 0, activos: 0, finalizados: 0, liquidados: 0 })
+
+  const guardarEmpresa = async (event) => {
+    event.preventDefault()
+    setSaving(true)
+    try {
+      if (empresaForm.id) await api.put('/empresas/' + empresaForm.id, { nombre: empresaForm.nombre })
+      else await api.post('/empresas', { nombre: empresaForm.nombre })
+      const editando = Boolean(empresaForm.id)
+      setEmpresaForm(null)
+      await onDone()
+      await notifySuccess(editando ? 'Empresa actualizada' : 'Empresa creada')
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo guardar la empresa.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const cambiarEstadoEmpresa = async (empresa) => {
+    try {
+      await api.patch('/empresas/' + empresa.id + '/' + (empresa.activo ? 'inactivar' : 'reactivar'), {})
+      await onDone()
+      await notifySuccess(empresa.activo ? 'Empresa inactivada' : 'Empresa reactivada')
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo cambiar el estado.')
+    }
+  }
+
+  const eliminarEmpresa = async (empresa) => {
+    const result = await confirmAction('Eliminar empresa', 'Solo se eliminara si no tiene viajes ni sedes utilizadas.', 'Eliminar')
+    if (!result.isConfirmed) return
+    try {
+      await api.delete('/empresas/' + empresa.id)
+      await onDone()
+      await notifySuccess('Empresa eliminada')
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo eliminar la empresa.')
+    }
+  }
+
+  const guardarSede = async (event) => {
+    event.preventDefault()
+    setSaving(true)
+    const payload = { nombre: sedeForm.nombre, ciudad: sedeForm.ciudad, direccion: sedeForm.direccion }
+    try {
+      if (sedeForm.id) await api.put('/empresas/' + sedeForm.empresaId + '/sedes/' + sedeForm.id, payload)
+      else await api.post('/empresas/' + sedeForm.empresaId + '/sedes', payload)
+      const editando = Boolean(sedeForm.id)
+      setSedeForm(null)
+      await onDone()
+      await notifySuccess(editando ? 'Punto actualizado' : 'Punto de carga creado')
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo guardar el punto de carga.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const cambiarEstadoSede = async (empresa, sede) => {
+    try {
+      await api.patch('/empresas/' + empresa.id + '/sedes/' + sede.id + '/' + (sede.activo ? 'inactivar' : 'reactivar'), {})
+      await onDone()
+      await notifySuccess(sede.activo ? 'Punto inactivado' : 'Punto reactivado')
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo cambiar el punto de carga.')
+    }
+  }
+
+  const eliminarSede = async (empresa, sede) => {
+    const result = await confirmAction('Eliminar punto de carga', 'Solo se eliminara si nunca fue utilizado en una parada.', 'Eliminar')
+    if (!result.isConfirmed) return
+    try {
+      await api.delete('/empresas/' + empresa.id + '/sedes/' + sede.id)
+      await onDone()
+      await notifySuccess('Punto de carga eliminado')
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo eliminar el punto de carga.')
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric title="Viajes registrados" value={totals.viajes} icon={Route} />
+        <Metric title="Viajes activos" value={totals.activos} icon={Truck} />
+        <Metric title="Finalizados" value={totals.finalizados} icon={FileCheck} tone="emerald" />
+        <Metric title="Liquidados" value={totals.liquidados} icon={Wallet} />
+      </section>
+      <section className="border border-neutral-200 bg-white">
+        <div className="flex flex-col gap-3 border-b border-neutral-200 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <SectionTitle title="Empresas" subtitle={empresas.length + ' registradas'} />
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={15} />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} className="input pl-9 sm:w-72" placeholder="Buscar empresa, sede o ciudad" />
+            </div>
+            {isAdmin && <button type="button" onClick={() => setEmpresaForm({ id: '', nombre: '' })} className="btn-primary"><Plus size={16} />Nueva empresa</button>}
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[920px] text-left text-sm">
+            <thead className="bg-neutral-50 text-xs font-semibold uppercase text-neutral-500">
+              <tr><th className="w-12 px-4 py-3"></th><th className="px-4 py-3">Empresa</th><th className="px-4 py-3">Puntos</th><th className="px-4 py-3">Activos</th><th className="px-4 py-3">Finalizados</th><th className="px-4 py-3">Liquidados</th><th className="px-4 py-3">Estado</th><th className="w-36 px-4 py-3 text-right">Acciones</th></tr>
+            </thead>
+            <tbody>
+              {filtered.map((empresa) => (
+                <Fragment key={empresa.id}>
+                  <tr className="border-t border-neutral-100">
+                    <td className="px-4 py-3"><button type="button" title="Ver puntos de carga" onClick={() => setExpandedId(expandedId === empresa.id ? null : empresa.id)} className="grid h-8 w-8 place-items-center rounded hover:bg-neutral-100"><ChevronRight size={16} className={expandedId === empresa.id ? 'rotate-90 transition' : 'transition'} /></button></td>
+                    <td className="px-4 py-3 font-medium">{empresa.nombre}</td>
+                    <td className="px-4 py-3">{(empresa.sedes || []).filter((sede) => sede.activo).length}</td>
+                    <td className="px-4 py-3">{empresa.estadisticas?.activos || 0}</td>
+                    <td className="px-4 py-3">{empresa.estadisticas?.finalizados || 0}</td>
+                    <td className="px-4 py-3">{empresa.estadisticas?.liquidados || 0}</td>
+                    <td className="px-4 py-3"><span className={'rounded px-2 py-1 text-xs font-medium ' + (empresa.activo ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-100 text-neutral-500')}>{empresa.activo ? 'ACTIVA' : 'INACTIVA'}</span></td>
+                    <td className="px-4 py-3">{isAdmin && <div className="flex justify-end gap-1">
+                      <button type="button" title="Editar empresa" onClick={() => setEmpresaForm({ id: empresa.id, nombre: empresa.nombre })} className="grid h-8 w-8 place-items-center rounded hover:bg-neutral-100"><Edit3 size={14} /></button>
+                      <button type="button" title={empresa.activo ? 'Inactivar empresa' : 'Reactivar empresa'} onClick={() => cambiarEstadoEmpresa(empresa)} className="grid h-8 w-8 place-items-center rounded hover:bg-neutral-100">{empresa.activo ? <EyeOff size={14} /> : <Eye size={14} />}</button>
+                      <button type="button" title="Eliminar empresa" onClick={() => eliminarEmpresa(empresa)} className="grid h-8 w-8 place-items-center rounded hover:bg-red-50 hover:text-red-600"><Trash2 size={14} /></button>
+                    </div>}</td>
+                  </tr>
+                  {expandedId === empresa.id && <tr className="bg-stone-50"><td colSpan={8} className="px-6 py-4">
+                    <div className="mb-3 flex items-center justify-between"><p className="text-xs font-semibold uppercase text-neutral-500">Puntos de carga</p>{isAdmin && empresa.activo && <button type="button" onClick={() => setSedeForm({ empresaId: empresa.id, id: '', nombre: '', ciudad: '', direccion: '' })} className="btn-secondary"><Plus size={15} />Agregar punto</button>}</div>
+                    <div className="divide-y divide-neutral-200 border-y border-neutral-200">
+                      {(empresa.sedes || []).map((sede) => <div key={sede.id} className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_100px_120px] sm:items-center">
+                        <div><p className="font-medium">{sede.nombre}</p><p className="text-xs text-neutral-500">{sede.direccion || 'Sin direccion adicional'}</p></div>
+                        <p className="text-neutral-600">{sede.ciudad}</p>
+                        <span className={sede.activo ? 'text-xs font-medium text-emerald-700' : 'text-xs font-medium text-neutral-400'}>{sede.activo ? 'ACTIVO' : 'INACTIVO'}</span>
+                        {isAdmin && <div className="flex justify-end gap-1">
+                          <button type="button" title="Editar punto" onClick={() => setSedeForm({ empresaId: empresa.id, id: sede.id, nombre: sede.nombre, ciudad: sede.ciudad, direccion: sede.direccion || '' })} className="grid h-8 w-8 place-items-center rounded hover:bg-white"><Edit3 size={14} /></button>
+                          <button type="button" title={sede.activo ? 'Inactivar punto' : 'Reactivar punto'} onClick={() => cambiarEstadoSede(empresa, sede)} className="grid h-8 w-8 place-items-center rounded hover:bg-white">{sede.activo ? <EyeOff size={14} /> : <Eye size={14} />}</button>
+                          <button type="button" title="Eliminar punto" onClick={() => eliminarSede(empresa, sede)} className="grid h-8 w-8 place-items-center rounded hover:bg-red-50 hover:text-red-600"><Trash2 size={14} /></button>
+                        </div>}
+                      </div>)}
+                      {(empresa.sedes || []).length === 0 && <Empty text="Esta empresa aun no tiene puntos de carga." />}
+                    </div>
+                  </td></tr>}
+                </Fragment>
+              ))}
+            </tbody>
+          </table>
+          {filtered.length === 0 && <Empty text="No se encontraron empresas." />}
+        </div>
+      </section>
+      {empresaForm && <div className="fixed inset-0 z-50 grid place-items-center bg-neutral-950/35 px-4"><form onSubmit={guardarEmpresa} className="w-full max-w-md rounded-md border border-neutral-200 bg-white p-5 shadow-xl">
+        <SectionTitle title={empresaForm.id ? 'Editar empresa' : 'Nueva empresa'} subtitle="Nombre comercial para viajes y estadisticas" />
+        <div className="mt-4"><Field label="Nombre"><input autoFocus required maxLength={120} value={empresaForm.nombre} onChange={(event) => setEmpresaForm({ ...empresaForm, nombre: event.target.value })} className="input" placeholder="Ej. Pepsico" /></Field></div>
+        <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setEmpresaForm(null)} className="btn-secondary">Cancelar</button><button disabled={saving} className="btn-primary"><Check size={16} />Guardar</button></div>
+      </form></div>}
+      {sedeForm && <div className="fixed inset-0 z-50 grid place-items-center bg-neutral-950/35 px-4"><form onSubmit={guardarSede} className="w-full max-w-lg rounded-md border border-neutral-200 bg-white p-5 shadow-xl">
+        <SectionTitle title={sedeForm.id ? 'Editar punto de carga' : 'Nuevo punto de carga'} subtitle="Sede operativa de la empresa" />
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <Field label="Nombre"><input autoFocus required maxLength={120} value={sedeForm.nombre} onChange={(event) => setSedeForm({ ...sedeForm, nombre: event.target.value })} className="input" placeholder="Ej. Mixing Maracay" /></Field>
+          <Field label="Ciudad"><input required maxLength={100} value={sedeForm.ciudad} onChange={(event) => setSedeForm({ ...sedeForm, ciudad: event.target.value })} className="input" placeholder="Maracay" /></Field>
+          <div className="sm:col-span-2"><Field label="Direccion o referencia (opcional)"><input maxLength={250} value={sedeForm.direccion} onChange={(event) => setSedeForm({ ...sedeForm, direccion: event.target.value })} className="input" placeholder="Zona industrial, avenida o referencia" /></Field></div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setSedeForm(null)} className="btn-secondary">Cancelar</button><button disabled={saving} className="btn-primary"><MapPinned size={16} />Guardar punto</button></div>
+      </form></div>}
+    </div>
   )
 }
 
@@ -2203,15 +2462,16 @@ function TallerView({ camiones, onDone }) {
   )
 }
 
-function LiquidacionesView({ viajes, choferes, onDone }) {
+function LiquidacionesView({ viajes, choferes, empresas, onDone }) {
   const [periodo, setPeriodo] = useState('mes')
   const [choferId, setChoferId] = useState('')
+  const [empresaId, setEmpresaId] = useState('')
   const [page, setPage] = useState(1)
   const pageSize = 10
   const desde = periodStart(periodo)
   const filtrados = viajes.filter((viaje) => {
     const fecha = new Date(viaje.fechaLiquidacion || viaje.fechaCierre || viaje.updatedAt)
-    return fecha >= desde && (!choferId || viaje.choferId === choferId)
+    return fecha >= desde && (!choferId || viaje.choferId === choferId) && matchesCompanyFilter(viaje, empresaId)
   })
   const pageItems = paginate(filtrados, page, pageSize)
   const totalGastos = filtrados.reduce((total, viaje) => total + Number(viaje.viaticosGastados || 0), 0)
@@ -2232,15 +2492,16 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(9)
     doc.setTextColor(90)
-    doc.text(`Periodo: ${periodLabel(periodo)} | Chofer: ${choferes.find((chofer) => chofer.id === choferId)?.nombre || 'Todos'}`, 58, 24)
+    doc.text(`Periodo: ${periodLabel(periodo)} | Chofer: ${choferes.find((chofer) => chofer.id === choferId)?.nombre || 'Todos'} | Empresa: ${empresaId ? (empresas.find((empresa) => empresa.id === empresaId)?.nombre || 'Sin empresa') : 'Todas'}`, 58, 24)
     doc.text(`Generado: ${new Date().toLocaleString('es-VE')}`, 58, 29)
 
     autoTable(doc, {
       startY: 38,
       theme: 'grid',
-      head: [['Viaje', 'Guia', 'Chofer', 'Unidad', 'Ruta', 'Liquidado', 'Viaticos Bs', 'Gastos Bs']],
+      head: [['Viaje', 'Empresa', 'Guia', 'Chofer', 'Unidad', 'Ruta', 'Liquidado', 'Viaticos Bs', 'Gastos Bs']],
       body: filtrados.map((viaje) => [
         viaje.codigo,
+        companyName(viaje),
         viaje.numeroGuia || 'Sin guia',
         viaje.chofer?.nombre || '',
         formatTripUnits(viaje),
@@ -2313,6 +2574,14 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
               <option value="">Todos los choferes</option>
               {choferes.map((chofer) => <option key={chofer.id} value={chofer.id}>{chofer.nombre}</option>)}
             </select>
+            <div className="w-full sm:w-60">
+              <SearchableSelect
+                value={empresaId}
+                options={companyFilterOptions(empresas)}
+                onChange={(value) => { setEmpresaId(value); setPage(1) }}
+                placeholder="Todas las empresas"
+              />
+            </div>
           </div>
         </div>
 
@@ -2321,6 +2590,7 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
             <thead className="bg-neutral-50 text-xs text-neutral-500">
               <tr>
                 <th className="px-4 py-3">Viaje</th>
+                <th className="px-4 py-3">Empresa</th>
                 <th className="px-4 py-3">Chofer</th>
                 <th className="px-4 py-3">Guia</th>
                 <th className="px-4 py-3">Fecha</th>
@@ -2331,6 +2601,7 @@ function LiquidacionesView({ viajes, choferes, onDone }) {
               {pageItems.map((viaje) => (
                 <tr key={viaje.id} className="border-t border-neutral-100">
                   <td className="px-4 py-3 font-medium">{viaje.codigo}</td>
+                  <td className="px-4 py-3">{companyName(viaje)}</td>
                   <td className="px-4 py-3">{viaje.chofer?.nombre}</td>
                   <td className="px-4 py-3">{viaje.numeroGuia || 'Sin guia'}</td>
                   <td className="px-4 py-3 text-neutral-500">{formatDate(viaje.fechaLiquidacion || viaje.fechaCierre)}</td>
@@ -2529,7 +2800,8 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
         </div>
 
         <div className="space-y-6 px-4 py-5 sm:px-6">
-          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <Fact icon={Building2} label="Empresa" value={companyName(viaje)} />
             <Fact icon={User} label="Chofer" value={viaje.chofer?.nombre || 'Sin chofer'} />
             <Fact icon={Truck} label="Unidades" value={formatTripUnits(viaje) || 'Sin unidades'} />
             <Fact icon={MapPin} label="Ultima ubicacion" value={<LocationValue data={ultimaUbicacion} />} />
@@ -2564,6 +2836,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
                       <div>
                         <p className="text-sm font-medium">{parada.lugar}</p>
                         <p className="text-xs text-neutral-500">{parada.ciudad}</p>
+                        {parada.empresaSede && <p className="mt-1 text-xs font-medium text-neutral-600">Punto registrado: {parada.empresaSede.nombre}</p>}
                         {parada.fechaProgramada && (
                           <p className="mt-1 text-xs font-medium text-blue-700">Carga programada: {formatDate(parada.fechaProgramada)}</p>
                         )}
@@ -2803,6 +3076,7 @@ function RutaEditorModal({ viaje, onClose, onSaved }) {
         paradas: paradas.map((parada) => ({
           id: parada.id && !String(parada.id).startsWith('tmp-') ? parada.id : undefined,
           tipo: parada.tipo,
+          empresaSedeId: parada.tipo === 'CARGA' ? parada.empresaSedeId || null : null,
           lugar: parada.lugar,
           ciudad: parada.ciudad,
           tramo: parada.tramo || 1,
@@ -3209,6 +3483,87 @@ function ReportRow({ reporte, compact = false }) {
   )
 }
 
+function SearchableSelect({
+  value,
+  options,
+  onChange,
+  placeholder,
+  disabled = false,
+  required = false,
+  allowClear = false,
+}) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const selected = options.find((option) => option.value === value)
+  const filtered = options.filter((option) => {
+    const query = normalize(search)
+    return !query || normalize(`${option.label} ${option.keywords || ''}`).includes(query)
+  })
+
+  const select = (nextValue) => {
+    onChange(nextValue)
+    setSearch('')
+    setOpen(false)
+  }
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={15} />
+        <input
+          required={required}
+          disabled={disabled}
+          value={open ? search : selected?.label || ''}
+          onFocus={() => {
+            setSearch('')
+            setOpen(true)
+          }}
+          onChange={(event) => {
+            setSearch(event.target.value)
+            setOpen(true)
+          }}
+          onBlur={() => setOpen(false)}
+          className="input pl-9 pr-9"
+          placeholder={placeholder}
+          autoComplete="off"
+          role="combobox"
+          aria-expanded={open}
+        />
+        {allowClear && value ? (
+          <button
+            type="button"
+            title="Limpiar seleccion"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => select('')}
+            className="absolute right-1 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+          >
+            <X size={14} />
+          </button>
+        ) : (
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-neutral-400" size={15} />
+        )}
+      </div>
+      {open && !disabled && (
+        <div className="absolute z-40 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-neutral-200 bg-white py-1 shadow-lg">
+          {filtered.map((option) => (
+            <button
+              key={option.value || '__all__'}
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => select(option.value)}
+              className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm hover:bg-neutral-50 ${option.value === value ? 'bg-neutral-100 font-medium' : ''}`}
+            >
+              <span className="truncate">{option.label}</span>
+              {option.value === value && <Check size={14} className="shrink-0" />}
+            </button>
+          ))}
+          {filtered.length === 0 && <p className="px-3 py-3 text-sm text-neutral-500">Sin resultados</p>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Field({ label, children }) {
   return (
     <label className="block">
@@ -3388,6 +3743,7 @@ function buildOperationalData({ viajes, choferes, camiones, retornables = [], qu
     if (!q) return true
     return [
       viaje.codigo,
+      viaje.empresa?.nombre,
       viaje.numeroGuia,
       viaje.chofer?.nombre,
       viaje.camion?.placa,
@@ -3472,6 +3828,27 @@ function buildOperationalData({ viajes, choferes, camiones, retornables = [], qu
       .flatMap((viaje) => (viaje.reportes || []).map((reporte) => ({ ...reporte, viaje })))
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
   }
+}
+
+function companyName(viaje) {
+  return viaje?.empresa?.nombre || 'Sin empresa'
+}
+
+function matchesCompanyFilter(viaje, empresaId) {
+  if (!empresaId) return true
+  if (empresaId === 'sin_empresa') return !viaje.empresaId
+  return viaje.empresaId === empresaId
+}
+
+function companyFilterOptions(empresas = []) {
+  return [
+    { value: '', label: 'Todas las empresas' },
+    ...empresas.map((empresa) => ({
+      value: empresa.id,
+      label: empresa.activo ? empresa.nombre : `${empresa.nombre} (inactiva)`,
+    })),
+    { value: 'sin_empresa', label: 'Sin empresa (historicos)' },
+  ]
 }
 
 function getCurrentLocationDetails(viaje) {
@@ -3717,6 +4094,7 @@ function pageTitle(tab) {
     reportes: 'Reportes',
     despacho: 'Agendamiento',
     recursos: 'Recursos',
+    empresas: 'Empresas',
     taller: 'Taller',
     usuarios: 'Usuarios',
     liquidaciones: 'Liquidaciones',

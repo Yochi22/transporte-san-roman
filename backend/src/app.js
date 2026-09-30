@@ -15,6 +15,7 @@ const { autenticar, soloAdmin } = require('./middlewares/auth.middleware')
 
 const authRoutes = require('./modules/auth/auth.routes')
 const usuariosRoutes = require('./modules/usuarios/usuarios.routes')
+const empresasRoutes = require('./modules/empresas/empresas.routes')
 const choferesRoutes = require('./modules/choferes/choferes.routes')
 const camionesRoutes = require('./modules/camiones/camiones.routes')
 const viajesRoutes = require('./modules/viajes/viajes.routes')
@@ -141,6 +142,7 @@ app.post('/api/whatsapp/reiniciar', autenticar, soloAdmin, async (req, res) => {
 })
 
 app.use('/api/usuarios', usuariosRoutes)
+app.use('/api/empresas', empresasRoutes)
 app.use('/api/choferes', choferesRoutes)
 app.use('/api/camiones', camionesRoutes)
 app.use('/api/viajes', viajesRoutes)

@@ -11,10 +11,16 @@ const fechaLimiteReportes = () => {
 }
 
 const viajePanelInclude = () => ({
+  empresa: { select: { id: true, nombre: true, activo: true } },
   chofer: { select: choferPanelSelect },
   camion: { select: camionPanelSelect },
   unidades: { include: { camion: { select: camionPanelSelect } } },
-  paradas: { orderBy: { orden: 'asc' } },
+  paradas: {
+    include: {
+      empresaSede: { select: { id: true, nombre: true, ciudad: true, direccion: true, activo: true } }
+    },
+    orderBy: { orden: 'asc' }
+  },
   reportes: { where: { createdAt: { gte: fechaLimiteReportes() } }, select: reportePanelSelect, orderBy: { createdAt: 'desc' }, take: 100 },
   gastos: { orderBy: { createdAt: 'desc' }, take: 200 }
 })
@@ -54,8 +60,43 @@ const validarParadas = (paradas) => {
     if (fechaProgramada && Number.isNaN(fechaProgramada.getTime())) {
       throw { status: 400, message: 'Fecha programada invalida' }
     }
-    return { ...parada, tipo, lugar, ciudad, fechaProgramada }
+    const empresaSedeId = tipo === 'CARGA' && typeof parada.empresaSedeId === 'string' && parada.empresaSedeId.trim()
+      ? parada.empresaSedeId.trim()
+      : null
+    return { ...parada, tipo, lugar, ciudad, fechaProgramada, empresaSedeId }
   })
+}
+
+const validarEmpresaYSedes = async (empresaId, paradas, { exigirActiva = true } = {}) => {
+  if (!empresaId || typeof empresaId !== 'string') {
+    throw { status: 400, message: 'Selecciona la empresa del viaje' }
+  }
+  const sedeIds = [...new Set(paradas.map((parada) => parada.empresaSedeId).filter(Boolean))]
+  const empresa = await prisma.empresa.findUnique({
+    where: { id: empresaId },
+    include: {
+      sedes: {
+        where: sedeIds.length > 0 ? { id: { in: sedeIds } } : undefined,
+        select: { id: true, activo: true }
+      }
+    }
+  })
+  if (!empresa) throw { status: 404, message: 'Empresa no encontrada' }
+  if (exigirActiva && !empresa.activo) {
+    throw { status: 409, message: 'La empresa esta inactiva y no admite nuevos viajes' }
+  }
+  if (empresa.sedes.length !== sedeIds.length) {
+    throw { status: 409, message: 'Una sede seleccionada no pertenece a la empresa' }
+  }
+  if (exigirActiva && empresa.sedes.some((sede) => !sede.activo)) {
+    throw { status: 409, message: 'Una sede seleccionada esta inactiva' }
+  }
+  return empresa
+}
+
+const aplicarFiltroEmpresa = (where, empresaId) => {
+  if (!empresaId) return
+  where.empresaId = empresaId === 'sin_empresa' ? null : empresaId
 }
 
 const normalizarUnidadIdsViaje = (datos) => {
@@ -94,6 +135,7 @@ const listar = async (filtros = {}) => {
   const where = {}
   if (filtros.estadoLogistico) where.estadoLogistico = filtros.estadoLogistico
   if (filtros.estadoFinanciero) where.estadoFinanciero = filtros.estadoFinanciero
+  aplicarFiltroEmpresa(where, filtros.empresaId)
 
   return prisma.viaje.findMany({
     where,
@@ -112,6 +154,7 @@ const listarArchivo = async (filtros = {}) => {
       estaPendienteDeLiquidacionWhere
     ]
   }
+  aplicarFiltroEmpresa(where, filtros.empresaId)
   const rango = construirRangoArchivo(filtros.periodo, filtros.fecha)
 
   if (rango) {
@@ -171,6 +214,9 @@ const obtener = async (id) => {
 
 const crear = async (datos, creadoPorId) => {
   const { choferId } = datos
+  const empresaIdSolicitada = typeof datos.empresaId === 'string' && datos.empresaId.trim()
+    ? datos.empresaId.trim()
+    : null
   const tipoAgendamiento = datos.tipoAgendamiento === 'CONTINUAR' ? 'CONTINUAR' : 'NUEVO'
   const viajeContinuacionId = typeof datos.viajeContinuacionId === 'string' && datos.viajeContinuacionId.trim()
     ? datos.viajeContinuacionId.trim()
@@ -246,15 +292,22 @@ const crear = async (datos, creadoPorId) => {
     if (!sameSet(unidadIds, tripUnitIds(viajeContinuacion))) {
       throw { status: 409, message: 'Las unidades deben coincidir con las del viaje que se continuara' }
     }
-    return agregarTramo(viajeContinuacion.id, { paradas, viaticosDepositados })
+    if (viajeContinuacion.empresaId && empresaIdSolicitada && viajeContinuacion.empresaId !== empresaIdSolicitada) {
+      throw { status: 409, message: 'El nuevo tramo debe conservar la empresa del viaje' }
+    }
+    const empresaId = viajeContinuacion.empresaId || empresaIdSolicitada
+    await validarEmpresaYSedes(empresaId, paradas)
+    return agregarTramo(viajeContinuacion.id, { paradas, viaticosDepositados, empresaId })
   }
 
+  await validarEmpresaYSedes(empresaIdSolicitada, paradas)
   const codigo = generarCodigoViaje()
   const primeraCarga = paradas.find((parada) => parada.tipo === 'CARGA' && parada.fechaProgramada)
 
   const viaje = await prisma.viaje.create({
     data: {
       codigo,
+      empresaId: empresaIdSolicitada,
       camionId,
       choferId,
       creadoPorId,
@@ -269,6 +322,7 @@ const crear = async (datos, creadoPorId) => {
           orden: i + 1,
           tramo: 1,
           tipo: p.tipo,
+          empresaSedeId: p.empresaSedeId,
           lugar: p.lugar,
           ciudad: p.ciudad,
           fechaProgramada: p.fechaProgramada,
@@ -291,6 +345,8 @@ const agregarTramo = async (id, datos) => {
     where: { id },
     include: { paradas: true, unidades: true }
   })
+  const empresaId = viaje.empresaId || datos.empresaId
+  await validarEmpresaYSedes(empresaId, paradas)
 
   const ultimoOrden = viaje.paradas.reduce((max, parada) => Math.max(max, parada.orden), 0)
   const nuevoTramo = viaje.paradas.reduce((max, parada) => Math.max(max, parada.tramo || 1), 1) + 1
@@ -302,6 +358,7 @@ const agregarTramo = async (id, datos) => {
         orden: ultimoOrden + index + 1,
         tramo: nuevoTramo,
         tipo: parada.tipo,
+        empresaSedeId: parada.empresaSedeId,
         lugar: parada.lugar,
         ciudad: parada.ciudad,
         fechaProgramada: parada.fechaProgramada,
@@ -311,6 +368,7 @@ const agregarTramo = async (id, datos) => {
     await tx.viaje.update({
       where: { id },
       data: {
+        empresaId,
         viaticosDepositados: { increment: viaticosDepositados },
         estadoLogistico: 'EN_CURSO',
         estadoFinanciero: 'PENDIENTE',
@@ -378,15 +436,30 @@ const actualizarRuta = async (viajeId, paradasInput) => {
         include: { _count: { select: { reportes: true } } },
         orderBy: { orden: 'asc' }
       },
-      unidades: true
+      unidades: true,
+      empresa: { select: { id: true } }
     }
   })
 
   if (viaje.estadoFinanciero === 'LIQUIDADO') {
     throw { status: 409, message: 'No se puede editar la ruta de un viaje liquidado' }
   }
-
   const actualesPorId = new Map(viaje.paradas.map((parada) => [parada.id, parada]))
+  if (viaje.empresaId) {
+    const empresa = await validarEmpresaYSedes(viaje.empresaId, paradas, { exigirActiva: false })
+    const sedesPorId = new Map(empresa.sedes.map((sede) => [sede.id, sede]))
+    const asignaSedeInactiva = paradas.some((parada) => {
+      if (!parada.empresaSedeId) return false
+      const sedeAnterior = parada.id ? actualesPorId.get(parada.id)?.empresaSedeId : null
+      return sedeAnterior !== parada.empresaSedeId && !sedesPorId.get(parada.empresaSedeId)?.activo
+    })
+    if (asignaSedeInactiva) {
+      throw { status: 409, message: 'No se puede asignar una sede inactiva a una parada nueva' }
+    }
+  } else if (paradas.some((parada) => parada.empresaSedeId)) {
+    throw { status: 409, message: 'Asigna una empresa al viaje antes de seleccionar una sede' }
+  }
+
   const idsRecibidos = new Set(paradas.map((parada) => parada.id).filter(Boolean))
 
   for (const parada of paradas) {
@@ -413,6 +486,7 @@ const actualizarRuta = async (viajeId, paradasInput) => {
         orden: index + 1,
         tramo: actual?.tramo || parada.tramo || 1,
         tipo: actual && actual.estado !== 'PENDIENTE' ? actual.tipo : parada.tipo,
+        empresaSedeId: parada.tipo === 'CARGA' ? parada.empresaSedeId : null,
         lugar: parada.lugar,
         ciudad: parada.ciudad,
         fechaProgramada: parada.tipo === 'CARGA' ? parada.fechaProgramada : null,
@@ -520,7 +594,8 @@ const confirmarDocumentacion = async (id) => {
 const listarPendientesLiquidacion = async (filtros = {}) => {
   const page = Math.max(1, Number(filtros.page) || 1)
   const pageSize = Math.min(50, Math.max(1, Number(filtros.pageSize) || 10))
-  const where = estaPendienteDeLiquidacionWhere
+  const where = { ...estaPendienteDeLiquidacionWhere }
+  aplicarFiltroEmpresa(where, filtros.empresaId)
 
   const [items, total] = await prisma.$transaction([
     prisma.viaje.findMany({
