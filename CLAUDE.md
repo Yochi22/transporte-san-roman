@@ -1034,6 +1034,7 @@ No registres payloads completos de produccion. Enmascara IMEI, telefonos, JID, t
 - El selector de sede solo ofrece sedes activas de la empresa elegida; al cambiar de empresa limpia una sede anterior incompatible.
 - Viajes y liquidaciones conservan la opcion global `Todas las empresas` y la opcion historica `Sin empresa`.
 - Cada tarjeta de viaje activo muestra de forma visible `Empresa: <nombre>` entre el codigo del viaje y el chofer; los registros historicos usan `Empresa: Sin empresa`.
+- El panel Empresas es un catalogo operativo: alta, busqueda, estado, sedes y estadisticas por fila. No muestra cards con conteos generales; esos resumenes pertenecen al dashboard principal.
 - Evita cards decorativas, gradientes, heroes y texto instructivo innecesario.
 - Mantiene iPhone/escritorio y evita desbordes de nombres, rutas y montos.
 - Si divides `App.jsx`, hazlo por dominio sin reescritura total incidental.

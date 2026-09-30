@@ -1729,12 +1729,6 @@ function EmpresasView({ empresas, isAdmin, onDone }) {
     empresa.nombre,
     ...(empresa.sedes || []).flatMap((sede) => [sede.nombre, sede.ciudad, sede.direccion]),
   ].some((value) => normalize(value).includes(q)))
-  const totals = empresas.reduce((acc, empresa) => ({
-    viajes: acc.viajes + Number(empresa.estadisticas?.totalViajes || 0),
-    activos: acc.activos + Number(empresa.estadisticas?.activos || 0),
-    finalizados: acc.finalizados + Number(empresa.estadisticas?.finalizados || 0),
-    liquidados: acc.liquidados + Number(empresa.estadisticas?.liquidados || 0),
-  }), { viajes: 0, activos: 0, finalizados: 0, liquidados: 0 })
 
   const guardarEmpresa = async (event) => {
     event.preventDefault()
@@ -1817,12 +1811,6 @@ function EmpresasView({ empresas, isAdmin, onDone }) {
 
   return (
     <div className="space-y-5">
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Metric title="Viajes registrados" value={totals.viajes} icon={Route} />
-        <Metric title="Viajes activos" value={totals.activos} icon={Truck} />
-        <Metric title="Finalizados" value={totals.finalizados} icon={FileCheck} tone="emerald" />
-        <Metric title="Liquidados" value={totals.liquidados} icon={Wallet} />
-      </section>
       <section className="border border-neutral-200 bg-white">
         <div className="flex flex-col gap-3 border-b border-neutral-200 p-4 sm:flex-row sm:items-center sm:justify-between">
           <SectionTitle title="Empresas" subtitle={empresas.length + ' registradas'} />
