@@ -14,7 +14,7 @@ const autenticar = async (req, res, next) => {
     const payload = verificarToken(token)
     const usuario = await prisma.usuario.findUnique({
       where: { id: payload.id },
-      select: { id: true, nombre: true, email: true, rol: true, activo: true, sessionVersion: true }
+      select: { id: true, nombre: true, email: true, rol: true, activo: true, sessionVersion: true, choferId: true }
     })
 
     if (!usuario?.activo || usuario.sessionVersion !== payload.sessionVersion) {
@@ -43,4 +43,11 @@ const adminOOperaciones = (req, res, next) => {
   next()
 }
 
-module.exports = { autenticar, soloAdmin, adminOOperaciones }
+const soloChofer = (req, res, next) => {
+  if (req.usuario?.rol !== 'CHOFER' || !req.usuario?.choferId) {
+    return error(res, 'Acceso restringido a choferes', 403)
+  }
+  next()
+}
+
+module.exports = { autenticar, soloAdmin, adminOOperaciones, soloChofer }

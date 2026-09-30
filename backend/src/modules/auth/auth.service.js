@@ -4,10 +4,15 @@ const { generarToken } = require('../../config/jwt')
 
 const HASH_FALSO = '$2b$10$8VEqvDgZgVTTpNQWut9NuO9t0rf6F9vraYy5caLWh6KcbA6W7VtdK'
 
-const login = async (email, password) => {
-  const emailNormalizado = email.trim().toLowerCase()
-  const usuario = await prisma.usuario.findUnique({
-    where: { email: emailNormalizado }
+const login = async (identificador, password) => {
+  const valor = identificador.trim()
+  const usuario = await prisma.usuario.findFirst({
+    where: {
+      OR: [
+        { email: valor.toLowerCase() },
+        { username: valor }
+      ]
+    }
   })
 
   const passwordValido = await bcrypt.compare(password, usuario?.passwordHash || HASH_FALSO)
@@ -17,18 +22,21 @@ const login = async (email, password) => {
 
   console.log('[AUTH] Login exitoso')
 
-  const token = generarToken({
-    id: usuario.id,
-    sessionVersion: usuario.sessionVersion
-  })
+  const esChofer = usuario.rol === 'CHOFER'
+  const token = generarToken(
+    { id: usuario.id, sessionVersion: usuario.sessionVersion },
+    esChofer ? { expiresIn: '30d' } : {}
+  )
 
   return {
     token,
+    esChofer,
     usuario: {
       id: usuario.id,
       nombre: usuario.nombre,
       email: usuario.email,
-      rol: usuario.rol
+      rol: usuario.rol,
+      choferId: usuario.choferId
     }
   }
 }

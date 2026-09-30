@@ -12,4 +12,9 @@ router.put('/:id', soloAdmin, ctrl.actualizar)
 router.patch('/:id/inactivar', soloAdmin, ctrl.inactivar)
 router.delete('/:id', soloAdmin, ctrl.eliminar)
 
+router.post('/:id/acceso', soloAdmin, ctrl.crearAcceso)
+router.patch('/:id/acceso/resetear', soloAdmin, ctrl.resetearClaveAcceso)
+router.patch('/:id/acceso/revocar', soloAdmin, ctrl.revocarAcceso)
+router.patch('/:id/acceso/reactivar', soloAdmin, ctrl.reactivarAcceso)
+
 module.exports = router

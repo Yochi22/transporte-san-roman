@@ -20,6 +20,9 @@ const choferPanelSelect = {
       }
     }
   },
+  usuario: {
+    select: { id: true, username: true, activo: true }
+  },
   createdAt: true,
   updatedAt: true
 }

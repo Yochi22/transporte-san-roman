@@ -53,6 +53,7 @@ const io = new Server(server, {
   perMessageDeflate: false,
   maxHttpBufferSize: 100_000
 })
+app.set('io', io)
 
 io.use(async (socket, next) => {
   try {

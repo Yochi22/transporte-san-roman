@@ -289,7 +289,7 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    if (!isAuthenticated) return
+    if (!isAuthenticated || usuario?.rol === 'CHOFER') return
 
     const initialRefresh = setTimeout(() => fetchData(), 0)
     socket.connect()
@@ -335,7 +335,7 @@ export default function App() {
       socket.off('operaciones:alerta', pushAlerta)
       socket.disconnect()
     }
-  }, [fetchData, isAuthenticated])
+  }, [fetchData, isAuthenticated, usuario?.rol])
 
   const data = useMemo(() => buildOperationalData({ viajes, choferes, camiones, retornables, query }), [viajes, choferes, camiones, retornables, query])
   const isAdmin = usuario?.rol === 'ADMIN'
@@ -363,6 +363,10 @@ export default function App() {
 
   if (!isAuthenticated) {
     return <Login onLogin={(nextUsuario) => { setUsuario(nextUsuario); setIsAuthenticated(true) }} />
+  }
+
+  if (usuario?.rol === 'CHOFER') {
+    return <ChoferApp onLogout={confirmLogout} />
   }
 
   return (
@@ -776,6 +780,7 @@ function ReportesTableView({ reportes, onSelectViaje }) {
                         <span className={`inline-flex rounded px-2 py-1 text-xs font-medium ${reporteStyles[reporte.tipoReporte] || reporteStyles.OTRO}`}>
                           {labelReporte(reporte.tipoReporte)}
                         </span>
+                        <p className="mt-1 text-[11px] text-neutral-400">{reporte.origen === 'APP' ? 'App' : 'WhatsApp'}</p>
                       </td>
                       <td className="px-4 py-3 text-xs text-neutral-600">{reporte.ubicacion || 'Sin ubicacion'}</td>
                       <td className="px-4 py-3">
@@ -2069,6 +2074,47 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
     }
   }
 
+  const gestionarAcceso = async (item, accion) => {
+    if (accion === 'revocar') {
+      const result = await confirmAction(
+        'Revocar acceso',
+        `${item.nombre} no podra volver a entrar a la app hasta que reactives su acceso.`,
+        'Revocar'
+      )
+      if (!result.isConfirmed) return
+    }
+    const rutas = {
+      crear: { metodo: 'post', sufijo: 'acceso' },
+      resetear: { metodo: 'patch', sufijo: 'acceso/resetear' },
+      revocar: { metodo: 'patch', sufijo: 'acceso/revocar' },
+      reactivar: { metodo: 'patch', sufijo: 'acceso/reactivar' },
+    }
+    const { metodo, sufijo } = rutas[accion]
+    try {
+      const response = await api[metodo](`/choferes/${item.id}/${sufijo}`, {})
+      const { username, claveTemporal } = response.data?.data || {}
+      if (claveTemporal) {
+        await Swal.fire({
+          ...alertOptions,
+          title: accion === 'crear' ? 'Acceso creado' : 'Clave restablecida',
+          html: [
+            '<p class="sanroman-alert-label">Usuario (cedula)</p>',
+            `<p style="font-weight:600">${username}</p>`,
+            '<p class="sanroman-alert-label" style="margin-top:12px">Clave temporal</p>',
+            `<p style="font-weight:600;font-size:18px;letter-spacing:1px">${claveTemporal}</p>`,
+            '<p style="margin-top:12px;font-size:12px;color:#78716c">Copiala ahora, no se volvera a mostrar.</p>',
+          ].join(''),
+          confirmButtonText: 'Listo',
+        })
+      } else {
+        await notifySuccess(accion === 'revocar' ? 'Acceso revocado' : 'Acceso reactivado')
+      }
+      onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo completar la accion.')
+    }
+  }
+
   const inactivar = async (item) => {
     const name = type === 'chofer' ? item.nombre : item.placa
     const result = await confirmAction(
@@ -2175,6 +2221,33 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
               </p>
               {type === 'camion' && item.gpsImei && (
                 <p className="mt-1 truncate text-xs text-neutral-400">GPS {item.gpsImei}</p>
+              )}
+              {type === 'chofer' && isAdmin && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <span className={`rounded-md px-2 py-1 text-xs font-medium ${item.usuario ? (item.usuario.activo ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700') : 'bg-neutral-100 text-neutral-500'}`}>
+                    {item.usuario ? (item.usuario.activo ? 'Acceso activo' : 'Acceso revocado') : 'Sin acceso'}
+                  </span>
+                  {!item.usuario && item.activo && (
+                    <button type="button" onClick={() => gestionarAcceso(item, 'crear')} className="h-7 rounded-md border border-neutral-200 px-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50">
+                      Crear acceso
+                    </button>
+                  )}
+                  {item.usuario?.activo && (
+                    <>
+                      <button type="button" onClick={() => gestionarAcceso(item, 'resetear')} className="h-7 rounded-md border border-neutral-200 px-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50">
+                        Resetear clave
+                      </button>
+                      <button type="button" onClick={() => gestionarAcceso(item, 'revocar')} className="h-7 rounded-md border border-neutral-200 px-2 text-xs font-medium text-red-600 hover:bg-red-50">
+                        Revocar
+                      </button>
+                    </>
+                  )}
+                  {item.usuario && !item.usuario.activo && (
+                    <button type="button" onClick={() => gestionarAcceso(item, 'reactivar')} className="h-7 rounded-md border border-neutral-200 px-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50">
+                      Reactivar
+                    </button>
+                  )}
+                </div>
               )}
             </div>
             <div className="flex shrink-0 items-center gap-1">
@@ -3499,8 +3572,8 @@ function Login({ onLogin }) {
           </div>
         </div>
         <div className="space-y-3">
-          <Field label="Correo">
-            <input value={email} onChange={(event) => setEmail(event.target.value)} className="input" autoComplete="email" />
+          <Field label="Correo o cedula">
+            <input value={email} onChange={(event) => setEmail(event.target.value)} className="input" autoComplete="username" />
           </Field>
           <Field label="Clave">
             <div className="relative">
@@ -3517,6 +3590,201 @@ function Login({ onLogin }) {
           </button>
         </div>
       </form>
+    </div>
+  )
+}
+
+function ChoferApp({ onLogout }) {
+  const [data, setData] = useState({ chofer: null, viajes: [] })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [enviando, setEnviando] = useState('')
+  const [novedadAbierta, setNovedadAbierta] = useState(null)
+  const [novedadTexto, setNovedadTexto] = useState('')
+  const [disponibleAbierto, setDisponibleAbierto] = useState(null)
+  const [disponibleUbicacion, setDisponibleUbicacion] = useState('Sede Barquisimeto')
+
+  const cargar = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const response = await api.get('/mi/viaje')
+      setData(response.data?.data || { chofer: null, viajes: [] })
+    } catch (err) {
+      setError(err.response?.data?.mensaje || 'No se pudo cargar tu viaje.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { cargar() }, [cargar])
+
+  const enviarReporte = async (viajeId, payload) => {
+    const clave = viajeId + payload.tipoReporte
+    setEnviando(clave)
+    try {
+      await api.post('/mi/reportes', { viajeId, ...payload })
+      await notifySuccess('Reporte enviado', 'Operaciones ya puede verlo en el panel.')
+      setNovedadAbierta(null)
+      setNovedadTexto('')
+      setDisponibleAbierto(null)
+      await cargar()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo enviar el reporte.')
+    } finally {
+      setEnviando('')
+    }
+  }
+
+  if (loading && !data.chofer) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-stone-50">
+        <RefreshCw className="animate-spin text-neutral-500" size={24} />
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-stone-50 text-neutral-950">
+      <header className="sticky top-0 z-10 border-b border-neutral-200 bg-white px-4 py-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold">{data.chofer?.nombre || 'Chofer'}</p>
+            <p className="truncate text-xs text-neutral-500">{data.chofer?.ubicacionActual || 'Sin ubicacion'}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <button type="button" onClick={cargar} className="grid h-10 w-10 place-items-center rounded-md border border-neutral-200 text-neutral-600">
+              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+            </button>
+            <button type="button" onClick={onLogout} className="grid h-10 w-10 place-items-center rounded-md border border-neutral-200 text-red-600">
+              <LogOut size={16} />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-lg space-y-4 px-4 py-4">
+        {error && <Banner tone="danger" icon={AlertTriangle} text={error} />}
+
+        {!loading && data.viajes.length === 0 && (
+          <div className="rounded-md border border-neutral-200 bg-white p-6 text-center text-sm text-neutral-500">
+            No tienes un viaje asignado por ahora.
+          </div>
+        )}
+
+        {data.viajes.map((viaje) => {
+          const paradaActual = viaje.paradas.find((parada) => parada.estado !== 'COMPLETADA')
+          const todasCompletas = viaje.paradas.length > 0 && viaje.paradas.every((parada) => parada.estado === 'COMPLETADA')
+          const unidades = (viaje.unidades || []).map((unidad) => unidad.camion?.placa).filter(Boolean).join(' + ') || viaje.camion?.placa || 'Sin unidad'
+          const bloqueado = Boolean(enviando)
+
+          return (
+            <section key={viaje.id} className="space-y-3 rounded-md border border-neutral-200 bg-white p-4">
+              <div>
+                <p className="text-xs font-medium uppercase text-neutral-400">{viaje.codigo}</p>
+                <p className="text-sm font-semibold">{viaje.empresa?.nombre || 'Sin empresa'}</p>
+                <p className="text-xs text-neutral-500">Unidad: {unidades}</p>
+              </div>
+
+              <div className="space-y-1.5">
+                {viaje.paradas.map((parada) => (
+                  <div key={parada.id} className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${paradaStyles[parada.estado] || paradaStyles.PENDIENTE}`}>
+                    <StatusDot estado={parada.estado === 'COMPLETADA' ? 'COMPLETADO' : parada.estado === 'EN_CURSO' ? 'EN_CURSO' : ''} />
+                    <span className="min-w-0 flex-1 truncate">{formatStatus(parada.tipo)} - {parada.lugar}, {parada.ciudad}</span>
+                  </div>
+                ))}
+              </div>
+
+              {todasCompletas ? (
+                <p className="rounded-md bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+                  Viaje completado. Gracias.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {paradaActual?.tipo === 'CARGA' && (
+                    <>
+                      <button type="button" disabled={bloqueado} onClick={() => enviarReporte(viaje.id, { tipoReporte: 'CARGANDO', paradaId: paradaActual.id, estadoParada: 'EN_CURSO' })} className="btn-secondary">Cargando</button>
+                      <button type="button" disabled={bloqueado} onClick={() => enviarReporte(viaje.id, { tipoReporte: 'CARGANDO', paradaId: paradaActual.id, estadoParada: 'COMPLETADA' })} className="btn-primary">Carga lista</button>
+                    </>
+                  )}
+                  {paradaActual?.tipo === 'DESCARGA' && (
+                    <>
+                      <button type="button" disabled={bloqueado} onClick={() => enviarReporte(viaje.id, { tipoReporte: 'DESCARGADO', paradaId: paradaActual.id, estadoParada: 'EN_CURSO' })} className="btn-secondary">Descargando</button>
+                      <button type="button" disabled={bloqueado} onClick={() => enviarReporte(viaje.id, { tipoReporte: 'DESCARGADO', paradaId: paradaActual.id, estadoParada: 'COMPLETADA' })} className="btn-primary">Descarga lista</button>
+                    </>
+                  )}
+                  <button type="button" disabled={bloqueado} onClick={() => enviarReporte(viaje.id, { tipoReporte: 'ESPERANDO_INSTRUCCIONES' })} className="btn-secondary">Esperando instrucciones</button>
+                  <button type="button" disabled={bloqueado} onClick={() => setNovedadAbierta(novedadAbierta === viaje.id ? null : viaje.id)} className="btn-secondary">
+                    <AlertTriangle size={16} />
+                    Novedad
+                  </button>
+                  <button type="button" disabled={bloqueado} onClick={() => setDisponibleAbierto(disponibleAbierto === viaje.id ? null : viaje.id)} className="btn-secondary">
+                    Regresamos / Disponible
+                  </button>
+                </div>
+              )}
+
+              {novedadAbierta === viaje.id && (
+                <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3">
+                  <textarea
+                    value={novedadTexto}
+                    onChange={(event) => setNovedadTexto(event.target.value)}
+                    placeholder="Describe la novedad"
+                    className="input min-h-20"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setNovedadAbierta(null)} className="btn-secondary">Cancelar</button>
+                    <button
+                      type="button"
+                      disabled={!novedadTexto.trim() || bloqueado}
+                      onClick={() => enviarReporte(viaje.id, { tipoReporte: 'NOVEDAD', mensaje: novedadTexto })}
+                      className="btn-primary"
+                    >
+                      Enviar novedad
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {disponibleAbierto === viaje.id && (
+                <div className="space-y-2 rounded-md border border-neutral-200 bg-stone-50 p-3">
+                  <input
+                    value={disponibleUbicacion}
+                    onChange={(event) => setDisponibleUbicacion(event.target.value)}
+                    placeholder="Donde quedaron disponibles"
+                    className="input"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setDisponibleAbierto(null)} className="btn-secondary">Cancelar</button>
+                    <button
+                      type="button"
+                      disabled={!disponibleUbicacion.trim() || bloqueado}
+                      onClick={() => enviarReporte(viaje.id, { tipoReporte: 'LIBRE', ubicacion: disponibleUbicacion })}
+                      className="btn-primary"
+                    >
+                      Confirmar
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {viaje.reportes?.length > 0 && (
+                <details className="text-xs text-neutral-500">
+                  <summary className="cursor-pointer select-none font-medium text-neutral-600">Tus ultimos reportes</summary>
+                  <ul className="mt-2 space-y-1">
+                    {viaje.reportes.map((reporte) => (
+                      <li key={reporte.id} className="flex items-center justify-between gap-2 border-b border-neutral-100 py-1 last:border-b-0">
+                        <span className="truncate">{labelReporte(reporte.tipoReporte)}{reporte.ubicacion ? ` - ${reporte.ubicacion}` : ''}</span>
+                        <span className="shrink-0 text-neutral-400">{formatDate(reporte.createdAt)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </section>
+          )
+        })}
+      </main>
     </div>
   )
 }
@@ -3561,7 +3829,12 @@ function ReportRow({ reporte, compact = false }) {
           {labelReporte(reporte.tipoReporte)}
         </span>
       </div>
-      <p className="mt-2 text-xs text-neutral-400">{formatDate(reporte.createdAt)}</p>
+      <p className="mt-2 flex items-center gap-2 text-xs text-neutral-400">
+        {formatDate(reporte.createdAt)}
+        <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500">
+          {reporte.origen === 'APP' ? 'App' : 'WhatsApp'}
+        </span>
+      </p>
     </div>
   )
 }

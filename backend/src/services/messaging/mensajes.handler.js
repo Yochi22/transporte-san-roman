@@ -1,6 +1,7 @@
 const prisma = require('../../config/database')
 const { parsearReporteChofer } = require('./ia.parser')
 const { normalizarTelefono, ultimosDigitosTelefono } = require('../../utils/normalizarTelefono')
+const { aplicarReporteChofer } = require('../reportes/aplicarReporte.service')
 
 const COMANDOS = {
   MENU: ['menu', 'ayuda', 'help', '0'],
@@ -289,165 +290,22 @@ const procesarReporte = async ({
     inferirUbicacionOperativa(resultado, viaje, paradaInferida, resultado.ubicacion)
   )
 
-  const { reporte, viajesCompletados, viajesPendientesLiquidacion } = await prisma.$transaction(async (tx) => {
-    if (paradaId && estadoParada) {
-      await tx.parada.update({
-        where: { id: paradaId },
-        data: {
-          estado: estadoParada,
-          completadaAt: estadoParada === 'COMPLETADA' ? new Date() : undefined,
-        },
-      })
-    }
-
-    const reporte = await tx.reporteChofer.create({
-      data: {
-        viajeId: viaje.id,
-        choferId: chofer.id,
-        paradaId,
-        mensajeOriginal: textoOriginal,
-        tipoReporte: resultado.tipo,
-        ubicacion,
-        procesadoPorIa: resultado.procesadoPorIa || resultado.resumen,
-      },
-    })
-
-    let viajesCompletados = []
-    if (resultado.tipo === 'ESPERANDO_INSTRUCCIONES') {
-      const paradasPendientes = await tx.parada.count({
-        where: { viajeId: viaje.id, estado: { not: 'COMPLETADA' } },
-      })
-      if (paradasPendientes === 0) {
-        await tx.viaje.update({
-          where: { id: viaje.id },
-          data: { estadoLogistico: 'EN_CURSO', fechaCierre: new Date() },
-        })
-        viajesCompletados = [viaje.id]
-      }
-    }
-
-    if (resultado.tipo === 'LIBRE') {
-      const ids = chofer.viajes.map((viajeActivo) => viajeActivo.id)
-      await tx.parada.updateMany({
-        where: { viajeId: { in: ids }, estado: { not: 'COMPLETADA' } },
-        data: { estado: 'COMPLETADA', completadaAt: new Date() },
-      })
-      await tx.viaje.updateMany({
-        where: { id: { in: ids } },
-        data: { estadoLogistico: 'EN_CURSO', fechaCierre: new Date() },
-      })
-      viajesCompletados = ids
-    }
-
-    const viajesActualizados = await tx.viaje.findMany({
-      where: { choferId: chofer.id, estadoLogistico: 'EN_CURSO' },
-      include: { paradas: true },
-    })
-
-    if (viajesActualizados.length > 0 && viajesActualizados.every((v) => v.paradas.every((p) => p.estado === 'COMPLETADA'))) {
-      await tx.viaje.updateMany({
-        where: { id: { in: viajesActualizados.map((v) => v.id) } },
-        data: { estadoLogistico: 'EN_CURSO', fechaCierre: new Date() },
-      })
-      viajesCompletados = [...new Set([...viajesCompletados, ...viajesActualizados.map((v) => v.id)])]
-    }
-
-    const dataChofer = {
-      ubicacionActual: ubicacion || chofer.ubicacionActual,
-      ultimoReporteAt: new Date(),
-    }
-    const [viajesChoferRestantes, viajesCamionRestantes] = await Promise.all([
-      tx.viaje.count({ where: { choferId: chofer.id, estadoLogistico: 'EN_CURSO', paradas: { some: { estado: { not: 'COMPLETADA' } } } } }),
-      tx.viaje.count({
-        where: {
-          estadoLogistico: 'EN_CURSO',
-          paradas: { some: { estado: { not: 'COMPLETADA' } } },
-          OR: [
-            { camionId: viaje.camionId },
-            { unidades: { some: { camionId: viaje.camionId } } }
-          ]
-        }
-      }),
-    ])
-
-    if (resultado.tipo === 'LIBRE' || resultado.tipo === 'ESPERANDO_INSTRUCCIONES' || viajesChoferRestantes === 0) {
-      dataChofer.estado = 'DISPONIBLE'
-      if (resultado.tipo === 'LIBRE') dataChofer.ubicacionActual = ubicacion || 'Sede Barquisimeto'
-    }
-
-    await tx.chofer.update({
-      where: { id: chofer.id },
-      data: dataChofer,
-    })
-
-    const unidadIds = [...new Set([(viaje.camionId), ...(viaje.unidades || []).map((unidad) => unidad.camionId)].filter(Boolean))]
-    await tx.camion.updateMany({
-      where: { id: { in: unidadIds }, estado: { not: 'EN_TALLER' } },
-      data: {
-        ubicacionActual: ubicacion || chofer.ubicacionActual,
-        estado:
-          resultado.tipo === 'LIBRE' || resultado.tipo === 'ESPERANDO_INSTRUCCIONES' || viajesCamionRestantes === 0
-            ? 'DISPONIBLE'
-            : undefined,
-      },
-    })
-
-    const viajesPendientesLiquidacion =
-      resultado.tipo === 'LIBRE'
-        ? await tx.viaje.count({
-            where: {
-              choferId: chofer.id,
-              estadoFinanciero: 'PENDIENTE',
-              paradas: { every: { estado: 'COMPLETADA' } },
-            },
-          })
-        : 0
-
-    return { reporte, viajesCompletados, viajesPendientesLiquidacion }
+  await aplicarReporteChofer({
+    chofer,
+    viaje,
+    paradaId,
+    estadoParada,
+    tipoReporte: resultado.tipo,
+    ubicacion,
+    mensajeOriginal: textoOriginal,
+    procesadoPorIa: resultado.procesadoPorIa || resultado.resumen,
+    origen: 'WHATSAPP',
+    socketIO,
   })
 
   reportesPendientes.delete(remoteJid)
 
   await enviarMensaje(remoteJid, construirRespuestaReporte(resultado, viaje, ubicacion))
-
-  if (socketIO) {
-    socketIO.emit('reporte:nuevo', {
-      reporte,
-      chofer: { id: chofer.id, nombre: chofer.nombre, telefono: chofer.telefono },
-      viaje: { codigo: viaje.codigo, id: viaje.id },
-      parada: paradaValida ? { id: paradaValida.id, estado: estadoParada } : null,
-      mensaje: `${chofer.nombre}: ${resultado.resumen || textoOriginal}`,
-    })
-
-    if (resultado.tipo === 'ESPERANDO_INSTRUCCIONES') {
-      socketIO.emit('operaciones:alerta', {
-        tipo: viajesCompletados.length > 0 ? 'VIAJES_COMPLETADOS' : 'CHOFER_ESPERA_INSTRUCCIONES',
-        chofer: { id: chofer.id, nombre: chofer.nombre },
-        ubicacion,
-        viajesCompletados,
-      })
-    }
-
-    if (resultado.tipo === 'NOVEDAD') {
-      socketIO.emit('operaciones:alerta', {
-        tipo: 'NOVEDAD_VIAJE',
-        mensaje: `Novedad de ${chofer.nombre} en ${viaje.codigo}: ${textoOriginal}`,
-        chofer: { id: chofer.id, nombre: chofer.nombre },
-        viaje: { id: viaje.id, codigo: viaje.codigo },
-        ubicacion,
-      })
-    }
-
-    if (resultado.tipo === 'LIBRE') {
-      socketIO.emit('operaciones:alerta', {
-        tipo: 'CHOFER_LIBRE',
-        mensaje: `Chofer ${chofer.nombre} llego a sede. Viajes pendientes de liquidacion: ${viajesPendientesLiquidacion}`,
-        chofer: { id: chofer.id, nombre: chofer.nombre },
-        ubicacion: ubicacion || 'Barquisimeto',
-        viajesPendientesLiquidacion,
-      })
-    }
-  }
 }
 
 const confirmarReportePendiente = async ({ remoteJid, opcion, chofer, socketIO, enviarMensaje }) => {

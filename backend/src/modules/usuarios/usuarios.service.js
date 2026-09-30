@@ -33,7 +33,7 @@ const validarUsuario = (datos, requierePassword = false) => {
 }
 
 const listar = async (filtros = {}) => {
-  const where = {}
+  const where = { rol: { not: 'CHOFER' } }
   if (filtros.estado === 'inactivos') where.activo = false
   else if (filtros.estado !== 'todos') where.activo = true
 

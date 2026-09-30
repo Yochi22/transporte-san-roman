@@ -31,4 +31,35 @@ const inactivar = async (req, res) => {
   return ok(res, null, 'Chofer inactivado')
 }
 
-module.exports = { listar, obtener, crear, actualizar, eliminar, inactivar }
+const crearAcceso = async (req, res) => {
+  const resultado = await service.crearAcceso(req.params.id)
+  return ok(res, resultado, 'Acceso creado', 201)
+}
+
+const resetearClaveAcceso = async (req, res) => {
+  const resultado = await service.resetearClaveAcceso(req.params.id)
+  return ok(res, resultado, 'Clave restablecida')
+}
+
+const revocarAcceso = async (req, res) => {
+  const resultado = await service.revocarAcceso(req.params.id)
+  return ok(res, resultado, 'Acceso revocado')
+}
+
+const reactivarAcceso = async (req, res) => {
+  const resultado = await service.reactivarAcceso(req.params.id)
+  return ok(res, resultado, 'Acceso reactivado')
+}
+
+module.exports = {
+  listar,
+  obtener,
+  crear,
+  actualizar,
+  eliminar,
+  inactivar,
+  crearAcceso,
+  resetearClaveAcceso,
+  revocarAcceso,
+  reactivarAcceso
+}

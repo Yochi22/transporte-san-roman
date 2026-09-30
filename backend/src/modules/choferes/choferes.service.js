@@ -1,6 +1,19 @@
+const crypto = require('crypto')
+const bcrypt = require('bcryptjs')
 const prisma = require('../../config/database')
 const { normalizarTelefono } = require('../../utils/normalizarTelefono')
 const { choferPanelSelect } = require('../../utils/prismaSelects')
+
+const ALFABETO_CLAVE = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+
+const generarClaveTemporal = () => {
+  let clave = ''
+  const bytes = crypto.randomBytes(10)
+  for (let i = 0; i < 10; i += 1) {
+    clave += ALFABETO_CLAVE[bytes[i] % ALFABETO_CLAVE.length]
+  }
+  return clave
+}
 
 const validarDatos = (datos, parcial = false) => {
   const nombre = datos.nombre?.trim()
@@ -134,10 +147,67 @@ const inactivar = async (id) => {
   if (viajesActivos > 0) throw { status: 409, message: 'No se puede eliminar un chofer con viajes activos' }
   return prisma.$transaction(async (tx) => {
     await tx.choferUnidad.deleteMany({ where: { choferId: id } })
+    await tx.usuario.updateMany({
+      where: { choferId: id },
+      data: { activo: false, sessionVersion: { increment: 1 } }
+    })
     return tx.chofer.update({
       where: { id },
       data: { activo: false, estado: 'DISPONIBLE', whatsappChatId: null }
     })
+  })
+}
+
+const crearAcceso = async (choferId) => {
+  const chofer = await prisma.chofer.findUniqueOrThrow({ where: { id: choferId }, select: { nombre: true, cedula: true, activo: true } })
+  if (!chofer.activo) throw { status: 409, message: 'El chofer debe estar activo para crear su acceso' }
+  const existente = await prisma.usuario.findUnique({ where: { choferId } })
+  if (existente) throw { status: 409, message: 'Este chofer ya tiene acceso creado' }
+
+  const clave = generarClaveTemporal()
+  const passwordHash = await bcrypt.hash(clave, 12)
+  await prisma.usuario.create({
+    data: {
+      nombre: chofer.nombre,
+      username: chofer.cedula,
+      passwordHash,
+      rol: 'CHOFER',
+      choferId
+    }
+  })
+  return { username: chofer.cedula, claveTemporal: clave }
+}
+
+const resetearClaveAcceso = async (choferId) => {
+  const usuario = await prisma.usuario.findUnique({ where: { choferId } })
+  if (!usuario) throw { status: 404, message: 'Este chofer no tiene acceso creado' }
+
+  const clave = generarClaveTemporal()
+  const passwordHash = await bcrypt.hash(clave, 12)
+  await prisma.usuario.update({
+    where: { choferId },
+    data: { passwordHash, activo: true, sessionVersion: { increment: 1 } }
+  })
+  return { username: usuario.username, claveTemporal: clave }
+}
+
+const revocarAcceso = async (choferId) => {
+  const usuario = await prisma.usuario.findUnique({ where: { choferId } })
+  if (!usuario) throw { status: 404, message: 'Este chofer no tiene acceso creado' }
+  return prisma.usuario.update({
+    where: { choferId },
+    data: { activo: false, sessionVersion: { increment: 1 } },
+    select: { id: true, username: true, activo: true }
+  })
+}
+
+const reactivarAcceso = async (choferId) => {
+  const usuario = await prisma.usuario.findUnique({ where: { choferId } })
+  if (!usuario) throw { status: 404, message: 'Este chofer no tiene acceso creado' }
+  return prisma.usuario.update({
+    where: { choferId },
+    data: { activo: true },
+    select: { id: true, username: true, activo: true }
   })
 }
 
@@ -159,4 +229,15 @@ const eliminar = async (id) => {
   })
 }
 
-module.exports = { listar, obtener, crear, actualizar, eliminar, inactivar }
+module.exports = {
+  listar,
+  obtener,
+  crear,
+  actualizar,
+  eliminar,
+  inactivar,
+  crearAcceso,
+  resetearClaveAcceso,
+  revocarAcceso,
+  reactivarAcceso
+}

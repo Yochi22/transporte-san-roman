@@ -1,6 +1,6 @@
 const { login } = require('./auth.service')
 const { ok, error } = require('../../utils/respuesta')
-const { SESSION_COOKIE_NAME, sessionCookieOptions } = require('../../config/session')
+const { SESSION_COOKIE_NAME, sessionCookieOptions, CHOFER_SESSION_MAX_AGE_MS } = require('../../config/session')
 const prisma = require('../../config/database')
 
 const loginController = async (req, res) => {
@@ -17,7 +17,10 @@ const loginController = async (req, res) => {
   }
 
   const resultado = await login(email, password)
-  res.cookie(SESSION_COOKIE_NAME, resultado.token, sessionCookieOptions())
+  const opciones = resultado.esChofer
+    ? sessionCookieOptions({ maxAgeMs: CHOFER_SESSION_MAX_AGE_MS })
+    : sessionCookieOptions()
+  res.cookie(SESSION_COOKIE_NAME, resultado.token, opciones)
   return ok(res, { usuario: resultado.usuario }, 'Login exitoso')
 }
 

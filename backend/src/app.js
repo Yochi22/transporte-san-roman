@@ -24,6 +24,7 @@ const retornablesRoutes = require('./modules/retornables/retornables.routes')
 const tallerRoutes = require('./modules/taller/taller.routes')
 const gpsRoutes = require('./modules/gps/gps.routes')
 const tasasRoutes = require('./modules/tasas/tasas.routes')
+const miRoutes = require('./modules/mi/mi.routes')
 const { obtenerEstadoWhatsApp, reiniciarWhatsApp } = require('./services/messaging/whatsapp')
 
 const app = express()
@@ -150,6 +151,7 @@ app.use('/api/gastos', gastosRoutes)
 app.use('/api/tasas', tasasRoutes)
 app.use('/api/retornables', retornablesRoutes)
 app.use('/api/taller', tallerRoutes)
+app.use('/api/mi', miRoutes)
 
 const frontendDist = path.resolve(__dirname, '../../frontend/dist')
 if (fs.existsSync(frontendDist)) {

@@ -43,13 +43,13 @@ Transporte San Roman centraliza:
 - Choferes, unidades y asignaciones.
 - Empresas clientes y sus sedes o puntos de carga.
 - Viajes con una o varias unidades y paradas ordenadas.
-- Seguimiento por estados y reportes de WhatsApp.
+- Seguimiento por estados y reportes de WhatsApp o de la app del chofer (rol `CHOFER`, mismo panel).
 - Viajes completados logisticamente y pendientes de liquidacion.
 - Gastos, viaticos, tasa BCV, documentacion y liquidaciones.
 - Retornables y sus movimientos.
 - Taller e historial de mantenimiento.
 - Ultima posicion GPS por unidad mediante Traccar.
-- Usuarios `ADMIN` y `OPERACIONES`.
+- Usuarios `ADMIN`, `OPERACIONES` y `CHOFER`.
 
 Es un MVP operativo avanzado. Prioriza integridad de estados, trazabilidad, disponibilidad, seguridad y claridad para operadores.
 
@@ -128,7 +128,7 @@ No mezcles procedimientos del modo unificado con el Compose separado sin adaptar
 
 ## 6. Datos y relaciones
 
-- `Usuario`: rol, activo y `sessionVersion` para invalidar sesiones.
+- `Usuario`: rol, activo y `sessionVersion` para invalidar sesiones. `email` (staff) y `username` (choferes, guarda la cedula) son nullable y unicos; una cuenta `CHOFER` esta ligada 1:1 a `Chofer` via `choferId` (`onDelete: Cascade`, se borra sola si se elimina el chofer).
 - `Chofer`: telefono, JID WhatsApp, estado, ubicacion y unidades.
 - `Camion`: placa, tipo, IMEI unico, estado, taller y posicion.
 - `ChoferUnidad`: asignacion vigente; `camionId` unico impide doble chofer.
@@ -146,7 +146,7 @@ No mezcles procedimientos del modo unificado con el Compose separado sin adaptar
 Estados principales:
 
 ```text
-Rol: ADMIN | OPERACIONES
+Rol: ADMIN | OPERACIONES | CHOFER
 Camion: DISPONIBLE | EN_RUTA | EN_TALLER
 Chofer: DISPONIBLE | EN_RUTA | DESCANSO
 Viaje logistico: PENDIENTE | EN_CURSO | COMPLETADO | CANCELADO
@@ -232,11 +232,11 @@ Rutas publicas/especiales:
 - `POST /api/gps/positions`, protegida por token GPS.
 - `/whatsapp-qr` y su estado: admin salvo demo publica explicita.
 
-Rutas autenticadas: auth perfil/logout, choferes, camiones, viajes, retornables, taller, tasas y consulta GPS. Son solo admin: usuarios; mutaciones de choferes/camiones; gastos; recarga/documentacion; pendientes de liquidacion; administracion de WhatsApp.
+Rutas autenticadas: auth perfil/logout, choferes, camiones, viajes, retornables, taller, tasas y consulta GPS. Son solo admin: usuarios; mutaciones de choferes/camiones; gastos; recarga/documentacion; pendientes de liquidacion; administracion de WhatsApp; acceso de choferes a la app. `/api/mi/*` es exclusivo de `CHOFER` y solo ve su propio viaje.
 
 ### Inventario de endpoints
 
-`A/O` significa ambos roles autenticados; `ADMIN` significa administrador.
+`A/O` significa ambos roles autenticados (ADMIN u OPERACIONES); `ADMIN` significa administrador; `CHOFER` significa rol chofer, restringido a `/api/mi/*` y a su propio `choferId` (middleware `soloChofer`).
 
 | Metodo y ruta | Permiso | Funcion |
 |---|---|---|
@@ -254,6 +254,10 @@ Rutas autenticadas: auth perfil/logout, choferes, camiones, viajes, retornables,
 | `PUT /api/choferes/:id` | ADMIN | Edita y asigna unidades |
 | `PATCH /api/choferes/:id/inactivar` | ADMIN | Inactiva chofer |
 | `DELETE /api/choferes/:id` | ADMIN | Eliminacion permanente validada |
+| `POST /api/choferes/:id/acceso` | ADMIN | Crea acceso de app (rol CHOFER), clave visible una vez |
+| `PATCH /api/choferes/:id/acceso/resetear` | ADMIN | Genera clave nueva, visible una vez |
+| `PATCH /api/choferes/:id/acceso/revocar` | ADMIN | Desactiva acceso e invalida sesion |
+| `PATCH /api/choferes/:id/acceso/reactivar` | ADMIN | Reactiva acceso existente |
 | `GET /api/camiones` | A/O | Lista y filtra unidades |
 | `GET /api/camiones/:id` | A/O | Detalle de unidad |
 | `POST /api/camiones` | ADMIN | Crea unidad |
@@ -297,8 +301,28 @@ Rutas autenticadas: auth perfil/logout, choferes, camiones, viajes, retornables,
 | `GET /api/gps/trucks/:truckId/position` | A/O | Consulta posicion |
 | `GET /api/whatsapp/status` | ADMIN | Estado del bot |
 | `POST /api/whatsapp/reiniciar` | ADMIN | Borra sesion y genera QR nuevo |
+| `GET /api/mi/viaje` | CHOFER | Viaje(s) propios en curso, con paradas y reportes recientes |
+| `POST /api/mi/reportes` | CHOFER | Registra un reporte estructurado desde la app |
 
-No existe endpoint independiente de reportes: se cargan dentro de viajes y se crean principalmente desde WhatsApp. Los controladores de viaje filtran informacion financiera para `OPERACIONES`; conserva ese filtrado al agregar campos.
+No existe endpoint independiente de reportes para ADMIN/OPERACIONES: se cargan dentro de viajes y se crean desde WhatsApp o desde la app del chofer. Los controladores de viaje filtran informacion financiera para `OPERACIONES`; conserva ese filtrado al agregar campos. `ReporteChofer.origen` distingue `WHATSAPP` de `APP`.
+
+Autoservicio del chofer (`/api/mi`, rol `CHOFER`, requiere `autenticar` + `soloChofer`):
+
+| Metodo y ruta | Funcion |
+|---|---|
+| `GET /api/mi/viaje` | Viaje(s) `EN_CURSO` del chofer autenticado, con paradas y sus reportes recientes |
+| `POST /api/mi/reportes` | Registra un reporte estructurado (botones, sin IA) para un viaje propio |
+
+Gestion de acceso del chofer (dentro de `/api/choferes`, todas `ADMIN`, paso manual separado de crear el chofer):
+
+| Metodo y ruta | Funcion |
+|---|---|
+| `POST /api/choferes/:id/acceso` | Crea el `Usuario` rol `CHOFER` (username = cedula); devuelve la clave una sola vez |
+| `PATCH /api/choferes/:id/acceso/resetear` | Genera clave nueva y la devuelve una sola vez; invalida sesiones previas |
+| `PATCH /api/choferes/:id/acceso/revocar` | Desactiva el acceso e invalida la sesion activa de inmediato |
+| `PATCH /api/choferes/:id/acceso/reactivar` | Reactiva el acceso (misma cedula, sin revelar clave) |
+
+La sesion de un `Usuario` rol `CHOFER` dura 30 dias (vs. 8 horas por defecto de staff) salvo cierre de sesion manual o revocacion admin.
 
 Los listados `GET /api/viajes`, `GET /api/viajes/archivo/listado` y `GET /api/viajes/pendientes-liquidacion/listado` aceptan `empresaId`. Un UUID filtra por empresa; `sin_empresa` recupera registros historicos con `empresaId IS NULL`. El frontend expone este filtro en viajes activos, finalizados y liquidaciones.
 
@@ -328,6 +352,8 @@ Flujo tecnico:
 8. Si hay varios viajes ambiguos, se solicita seleccion numerica.
 9. El reporte actualiza entidades relacionadas cuando corresponde.
 10. Socket.IO emite alertas al panel.
+
+El paso 9 (marcar parada, cerrar viaje/paradas si aplica, recalcular estado de chofer/camion, crear `ReporteChofer`, emitir sockets) vive en `backend/src/services/reportes/aplicarReporte.service.js` (`aplicarReporteChofer`). Es la unica fuente de verdad: tanto `mensajes.handler.js` (WhatsApp, tras el parseo NLP) como `modules/mi` (app del chofer, con botones ya resueltos) llaman a esa misma funcion para garantizar el mismo resultado sin importar el canal.
 
 Eventos relevantes:
 
@@ -867,6 +893,15 @@ Validacion posterior especifica:
 5. Inactiva la empresa y confirma que desaparece del agendamiento, pero permanece visible en el viaje historico.
 6. Reactivala o elimina los datos de prueba solo si no tienen historial real asociado.
 
+Para el rol `CHOFER`, la migracion esperada es `20260930160000_add_chofer_role_and_report_origin`. Es aditiva: agrega el valor `CHOFER` a `Rol`, afloja `usuarios.email` a nullable, agrega `usuarios.username` y `usuarios.chofer_id` (unicos, FK a `choferes` con `ON DELETE CASCADE`), el tipo `OrigenReporte` y `reportes_chofer.origen` (default `WHATSAPP`). No rellena datos ni necesita variables de entorno nuevas. Validacion especifica tras desplegar:
+
+1. Crea un chofer de prueba y usa "Crear acceso" en Recursos; copia la clave temporal mostrada (no se repite).
+2. Inicia sesion con esa cedula/clave en un navegador aparte y confirma que entra a la vista de chofer, no al panel admin.
+3. Con un viaje `EN_CURSO` asignado, recorre Cargando -> Carga lista -> Descargando -> Descarga lista -> Regresamos/Disponible y confirma en el panel admin (otra sesion) que las paradas cambian en vivo y que el reporte aparece con origen `App`.
+4. Envia tambien un reporte por WhatsApp sobre el mismo chofer/viaje y confirma que ambos canales conviven sin pisarse.
+5. Prueba "Revocar acceso" y confirma que la sesion del chofer muere de inmediato (401 en su siguiente accion).
+6. Elimina el chofer/usuario de prueba solo si no generaron historial real.
+
 ### 13.6 Aplicacion
 
 ```bash
@@ -889,6 +924,8 @@ panel.example.com {
 ```
 
 El proxy debe conservar Host, `X-Forwarded-Proto` y WebSocket upgrade. `FRONTEND_URL` debe ser exactamente `https://panel.example.com`. Restringe Traccar por VPN, IP o autenticacion adicional.
+
+El frontend ya sirve `manifest.webmanifest` y `sw.js` (ver `frontend/public/`) para que el panel sea instalable como PWA en el celular de los choferes. Mientras el VPS siga por IP sin TLS, la mayoria de navegadores moviles (Chrome/Android incluido) no registran el Service Worker ni ofrecen "Agregar a pantalla de inicio" fuera de `localhost`. No hace falta tocar nada del codigo: en cuanto quede el dominio con HTTPS de este apartado, la instalabilidad se activa sola.
 
 ### 13.8 Validacion inicial
 

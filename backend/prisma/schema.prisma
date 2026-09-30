@@ -11,6 +11,12 @@ datasource db {
 enum Rol {
   ADMIN
   OPERACIONES
+  CHOFER
+}
+
+enum OrigenReporte {
+  WHATSAPP
+  APP
 }
 
 enum EstadoCamion {
@@ -158,14 +164,17 @@ model EmpresaSede {
 model Usuario {
   id             String   @id @default(uuid())
   nombre         String
-  email          String   @unique
+  email          String?  @unique
+  username       String?  @unique
   passwordHash   String   @map("password_hash")
   rol            Rol      @default(OPERACIONES)
   activo         Boolean  @default(true)
   sessionVersion Int      @default(0) @map("session_version")
+  choferId       String?  @unique @map("chofer_id")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
+  chofer        Chofer? @relation(fields: [choferId], references: [id], onDelete: Cascade)
   viajesCreados Viaje[] @relation("ViajeCreador")
   retornableMovimientos RetornableMovimiento[]
 
@@ -189,6 +198,7 @@ model Chofer {
   gastos            Gasto[]
   unidadesAsignadas ChoferUnidad[]
   retornableMovimientos RetornableMovimiento[]
+  usuario           Usuario?
 
   @@index([estado, activo])
   @@map("choferes")
@@ -363,6 +373,7 @@ model ReporteChofer {
   tipoReporte     TipoReporte @map("tipo_reporte")
   ubicacion       String?
   procesadoPorIa  String?     @map("procesado_por_ia")
+  origen          OrigenReporte @default(WHATSAPP)
   createdAt       DateTime    @default(now()) @map("created_at")
 
   viaje  Viaje   @relation(fields: [viajeId], references: [id])

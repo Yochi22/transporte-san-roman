@@ -8,8 +8,8 @@ const JWT_OPTIONS = {
   audience: 'panel-operativo'
 }
 
-const generarToken = (payload) => {
-  return jwt.sign(payload, JWT_SECRET, { ...JWT_OPTIONS, expiresIn: JWT_EXPIRES_IN })
+const generarToken = (payload, { expiresIn } = {}) => {
+  return jwt.sign(payload, JWT_SECRET, { ...JWT_OPTIONS, expiresIn: expiresIn || JWT_EXPIRES_IN })
 }
 
 const verificarToken = (token) => {
