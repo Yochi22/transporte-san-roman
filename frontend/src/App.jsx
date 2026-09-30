@@ -1823,9 +1823,9 @@ function EmpresasView({ empresas, isAdmin, onDone }) {
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[920px] text-left text-sm">
+          <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="bg-neutral-50 text-xs font-semibold uppercase text-neutral-500">
-              <tr><th className="w-12 px-4 py-3"></th><th className="px-4 py-3">Empresa</th><th className="px-4 py-3">Puntos</th><th className="px-4 py-3">Activos</th><th className="px-4 py-3">Finalizados</th><th className="px-4 py-3">Liquidados</th><th className="px-4 py-3">Estado</th><th className="w-36 px-4 py-3 text-right">Acciones</th></tr>
+              <tr><th className="w-12 px-4 py-3"></th><th className="px-4 py-3">Empresa</th><th className="px-4 py-3">Puntos</th><th className="px-4 py-3">Estado</th><th className="w-36 px-4 py-3 text-right">Acciones</th></tr>
             </thead>
             <tbody>
               {filtered.map((empresa) => (
@@ -1834,9 +1834,6 @@ function EmpresasView({ empresas, isAdmin, onDone }) {
                     <td className="px-4 py-3"><button type="button" title="Ver puntos de carga" onClick={() => setExpandedId(expandedId === empresa.id ? null : empresa.id)} className="grid h-8 w-8 place-items-center rounded hover:bg-neutral-100"><ChevronRight size={16} className={expandedId === empresa.id ? 'rotate-90 transition' : 'transition'} /></button></td>
                     <td className="px-4 py-3 font-medium">{empresa.nombre}</td>
                     <td className="px-4 py-3">{(empresa.sedes || []).filter((sede) => sede.activo).length}</td>
-                    <td className="px-4 py-3">{empresa.estadisticas?.activos || 0}</td>
-                    <td className="px-4 py-3">{empresa.estadisticas?.finalizados || 0}</td>
-                    <td className="px-4 py-3">{empresa.estadisticas?.liquidados || 0}</td>
                     <td className="px-4 py-3"><span className={'rounded px-2 py-1 text-xs font-medium ' + (empresa.activo ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-100 text-neutral-500')}>{empresa.activo ? 'ACTIVA' : 'INACTIVA'}</span></td>
                     <td className="px-4 py-3">{isAdmin && <div className="flex justify-end gap-1">
                       <button type="button" title="Editar empresa" onClick={() => setEmpresaForm({ id: empresa.id, nombre: empresa.nombre })} className="grid h-8 w-8 place-items-center rounded hover:bg-neutral-100"><Edit3 size={14} /></button>
@@ -1844,7 +1841,7 @@ function EmpresasView({ empresas, isAdmin, onDone }) {
                       <button type="button" title="Eliminar empresa" onClick={() => eliminarEmpresa(empresa)} className="grid h-8 w-8 place-items-center rounded hover:bg-red-50 hover:text-red-600"><Trash2 size={14} /></button>
                     </div>}</td>
                   </tr>
-                  {expandedId === empresa.id && <tr className="bg-stone-50"><td colSpan={8} className="px-6 py-4">
+                  {expandedId === empresa.id && <tr className="bg-stone-50"><td colSpan={5} className="px-6 py-4">
                     <div className="mb-3 flex items-center justify-between"><p className="text-xs font-semibold uppercase text-neutral-500">Puntos de carga</p>{isAdmin && empresa.activo && <button type="button" onClick={() => setSedeForm({ empresaId: empresa.id, id: '', nombre: '', ciudad: '', direccion: '' })} className="btn-secondary"><Plus size={15} />Agregar punto</button>}</div>
                     <div className="divide-y divide-neutral-200 border-y border-neutral-200">
                       {(empresa.sedes || []).map((sede) => <div key={sede.id} className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_100px_120px] sm:items-center">
