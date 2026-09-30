@@ -7,6 +7,7 @@ import GpsMap from './components/GpsMap.jsx'
 import { api, SOCKET_URL } from './lib/api'
 import {
   AlertTriangle,
+  Archive,
   Banknote,
   Bell,
   Building2,
@@ -105,6 +106,7 @@ const requestNumber = (title, value = '', placeholder = '0.00') => Swal.fire({
 const tabs = [
   { id: 'monitor', label: 'Resumen', icon: LayoutDashboard },
   { id: 'viajes', label: 'Viajes', icon: Route },
+  { id: 'archivo', label: 'Archivo', icon: Archive },
   { id: 'reportes', label: 'Reportes', icon: ClipboardList },
   { id: 'retornables', label: 'Retornables', icon: Package },
   { id: 'despacho', label: 'Agendamiento', icon: Send },
@@ -461,6 +463,9 @@ export default function App() {
             {activeTab === 'viajes' && (
               <ViajesView data={data} empresas={empresas} onSelect={setSelectedViaje} />
             )}
+            {activeTab === 'archivo' && (
+              <ArchivoView empresas={empresas} onSelect={setSelectedViaje} />
+            )}
             {activeTab === 'reportes' && (
               <ReportesTableView reportes={data.reportes} onSelectViaje={setSelectedViaje} />
             )}
@@ -667,7 +672,6 @@ function ViajesView({ data, empresas, onSelect }) {
       </section>
       <TripList title="En curso" viajes={activos} onSelect={onSelect} />
       <PendientesLiquidacion key={'pendientes-' + empresaId} empresaId={empresaId} onSelect={onSelect} />
-      <ArchivoLogistico key={'archivo-' + empresaId} empresaId={empresaId} onSelect={onSelect} />
     </div>
   )
 }
@@ -767,86 +771,6 @@ function ReportesTableView({ reportes, onSelectViaje }) {
   )
 }
 
-function ReportesView({ reportes, onSelectViaje }) {
-  const [page, setPage] = useState(1)
-  const [expandedId, setExpandedId] = useState(null)
-  const pageSize = 12
-  const visibleReports = paginate(reportes, page, pageSize)
-  useClampPage(page, reportes.length, pageSize, setPage)
-
-  return (
-    <div className="space-y-4">
-      <section className="rounded-md border border-neutral-200 bg-white">
-        <div className="flex flex-col gap-3 border-b border-neutral-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
-          <SectionTitle title="Reportes de choferes" subtitle={`${reportes.length} registros recientes`} />
-          <span className="text-xs text-neutral-500">Conservación automática: 5 días</span>
-        </div>
-
-        <div className="divide-y divide-neutral-100">
-          {visibleReports.map((reporte) => {
-            const expanded = expandedId === reporte.id
-            const chofer = reporte.chofer?.nombre || reporte.viaje?.chofer?.nombre || 'Sin chofer'
-            const viaje = reporte.viaje
-
-            return (
-              <article key={reporte.id} className="px-4 py-4">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-2 flex flex-wrap items-center gap-2">
-                      <span className={`rounded-md px-2 py-1 text-xs font-medium ${reporteStyles[reporte.tipoReporte] || reporteStyles.OTRO}`}>
-                        {labelReporte(reporte.tipoReporte)}
-                      </span>
-                      <span className="text-xs text-neutral-500">{formatDate(reporte.createdAt)}</span>
-                    </div>
-                    <h3 className="truncate text-sm font-semibold">{formatReportTitle(reporte)}</h3>
-                    <p className="mt-1 text-xs text-neutral-500">
-                      {chofer}{viaje?.codigo ? `  -  ${viaje.codigo}` : ''}
-                    </p>
-                    {reporte.ubicacion && (
-                      <p className="mt-1 truncate text-xs text-neutral-400">{reporte.ubicacion}</p>
-                    )}
-                  </div>
-
-                  <div className="flex shrink-0 flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setExpandedId(expanded ? null : reporte.id)}
-                      className="h-9 rounded-md border border-neutral-200 px-3 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
-                    >
-                      {expanded ? 'Ocultar' : 'Ver detalle'}
-                    </button>
-                    {viaje && (
-                      <button
-                        type="button"
-                        onClick={() => onSelectViaje(viaje)}
-                        className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-neutral-950 px-3 text-sm font-medium text-white hover:bg-neutral-800"
-                      >
-                        <Route size={15} />
-                        Viaje
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {expanded && (
-                  <div className="mt-4 grid gap-3 rounded-md border border-neutral-200 bg-stone-50 p-3 text-sm lg:grid-cols-3">
-                    <InfoBlock label="Mensaje recibido" value={reporte.mensajeOriginal || 'Sin mensaje'} />
-                    <InfoBlock label="Ubicacion" value={reporte.ubicacion || 'Sin ubicacion reportada'} />
-                    <InfoBlock label="Viaje" value={viaje ? `${viaje.codigo}  -  ${formatRoute(viaje)}` : 'Sin viaje asociado'} />
-                  </div>
-                )}
-              </article>
-            )
-          })}
-          {visibleReports.length === 0 && <Empty text="Sin reportes recientes." />}
-        </div>
-      </section>
-
-      <Pagination page={page} total={reportes.length} pageSize={pageSize} onChange={setPage} />
-    </div>
-  )
-}
-
 function PendientesLiquidacion({ empresaId, onSelect }) {
   const [page, setPage] = useState(1)
   const [data, setData] = useState({ items: [], total: 0, pageSize: 10 })
@@ -910,13 +834,16 @@ function PendientesLiquidacion({ empresaId, onSelect }) {
   )
 }
 
-function ArchivoLogistico({ empresaId, onSelect }) {
+function ArchivoView({ empresas, onSelect }) {
+  const [empresaId, setEmpresaId] = useState('')
   const [periodo, setPeriodo] = useState('todos')
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10))
+  const [estadoFinanciero, setEstadoFinanciero] = useState('')
   const [page, setPage] = useState(1)
   const [archivo, setArchivo] = useState({ items: [], total: 0, pageSize: 10 })
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
+  const opciones = companyFilterOptions(empresas)
   useClampPage(page, archivo.total, archivo.pageSize, setPage)
 
   useEffect(() => {
@@ -926,7 +853,14 @@ function ArchivoLogistico({ empresaId, onSelect }) {
       setLoadError('')
       try {
         const response = await api.get('/viajes/archivo/listado', {
-          params: { periodo, fecha, page, pageSize: archivo.pageSize, empresaId: empresaId || undefined },
+          params: {
+            periodo,
+            fecha,
+            page,
+            pageSize: archivo.pageSize,
+            empresaId: empresaId || undefined,
+            estadoFinanciero: estadoFinanciero || undefined,
+          },
         })
         if (active) setArchivo(response.data?.data || { items: [], total: 0, pageSize: 10 })
       } catch (err) {
@@ -939,19 +873,33 @@ function ArchivoLogistico({ empresaId, onSelect }) {
     return () => {
       active = false
     }
-  }, [periodo, fecha, page, archivo.pageSize, empresaId])
+  }, [periodo, fecha, page, archivo.pageSize, empresaId, estadoFinanciero])
+
+  const cambiarEmpresa = (value) => {
+    setEmpresaId(value)
+    setPage(1)
+  }
 
   const cambiarPeriodo = (value) => {
     setPeriodo(value)
     setPage(1)
   }
 
+  const cambiarEstadoFinanciero = (value) => {
+    setEstadoFinanciero(value)
+    setPage(1)
+  }
+
   return (
-    <section className="space-y-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <SectionTitle title="Archivo logistico" subtitle={`${archivo.total} registros`} />
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <div className="flex rounded-md border border-neutral-200 bg-white p-1">
+    <div className="space-y-4">
+      <section className="space-y-4 border-b border-neutral-200 pb-4">
+        <div className="max-w-md">
+          <Field label="Filtrar por empresa">
+            <SearchableSelect value={empresaId} options={opciones} onChange={cambiarEmpresa} placeholder="Todas las empresas" />
+          </Field>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <div className="flex flex-wrap rounded-md border border-neutral-200 bg-white p-1">
             {[
               ['todos', 'Todos'],
               ['dia', 'Dia'],
@@ -979,29 +927,49 @@ function ArchivoLogistico({ empresaId, onSelect }) {
               className="input sm:w-40"
             />
           )}
+          <div className="flex flex-wrap rounded-md border border-neutral-200 bg-white p-1">
+            {[
+              ['', 'Todos'],
+              ['LIQUIDADO', 'Liquidados'],
+              ['PENDIENTE', 'Pendientes'],
+            ].map(([value, label]) => (
+              <button
+                key={value || 'todos-financiero'}
+                type="button"
+                onClick={() => cambiarEstadoFinanciero(value)}
+                className={`h-8 px-3 text-xs font-medium ${estadoFinanciero === value ? 'rounded bg-neutral-950 text-white' : 'text-neutral-600'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-      {loadError && <Banner tone="danger" icon={AlertTriangle} text={loadError} />}
-      <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">
-        {archivo.items.map((viaje) => (
-          <button key={viaje.id} onClick={() => onSelect(viaje)} className="flex w-full items-center gap-3 border-b border-neutral-100 px-4 py-3 text-left last:border-b-0 hover:bg-neutral-50">
-            <StatusDot estado={viaje.estadoLogistico} />
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{viaje.codigo}</p>
-              <p className="truncate text-xs text-neutral-500">{companyName(viaje)} - {viaje.chofer?.nombre || 'Sin chofer'} - {formatRoute(viaje)}</p>
-            </div>
-            <div className="hidden text-right sm:block">
-              <p className="text-sm font-medium">{formatDate(viaje.fechaCierre)}</p>
-              <p className="text-xs text-neutral-500">{formatStatus(viaje.estadoFinanciero)}</p>
-            </div>
-            <ChevronRight className="text-neutral-400" size={18} />
-          </button>
-        ))}
-        {!loading && !loadError && archivo.items.length === 0 && <Empty text="Sin registros para este periodo." />}
-        {loading && <Empty text="Cargando archivo..." />}
-      </div>
-      <Pagination page={page} total={archivo.total} pageSize={archivo.pageSize} onChange={setPage} />
-    </section>
+      </section>
+
+      <section className="space-y-3">
+        <SectionTitle title="Archivo logistico" subtitle={`${archivo.total} registros`} />
+        {loadError && <Banner tone="danger" icon={AlertTriangle} text={loadError} />}
+        <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">
+          {archivo.items.map((viaje) => (
+            <button key={viaje.id} onClick={() => onSelect(viaje)} className="flex w-full items-center gap-3 border-b border-neutral-100 px-4 py-3 text-left last:border-b-0 hover:bg-neutral-50">
+              <StatusDot estado={viaje.estadoLogistico} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">{viaje.codigo}</p>
+                <p className="truncate text-xs text-neutral-500">{companyName(viaje)} - {viaje.chofer?.nombre || 'Sin chofer'} - {formatRoute(viaje)}</p>
+              </div>
+              <div className="hidden text-right sm:block">
+                <p className="text-sm font-medium">{formatDate(viaje.fechaCierre)}</p>
+                <p className="text-xs text-neutral-500">{formatStatus(viaje.estadoFinanciero)}</p>
+              </div>
+              <ChevronRight className="text-neutral-400" size={18} />
+            </button>
+          ))}
+          {!loading && !loadError && archivo.items.length === 0 && <Empty text="Sin registros para este periodo." />}
+          {loading && <Empty text="Cargando archivo..." />}
+        </div>
+        <Pagination page={page} total={archivo.total} pageSize={archivo.pageSize} onChange={setPage} />
+      </section>
+    </div>
   )
 }
 
@@ -1332,7 +1300,7 @@ function TripPicker({ viajes, value, onChange, disabled = false }) {
     </div>
   )
 }
-function RetornableDrawer({ item, viajes, choferes, camiones, onClose, onDone }) {
+function RetornableDrawer({ item, viajes, choferes, onClose, onDone }) {
   const [form, setForm] = useState({ tipoMovimiento: 'DEVOLUCION_PARCIAL', cantidad: item.cantidadPendiente || '', viajeId: '', choferId: '', observacion: '' })
   const pendiente = Number(item.cantidadPendiente || 0)
 
@@ -2447,7 +2415,7 @@ function TallerView({ camiones, onDone }) {
   )
 }
 
-function LiquidacionesView({ viajes, choferes, empresas, onDone }) {
+function LiquidacionesView({ viajes, choferes, empresas }) {
   const [periodo, setPeriodo] = useState('mes')
   const [choferId, setChoferId] = useState('')
   const [empresaId, setEmpresaId] = useState('')
@@ -2616,7 +2584,6 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
   const [showLiquidarModal, setShowLiquidarModal] = useState(false)
   const [showRutaEditor, setShowRutaEditor] = useState(false)
   const [numeroGuia, setNumeroGuia] = useState(viaje.numeroGuia || '')
-  const [cierreForm, setCierreForm] = useState({})
   const puedeCancelar = canCancelTrip(viaje)
   const detailPageSize = 8
   const tramos = groupByTramo(viaje.paradas || [])
@@ -2639,7 +2606,9 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
         setTasaBcv(tasa)
         setGastoForm((current) => current.tasaBcv ? { ...current, tasaFuente: current.tasaFuente || data.fuente || '', tasaFecha: current.tasaFecha || data.fecha || '' } : { ...current, tasaBcv: String(tasa), tasaFuente: data.fuente || '', tasaFecha: data.fecha || '' })
       }
-    } catch (error) {}
+    } catch {
+      // Tasa BCV opcional: si falla la consulta, el campo queda vacio para ingreso manual.
+    }
   }
 
   useEffect(() => {
@@ -4076,6 +4045,7 @@ function pageTitle(tab) {
   const titles = {
     monitor: 'Resumen',
     viajes: 'Viajes',
+    archivo: 'Archivo',
     reportes: 'Reportes',
     despacho: 'Agendamiento',
     recursos: 'Recursos',

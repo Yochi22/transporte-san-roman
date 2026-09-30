@@ -161,6 +161,10 @@ const listarArchivo = async (filtros = {}) => {
     where.fechaCierre = { gte: rango.desde, lte: rango.hasta }
   }
 
+  if (filtros.estadoFinanciero === 'LIQUIDADO' || filtros.estadoFinanciero === 'PENDIENTE') {
+    where.estadoFinanciero = filtros.estadoFinanciero
+  }
+
   const [items, total] = await prisma.$transaction([
     prisma.viaje.findMany({
       where,
