@@ -656,6 +656,41 @@ function ViajesView({ data, empresas, onSelect }) {
   const activos = data.activos.filter((viaje) => matchesCompanyFilter(viaje, empresaId))
   const opciones = companyFilterOptions(empresas)
 
+  const descargarReporteViaticos = async () => {
+    const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ])
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+    const logoData = await imageToDataUrl(logo)
+    doc.addImage(logoData, 'PNG', 14, 10, 30, 17)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(14)
+    doc.text('Viajes en curso - Viaticos', 50, 17)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.setTextColor(90)
+    doc.text(`Empresa: ${empresaId ? (opciones.find((opcion) => opcion.value === empresaId)?.label || 'Sin empresa') : 'Todas'}`, 50, 23)
+    doc.text(`Generado: ${new Date().toLocaleString('es-VE')}`, 50, 28)
+
+    autoTable(doc, {
+      startY: 36,
+      theme: 'grid',
+      head: [['Chofer', 'Ruta', 'Fecha de agendamiento']],
+      body: activos.map((viaje) => [
+        viaje.chofer?.nombre || 'Sin chofer',
+        formatRoute(viaje),
+        formatDate(viaje.createdAt),
+      ]),
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [24, 24, 27], textColor: 255 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+    })
+
+    doc.save(`viajes-en-curso-${new Date().toISOString().slice(0, 10)}.pdf`)
+    await notifySuccess('PDF generado', 'El reporte de viajes en curso fue descargado.')
+  }
+
   return (
     <div className="space-y-6">
       <section className="border-b border-neutral-200 pb-4">
@@ -670,7 +705,17 @@ function ViajesView({ data, empresas, onSelect }) {
           </Field>
         </div>
       </section>
-      <TripList title="En curso" viajes={activos} onSelect={onSelect} />
+      <TripList
+        title="En curso"
+        viajes={activos}
+        onSelect={onSelect}
+        actions={(
+          <button type="button" onClick={descargarReporteViaticos} disabled={activos.length === 0} className="btn-secondary">
+            <Download size={16} />
+            Reporte de viaticos
+          </button>
+        )}
+      />
       <PendientesLiquidacion key={'pendientes-' + empresaId} empresaId={empresaId} onSelect={onSelect} />
     </div>
   )
@@ -973,7 +1018,7 @@ function ArchivoView({ empresas, onSelect }) {
   )
 }
 
-function TripList({ title, viajes, onSelect }) {
+function TripList({ title, viajes, onSelect, actions = null }) {
   const [page, setPage] = useState(1)
   const pageSize = 8
   const pageItems = paginate(viajes, page, pageSize)
@@ -981,7 +1026,10 @@ function TripList({ title, viajes, onSelect }) {
 
   return (
     <section className="space-y-3">
-      <SectionTitle title={title} subtitle={`${viajes.length} registros`} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <SectionTitle title={title} subtitle={`${viajes.length} registros`} />
+        {actions}
+      </div>
       <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">
         {pageItems.map((viaje) => (
           <button key={viaje.id} onClick={() => onSelect(viaje)} className="flex w-full items-center gap-3 border-b border-neutral-100 px-4 py-3 text-left last:border-b-0 hover:bg-neutral-50">
