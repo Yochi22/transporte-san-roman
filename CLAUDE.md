@@ -532,6 +532,18 @@ Los bloques de despliegue omiten `sudo` para facilitar lectura. Si el usuario no
 
 Nunca guardes la llave privada dentro del repositorio, OneDrive compartido, correo o chat. La clave publica termina en `.pub` y si puede copiarse al proveedor; la privada no.
 
+Entorno verificado el 30 de septiembre de 2026:
+
+- VPS de San Roman: `104.251.219.40`, hostname `ubuntu-4gb-dal-hquw`.
+- Usuario SSH vigente: `root`.
+- Checkout: `/opt/sanroman`, rama `main`.
+- Llave local autorizada: `~/.ssh/sanroman_vps_ed25519`.
+- Acceso: `ssh -i $env:USERPROFILE\.ssh\sanroman_vps_ed25519 root@104.251.219.40`.
+- Panel: `http://104.251.219.40:8080` mientras no exista dominio/TLS.
+- `104.237.5.23` no es el despliegue vigente de San Roman; no despliegues alli sin volver a identificarlo.
+
+El VPS conserva cambios locales preparados en `docker-compose.yml` y archivos bajo `traccar/traccar/`. No los reviertas, no uses `git reset --hard` y comprueba siempre que no colisionan con el commit entrante. El override local de Compose mantiene `NODE_ENV=development` porque el panel aun usa HTTP por IP; es deuda de seguridad. Para volver a `production`, configura primero dominio/TLS y un `FRONTEND_URL=https://...` valido.
+
 Crear una llave dedicada desde PowerShell, solo si aun no existe:
 
 ```powershell
@@ -843,6 +855,8 @@ docker compose run --rm backend npx --yes prisma@5.22.0 migrate deploy
 Confirma exito antes de iniciar codigo nuevo. Para despliegue offline, ajusta primero Dockerfile con una etapa de migracion que incluya Prisma fijado.
 
 Para el modulo Empresas, la migracion esperada es `20260930150000_add_companies_and_loading_sites`. Es aditiva: crea `empresas` y `empresas_sedes`, agrega referencias nullable a `viajes` y `paradas`, indices, claves foraneas y proteccion RLS/grants. No necesita variables de entorno nuevas ni rellena viajes antiguos. Despliega primero la migracion y despues recrea backend/frontend; el codigo nuevo consulta estas tablas desde el arranque.
+
+Estado verificado el 30 de septiembre de 2026: esta migracion ya fue aplicada en la base Supabase de produccion, figura terminada y no revertida en `_prisma_migrations`, y el despliegue `32e1a9e` quedo activo en el VPS. Las tablas tienen RLS y no exponen grants a `PUBLIC`, `anon` o `authenticated`.
 
 Validacion posterior especifica:
 
