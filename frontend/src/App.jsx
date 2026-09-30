@@ -473,7 +473,7 @@ export default function App() {
               <RetornablesView retornables={data.retornables} viajes={viajes} choferes={choferes} camiones={camiones} onDone={() => fetchData({ refreshSelected: true })} />
             )}
             {activeTab === 'despacho' && (
-              <DespachoView choferes={data.choferesOperativos} empresas={empresas.filter((empresa) => empresa.activo)} viajesPendientes={data.pendientesLiquidacion} onDone={() => fetchData()} />
+              <DespachoView choferes={data.choferesOperativos} camiones={data.camionesOperativos} empresas={empresas.filter((empresa) => empresa.activo)} viajesPendientes={data.pendientesLiquidacion} onDone={() => fetchData()} />
             )}
             {activeTab === 'empresas' && (
               <EmpresasView empresas={empresas} isAdmin={isAdmin} onDone={() => fetchData()} />
@@ -1419,7 +1419,7 @@ function normalizarRetornablePayload(form) {
     camionId: form.viajeId ? null : form.camionId || null,
   }
 }
-function DespachoView({ choferes, empresas, viajesPendientes, onDone }) {
+function DespachoView({ choferes, camiones, empresas, viajesPendientes, onDone }) {
   const [form, setForm] = useState({ empresaId: '', choferId: '', camionIds: [], viaticosDepositados: '', tipoAgendamiento: 'NUEVO', viajeContinuacionId: '' })
   const [paradas, setParadas] = useState([
     { id: createClientId(), tipo: 'CARGA', empresaSedeId: '', lugar: '', ciudad: '', fechaProgramada: '', programacion: 'SIN_PROGRAMAR' },
@@ -1436,6 +1436,28 @@ function DespachoView({ choferes, empresas, viajesPendientes, onDone }) {
       .filter((camion) => camion?.activo !== false && camion.estado !== 'EN_TALLER'),
     [selectedChofer]
   )
+  const propietarioPorUnidad = useMemo(() => buildAssignedUnitsMap(choferes), [choferes])
+  const extraUnidades = useMemo(
+    () => form.camionIds
+      .filter((id) => !unidadesAsignadas.some((camion) => camion.id === id))
+      .map((id) => camiones.find((camion) => camion.id === id))
+      .filter(Boolean),
+    [form.camionIds, unidadesAsignadas, camiones]
+  )
+  const otrasUnidadesOpciones = useMemo(
+    () => camiones
+      .filter((camion) => camion.activo !== false && (camion.estadoCalculado || camion.estado) === 'DISPONIBLE')
+      .filter((camion) => !form.camionIds.includes(camion.id))
+      .filter((camion) => !unidadesAsignadas.some((asignada) => asignada.id === camion.id))
+      .map((camion) => {
+        const propietario = propietarioPorUnidad.get(camion.id)
+        return {
+          value: camion.id,
+          label: `${vehicleLabel(camion)}${propietario ? ` - de ${propietario.nombre}` : ''}`,
+        }
+      }),
+    [camiones, form.camionIds, propietarioPorUnidad, unidadesAsignadas]
+  )
   const continuacionesDisponibles = useMemo(
     () => viajesPendientes.filter((viaje) => (
       viaje.choferId === form.choferId
@@ -1450,12 +1472,10 @@ function DespachoView({ choferes, empresas, viajesPendientes, onDone }) {
       if (form.camionIds.length > 0) setForm((current) => ({ ...current, camionIds: [] }))
       return
     }
-    if (unidadesAsignadas.length === 1 && !sameIdSet(form.camionIds, [unidadesAsignadas[0].id])) {
+    if (form.camionIds.length === 0 && unidadesAsignadas.length === 1) {
       setForm((current) => ({ ...current, camionIds: [unidadesAsignadas[0].id] }))
-    } else if (form.camionIds.some((id) => !unidadesAsignadas.some((camion) => camion.id === id))) {
-      setForm((current) => ({ ...current, camionIds: current.camionIds.filter((id) => unidadesAsignadas.some((camion) => camion.id === id)) }))
     }
-  }, [form.choferId, form.camionIds, unidadesAsignadas])
+  }, [form.choferId, form.camionIds.length, unidadesAsignadas])
 
   const toggleUnidadViaje = (camionId) => {
     setForm((current) => {
@@ -1464,6 +1484,17 @@ function DespachoView({ choferes, empresas, viajesPendientes, onDone }) {
       else selected.add(camionId)
       return { ...current, camionIds: Array.from(selected) }
     })
+  }
+
+  const agregarUnidadExtra = (camionId) => {
+    if (!camionId) return
+    setForm((current) => (
+      current.camionIds.includes(camionId) ? current : { ...current, camionIds: [...current.camionIds, camionId] }
+    ))
+  }
+
+  const quitarUnidadExtra = (camionId) => {
+    setForm((current) => ({ ...current, camionIds: current.camionIds.filter((id) => id !== camionId) }))
   }
 
   const seleccionarContinuacion = (viajeId) => {
@@ -1552,8 +1583,8 @@ function DespachoView({ choferes, empresas, viajesPendientes, onDone }) {
           text={`Se agregara un nuevo tramo a ${viajeExistente.codigo}.`}
         />
       )}
-      {form.choferId && unidadesAsignadas.length === 0 && (
-        <Banner tone="danger" icon={AlertTriangle} text="Este chofer no tiene unidades activas asignadas. Asignale una unidad en Recursos antes de agendar." />
+      {form.choferId && unidadesAsignadas.length === 0 && form.tipoAgendamiento !== 'CONTINUAR' && (
+        <Banner tone="neutral" icon={AlertTriangle} text="Este chofer no tiene unidades asignadas por defecto. Agregale una unidad disponible en el campo de abajo para este despacho." />
       )}
 
       <section className="rounded-md border border-neutral-200 bg-white p-4 sm:p-5">
@@ -1578,7 +1609,9 @@ function DespachoView({ choferes, empresas, viajesPendientes, onDone }) {
           <Field label="Unidades del viaje">
             <div className="min-h-10 rounded-md border border-neutral-200 bg-white">
               {!form.choferId && <p className="px-3 py-2 text-sm text-neutral-400">Selecciona un chofer primero</p>}
-              {form.choferId && unidadesAsignadas.length === 0 && <p className="px-3 py-2 text-sm text-neutral-400">Sin unidades asignadas</p>}
+              {form.choferId && unidadesAsignadas.length === 0 && extraUnidades.length === 0 && (
+                <p className="px-3 py-2 text-sm text-neutral-400">Sin unidades asignadas</p>
+              )}
               {unidadesAsignadas.map((camion) => (
                 <label key={camion.id} className="flex items-center gap-3 border-b border-neutral-100 px-3 py-2 last:border-b-0 hover:bg-neutral-50">
                   <input type="checkbox" checked={form.camionIds.includes(camion.id)} onChange={() => toggleUnidadViaje(camion.id)} className="h-4 w-4 accent-neutral-950" />
@@ -1588,7 +1621,38 @@ function DespachoView({ choferes, empresas, viajesPendientes, onDone }) {
                   </span>
                 </label>
               ))}
+              {extraUnidades.map((camion) => {
+                const propietario = propietarioPorUnidad.get(camion.id)
+                return (
+                  <div key={camion.id} className="flex items-center justify-between gap-3 border-b border-neutral-100 bg-amber-50 px-3 py-2 last:border-b-0">
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium">{camion.placa}</span>
+                      <span className="block truncate text-xs text-amber-700">
+                        Unidad prestada{propietario ? ` - regularmente de ${propietario.nombre}` : ' - sin chofer regular'}
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => quitarUnidadExtra(camion.id)}
+                      title="Quitar unidad prestada"
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded text-neutral-400 hover:bg-red-50 hover:text-red-600"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                )
+              })}
             </div>
+            {form.choferId && form.tipoAgendamiento !== 'CONTINUAR' && (
+              <div className="mt-2">
+                <SearchableSelect
+                  value=""
+                  options={otrasUnidadesOpciones}
+                  onChange={agregarUnidadExtra}
+                  placeholder="Prestar otra unidad disponible"
+                />
+              </div>
+            )}
           </Field>
           <Field label="Viaticos en Bs (opcional)">
             <input type="number" min="0" step="0.01" value={form.viaticosDepositados} onChange={(event) => setForm({ ...form, viaticosDepositados: event.target.value })} className="input" placeholder="Sin viaticos en Bs" />
@@ -3943,11 +4007,6 @@ function tripUnitIds(viaje) {
   return ids.length > 0 ? ids : [viaje.camionId].filter(Boolean)
 }
 
-function sameIdSet(a = [], b = []) {
-  if (a.length !== b.length) return false
-  const set = new Set(a)
-  return b.every((id) => set.has(id))
-}
 
 function formatTripUnits(viaje) {
   const unidades = (viaje.unidades || []).map((unidad) => vehicleLabel(unidad.camion)).filter(Boolean)

@@ -250,11 +250,11 @@ const crear = async (datos, creadoPorId) => {
     unidadIds = [unidadesAsignadas[0].id]
   }
   if (unidadIds.length === 0) {
-    throw { status: 400, message: 'Selecciona al menos una unidad asignada al chofer' }
+    throw { status: 400, message: 'Selecciona al menos una unidad para el viaje' }
   }
-  const unidadesSeleccionadas = unidadIds.map((id) => unidadesAsignadas.find((unidad) => unidad.id === id))
-  if (unidadesSeleccionadas.some((unidad) => !unidad)) {
-    throw { status: 409, message: 'Una o mas unidades seleccionadas no estan asignadas a este chofer' }
+  const unidadesSeleccionadas = await prisma.camion.findMany({ where: { id: { in: unidadIds } } })
+  if (unidadesSeleccionadas.length !== unidadIds.length) {
+    throw { status: 409, message: 'Una o mas unidades seleccionadas no existen' }
   }
   if (unidadesSeleccionadas.some((unidad) => !unidad.activo)) {
     throw { status: 409, message: 'Una o mas unidades no estan activas' }

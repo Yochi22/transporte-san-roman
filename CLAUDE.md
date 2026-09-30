@@ -188,7 +188,7 @@ Compatibilidad de empresas: `Viaje.empresaId` y `Parada.empresaSedeId` son nulla
 
 - Los viajes nuevos requieren una empresa activa. Los viajes historicos sin empresa siguen siendo consultables y pueden filtrarse con `empresaId=sin_empresa`.
 - Requieren entre 2 y 50 paradas; cada una necesita tipo, lugar y ciudad validos.
-- Solo se despachan unidades activas asignadas al chofer.
+- Se despachan unidades activas y libres (sin otro viaje `EN_CURSO`, sin estar `EN_TALLER`). Por defecto son las asignadas al chofer en `ChoferUnidad`, pero el agendamiento permite agregar una unidad "prestada" que no es la asignacion regular de ese chofer (por ejemplo, la unidad de otro chofer que ese dia no viaja). Prestar una unidad no modifica `ChoferUnidad`; solo queda registrada en `ViajeUnidad` para ese viaje.
 - Un viaje nuevo, su chofer y sus unidades pasan a `EN_CURSO`/`EN_RUTA`.
 - Continuar un viaje agrega un tramo solo si sigue pendiente de liquidacion, todas las paradas estan completas y conserva exactamente las mismas unidades y empresa. Un viaje historico sin empresa debe adoptar una empresa activa al continuarse.
 - Al completar todas las paradas se liberan recursos, pero el viaje sigue financieramente `PENDIENTE`.
