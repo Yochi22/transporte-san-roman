@@ -2113,6 +2113,13 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
 }
 
 function ResourceModal({ title, type, form, setForm, error, editingId, camiones, assignedUnits, onSubmit, onClose, onToggleUnidad }) {
+  const [unidadQuery, setUnidadQuery] = useState('')
+  const camionesFiltrados = camiones.filter((camion) => {
+    const query = normalizeText(unidadQuery)
+    if (!query) return true
+    return normalizeText(`${vehicleLabel(camion)} ${camion.marcaModelo || ''}`).includes(query)
+  })
+
   return (
     <div className="fixed inset-0 z-50 grid min-h-[100svh] place-items-center bg-neutral-950/40 p-4">
       <form onSubmit={onSubmit} className="max-h-[92svh] w-full max-w-2xl overflow-y-auto rounded-md border border-neutral-200 bg-white shadow-xl">
@@ -2137,8 +2144,17 @@ function ResourceModal({ title, type, form, setForm, error, editingId, camiones,
               </Field>
               <div className="md:col-span-3">
                 <Field label="Unidades asignadas">
+                  <div className="relative mb-2">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-400" size={16} />
+                    <input
+                      value={unidadQuery}
+                      onChange={(event) => setUnidadQuery(event.target.value)}
+                      placeholder="Buscar unidad por placa o tipo"
+                      className="input pl-9"
+                    />
+                  </div>
                   <div className="max-h-72 overflow-y-auto rounded-md border border-neutral-200 bg-white">
-                    {camiones.map((camion) => {
+                    {camionesFiltrados.map((camion) => {
                       const owner = assignedUnits.get(camion.id)
                       const assignedToOther = owner && owner.choferId !== editingId
                       const checked = (form.unidadIds || []).includes(camion.id)
@@ -2161,6 +2177,7 @@ function ResourceModal({ title, type, form, setForm, error, editingId, camiones,
                       )
                     })}
                     {camiones.length === 0 && <Empty text="No hay unidades registradas." />}
+                    {camiones.length > 0 && camionesFiltrados.length === 0 && <Empty text="Sin unidades que coincidan con la busqueda." />}
                   </div>
                 </Field>
               </div>
