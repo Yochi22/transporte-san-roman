@@ -1,7 +1,7 @@
 const prisma = require('../../config/database')
 const { aplicarReporteChofer } = require('../../services/reportes/aplicarReporte.service')
 
-const TIPOS_VALIDOS = new Set(['CARGANDO', 'DESCARGADO', 'ESPERANDO_INSTRUCCIONES', 'LIBRE', 'NOVEDAD'])
+const TIPOS_VALIDOS = new Set(['CARGANDO', 'DESCARGADO', 'ESPERANDO_INSTRUCCIONES', 'LIBRE', 'NOVEDAD', 'OTRO'])
 const ESTADOS_PARADA_VALIDOS = new Set(['EN_CURSO', 'COMPLETADA'])
 const TIPOS_CON_PARADA = new Set(['CARGANDO', 'DESCARGADO'])
 
@@ -64,8 +64,8 @@ const registrarReporte = async ({ choferId, viajeId, paradaId, tipoReporte, esta
   if (typeof viajeId !== 'string' || !viajeId.trim()) {
     throw { status: 400, message: 'Viaje requerido' }
   }
-  if (tipoReporte === 'NOVEDAD' && !mensaje?.trim()) {
-    throw { status: 400, message: 'Escribe la novedad' }
+  if ((tipoReporte === 'NOVEDAD' || tipoReporte === 'OTRO') && !mensaje?.trim()) {
+    throw { status: 400, message: 'Escribe el reporte' }
   }
   if (tipoReporte === 'LIBRE' && !ubicacion?.trim()) {
     throw { status: 400, message: 'Escribe donde quedaron disponibles' }

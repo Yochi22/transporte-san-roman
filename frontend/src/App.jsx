@@ -3618,6 +3618,8 @@ function ChoferApp({ onLogout }) {
   const [enviando, setEnviando] = useState('')
   const [novedadAbierta, setNovedadAbierta] = useState(null)
   const [novedadTexto, setNovedadTexto] = useState('')
+  const [reporteAbierto, setReporteAbierto] = useState(null)
+  const [reporteTexto, setReporteTexto] = useState('')
   const [disponibleAbierto, setDisponibleAbierto] = useState(null)
   const [disponibleUbicacion, setDisponibleUbicacion] = useState('Sede Barquisimeto')
 
@@ -3644,6 +3646,8 @@ function ChoferApp({ onLogout }) {
       await notifySuccess('Reporte enviado', 'Operaciones ya puede verlo en el panel.')
       setNovedadAbierta(null)
       setNovedadTexto('')
+      setReporteAbierto(null)
+      setReporteTexto('')
       setDisponibleAbierto(null)
       await cargar()
     } catch (err) {
@@ -3720,17 +3724,21 @@ function ChoferApp({ onLogout }) {
                 <div className="flex flex-wrap gap-2">
                   {paradaActual?.tipo === 'CARGA' && (
                     <>
-                      <button type="button" disabled={bloqueado} onClick={() => enviarReporte(viaje.id, { tipoReporte: 'CARGANDO', paradaId: paradaActual.id, estadoParada: 'EN_CURSO' })} className="btn-secondary">Cargando</button>
-                      <button type="button" disabled={bloqueado} onClick={() => enviarReporte(viaje.id, { tipoReporte: 'CARGANDO', paradaId: paradaActual.id, estadoParada: 'COMPLETADA' })} className="btn-primary">Carga lista</button>
+                      <button type="button" disabled={bloqueado} onClick={() => enviarReporte(viaje.id, { tipoReporte: 'CARGANDO', paradaId: paradaActual.id, estadoParada: 'EN_CURSO', ubicacion: `${paradaActual.lugar}, ${paradaActual.ciudad}` })} className="btn-secondary">Cargando</button>
+                      <button type="button" disabled={bloqueado} onClick={() => enviarReporte(viaje.id, { tipoReporte: 'CARGANDO', paradaId: paradaActual.id, estadoParada: 'COMPLETADA', ubicacion: `${paradaActual.lugar}, ${paradaActual.ciudad}` })} className="btn-primary">Carga lista</button>
                     </>
                   )}
                   {paradaActual?.tipo === 'DESCARGA' && (
                     <>
-                      <button type="button" disabled={bloqueado} onClick={() => enviarReporte(viaje.id, { tipoReporte: 'DESCARGADO', paradaId: paradaActual.id, estadoParada: 'EN_CURSO' })} className="btn-secondary">Descargando</button>
-                      <button type="button" disabled={bloqueado} onClick={() => enviarReporte(viaje.id, { tipoReporte: 'DESCARGADO', paradaId: paradaActual.id, estadoParada: 'COMPLETADA' })} className="btn-primary">Descarga lista</button>
+                      <button type="button" disabled={bloqueado} onClick={() => enviarReporte(viaje.id, { tipoReporte: 'DESCARGADO', paradaId: paradaActual.id, estadoParada: 'EN_CURSO', ubicacion: `${paradaActual.lugar}, ${paradaActual.ciudad}` })} className="btn-secondary">Descargando</button>
+                      <button type="button" disabled={bloqueado} onClick={() => enviarReporte(viaje.id, { tipoReporte: 'DESCARGADO', paradaId: paradaActual.id, estadoParada: 'COMPLETADA', ubicacion: `${paradaActual.lugar}, ${paradaActual.ciudad}` })} className="btn-primary">Descarga lista</button>
                     </>
                   )}
                   <button type="button" disabled={bloqueado} onClick={() => enviarReporte(viaje.id, { tipoReporte: 'ESPERANDO_INSTRUCCIONES' })} className="btn-secondary">Esperando instrucciones</button>
+                  <button type="button" disabled={bloqueado} onClick={() => setReporteAbierto(reporteAbierto === viaje.id ? null : viaje.id)} className="btn-secondary">
+                    <Send size={16} />
+                    Escribir reporte
+                  </button>
                   <button type="button" disabled={bloqueado} onClick={() => setNovedadAbierta(novedadAbierta === viaje.id ? null : viaje.id)} className="btn-secondary">
                     <AlertTriangle size={16} />
                     Novedad
@@ -3738,6 +3746,28 @@ function ChoferApp({ onLogout }) {
                   <button type="button" disabled={bloqueado} onClick={() => setDisponibleAbierto(disponibleAbierto === viaje.id ? null : viaje.id)} className="btn-secondary">
                     Regresamos / Disponible
                   </button>
+                </div>
+              )}
+
+              {reporteAbierto === viaje.id && (
+                <div className="space-y-2 rounded-md border border-neutral-200 bg-stone-50 p-3">
+                  <textarea
+                    value={reporteTexto}
+                    onChange={(event) => setReporteTexto(event.target.value)}
+                    placeholder="Escribe lo que quieras reportar (ubicacion, estado del viaje, lo que sea)"
+                    className="input min-h-20"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setReporteAbierto(null)} className="btn-secondary">Cancelar</button>
+                    <button
+                      type="button"
+                      disabled={!reporteTexto.trim() || bloqueado}
+                      onClick={() => enviarReporte(viaje.id, { tipoReporte: 'OTRO', mensaje: reporteTexto })}
+                      className="btn-primary"
+                    >
+                      Enviar reporte
+                    </button>
+                  </div>
                 </div>
               )}
 
