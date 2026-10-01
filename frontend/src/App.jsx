@@ -3696,6 +3696,7 @@ function ChoferApp({ onLogout }) {
         {data.viajes.map((viaje) => {
           const paradaActual = viaje.paradas.find((parada) => parada.estado !== 'COMPLETADA')
           const todasCompletas = viaje.paradas.length > 0 && viaje.paradas.every((parada) => parada.estado === 'COMPLETADA')
+          const yaDisponible = viaje.reportes?.[0]?.tipoReporte === 'LIBRE'
           const unidades = (viaje.unidades || []).map((unidad) => unidad.camion?.placa).filter(Boolean).join(' + ') || viaje.camion?.placa || 'Sin unidad'
           const bloqueado = Boolean(enviando)
 
@@ -3716,12 +3717,17 @@ function ChoferApp({ onLogout }) {
                 ))}
               </div>
 
-              {todasCompletas ? (
+              {yaDisponible ? (
                 <p className="rounded-md bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
-                  Viaje completado. Gracias.
+                  Marcaste disponible para este viaje. Gracias.
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-2">
+                  {todasCompletas && (
+                    <p className="w-full rounded-md bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
+                      Carga y descarga completas. Si ya volviste a la sede o quedaste disponible en otro lugar, confirmalo abajo.
+                    </p>
+                  )}
                   {paradaActual?.tipo === 'CARGA' && (
                     <>
                       <button type="button" disabled={bloqueado} onClick={() => enviarReporte(viaje.id, { tipoReporte: 'CARGANDO', paradaId: paradaActual.id, estadoParada: 'EN_CURSO', ubicacion: `${paradaActual.lugar}, ${paradaActual.ciudad}` })} className="btn-secondary">Cargando</button>
