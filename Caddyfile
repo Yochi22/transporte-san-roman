@@ -1,0 +1,7 @@
+www.operacionestsr.site {
+    redir https://operacionestsr.site{uri} permanent
+}
+
+operacionestsr.site {
+    reverse_proxy frontend:80
+}
