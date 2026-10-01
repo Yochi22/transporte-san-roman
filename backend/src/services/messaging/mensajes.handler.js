@@ -172,13 +172,6 @@ const procesarMensajeChofer = async ({ remoteJid, texto, mensaje = null, socketI
     const chofer = await buscarChofer(identificadores)
 
     if (!chofer) {
-      await enviarMensaje(
-        remoteJid,
-        [
-          'Este numero de WhatsApp no coincide con ningun chofer activo.',
-          'Contacta a operaciones para verificar el telefono registrado.',
-        ].join('\n')
-      )
       return
     }
 
