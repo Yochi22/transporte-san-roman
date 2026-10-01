@@ -1093,6 +1093,7 @@ No uses scripts `apply_*_migration.js` antiguos como primera opcion si Prisma Mi
 Requieren confirmacion explicita y backup:
 
 - `backend/scripts/reset_demo_data.js`, que borra operacion y exige `ALLOW_DEMO_RESET=true`.
+- `backend/scripts/reset_viajes.js`, que borra solo viajes y lo que cuelga de ellos (paradas, reportes, gastos, viaje-unidad, retornables y sus movimientos), resetea choferes/camiones a `DISPONIBLE`/`Sede`, y conserva choferes, camiones, usuarios y empresas. Exige `ALLOW_TRIPS_RESET=true`.
 - `DELETE`, `TRUNCATE`, migracion destructiva o limpieza masiva.
 - Borrar `.whatsapp-auth` o `whatsapp_auth`.
 - Borrar `traccar_data` o migrar H2.
