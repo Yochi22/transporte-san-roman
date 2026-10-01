@@ -31,6 +31,11 @@ const inactivar = async (req, res) => {
   return ok(res, null, 'Chofer inactivado')
 }
 
+const reactivar = async (req, res) => {
+  const chofer = await service.reactivar(req.params.id)
+  return ok(res, chofer, 'Chofer reactivado')
+}
+
 const crearAcceso = async (req, res) => {
   const resultado = await service.crearAcceso(req.params.id)
   return ok(res, resultado, 'Acceso creado', 201)
@@ -58,6 +63,7 @@ module.exports = {
   actualizar,
   eliminar,
   inactivar,
+  reactivar,
   crearAcceso,
   resetearClaveAcceso,
   revocarAcceso,

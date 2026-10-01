@@ -85,6 +85,14 @@ const inactivar = async (id) => {
   })
 }
 
+const reactivar = async (id) => {
+  return prisma.camion.update({
+    where: { id },
+    data: { activo: true },
+    select: camionPanelSelect
+  })
+}
+
 const eliminar = async (id) => {
   const viajes = await prisma.viaje.findMany({
     where: {
@@ -110,4 +118,4 @@ const eliminar = async (id) => {
   })
 }
 
-module.exports = { listar, obtener, crear, actualizar, eliminar, inactivar }
+module.exports = { listar, obtener, crear, actualizar, eliminar, inactivar, reactivar }

@@ -158,6 +158,14 @@ const inactivar = async (id) => {
   })
 }
 
+const reactivar = async (id) => {
+  return prisma.chofer.update({
+    where: { id },
+    data: { activo: true },
+    select: choferPanelSelect
+  })
+}
+
 const crearAcceso = async (choferId) => {
   const chofer = await prisma.chofer.findUniqueOrThrow({ where: { id: choferId }, select: { nombre: true, cedula: true, activo: true } })
   if (!chofer.activo) throw { status: 409, message: 'El chofer debe estar activo para crear su acceso' }
@@ -236,6 +244,7 @@ module.exports = {
   actualizar,
   eliminar,
   inactivar,
+  reactivar,
   crearAcceso,
   resetearClaveAcceso,
   revocarAcceso,

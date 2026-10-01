@@ -10,6 +10,7 @@ router.get('/:id', ctrl.obtener)
 router.post('/', soloAdmin, ctrl.crear)
 router.put('/:id', soloAdmin, ctrl.actualizar)
 router.patch('/:id/inactivar', soloAdmin, ctrl.inactivar)
+router.patch('/:id/reactivar', soloAdmin, ctrl.reactivar)
 router.delete('/:id', soloAdmin, ctrl.eliminar)
 
 router.post('/:id/acceso', soloAdmin, ctrl.crearAcceso)

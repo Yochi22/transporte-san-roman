@@ -2136,6 +2136,18 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
     }
   }
 
+  const reactivar = async (item) => {
+    try {
+      await api.patch(`/${type === 'chofer' ? 'choferes' : 'camiones'}/${item.id}/reactivar`, {})
+      await notifySuccess('Registro reactivado')
+      onDone()
+    } catch (err) {
+      const message = err.response?.data?.mensaje || 'No se pudo reactivar.'
+      setError(message)
+      await notifyError(message)
+    }
+  }
+
   return (
     <section className="rounded-md border border-neutral-200 bg-white">
       <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
@@ -2262,6 +2274,11 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
               {isAdmin && item.activo && (
                 <button onClick={() => inactivar(item)} title="Inactivar" className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-amber-50 hover:text-amber-700">
                   <UserX size={14} />
+                </button>
+              )}
+              {isAdmin && !item.activo && (
+                <button onClick={() => reactivar(item)} title="Reactivar" className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-emerald-50 hover:text-emerald-700">
+                  <Eye size={14} />
                 </button>
               )}
               {isAdmin && (

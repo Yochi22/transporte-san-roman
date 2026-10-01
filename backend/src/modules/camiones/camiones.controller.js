@@ -31,4 +31,9 @@ const inactivar = async (req, res) => {
   return ok(res, null, 'Camion inactivado')
 }
 
-module.exports = { listar, obtener, crear, actualizar, eliminar, inactivar }
+const reactivar = async (req, res) => {
+  const camion = await service.reactivar(req.params.id)
+  return ok(res, camion, 'Camion reactivado')
+}
+
+module.exports = { listar, obtener, crear, actualizar, eliminar, inactivar, reactivar }
