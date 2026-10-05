@@ -535,20 +535,19 @@ function Monitor({
   useClampPage(reportPage, data.reportes.length, reportPageSize, setReportPage)
 
   const flota = data.camionesOperativos || []
-  const enViaje = flota.filter((camion) => camion.estadoCalculado === 'EN_RUTA').length
-  const enTaller = flota.filter((camion) => camion.estadoCalculado === 'EN_TALLER').length
-  const disponibles = flota.filter((camion) => camion.estadoCalculado === 'DISPONIBLE')
+  const unidadesEnViaje = new Set(data.activos.flatMap((viaje) => tripUnitIds(viaje)))
+  const enViaje = flota.filter((camion) => unidadesEnViaje.has(camion.id)).length
+  const enTaller = flota.filter((camion) => camion.estado === 'EN_TALLER').length
+  const disponibles = flota.filter((camion) => !unidadesEnViaje.has(camion.id) && camion.estado !== 'EN_TALLER')
   const contarPorUbicacion = (nombre) => disponibles.filter((camion) => normalize(camion.ubicacionActual) === normalize(nombre)).length
   const enUbicacionesConocidas = UBICACIONES_DISPONIBLE.reduce((total, nombre) => total + contarPorUbicacion(nombre), 0)
   const enOtraUbicacion = disponibles.length - enUbicacionesConocidas
 
   return (
     <div className="space-y-5">
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2">
         <Metric title="En curso" value={data.activos.length} icon={Route} />
-        <Metric title="Esperando" value={data.esperando.length} icon={Bell} tone="amber" />
         <Metric title="Por liquidar" value={data.pendientesLiquidacion.length} icon={Wallet} tone="blue" />
-        <Metric title="Fuera de servicio" value={data.camionesTaller.length} icon={Wrench} tone="amber" />
       </section>
 
       <section className="space-y-2">
