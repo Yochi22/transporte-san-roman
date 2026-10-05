@@ -468,10 +468,10 @@ export default function App() {
               />
             )}
             {activeTab === 'viajes' && (
-              <ViajesView data={data} empresas={empresas} onSelect={setSelectedViaje} />
+              <ViajesView data={data} empresas={empresas} camiones={data.camionesActivosTodos} onSelect={setSelectedViaje} />
             )}
             {activeTab === 'archivo' && (
-              <ArchivoView empresas={empresas} onSelect={setSelectedViaje} />
+              <ArchivoView empresas={empresas} camiones={data.camionesActivosTodos} onSelect={setSelectedViaje} />
             )}
             {activeTab === 'reportes' && (
               <ReportesTableView reportes={data.reportes} onSelectViaje={setSelectedViaje} />
@@ -495,7 +495,7 @@ export default function App() {
               <TallerView camiones={data.camionesActivosTodos} onDone={() => fetchData()} />
             )}
             {isAdmin && activeTab === 'liquidaciones' && (
-              <LiquidacionesView viajes={data.liquidados} choferes={choferes} empresas={empresas} onDone={() => fetchData()} />
+              <LiquidacionesView viajes={data.liquidados} choferes={choferes} empresas={empresas} camiones={data.camionesActivosTodos} onDone={() => fetchData()} />
             )}
           </div>
         </main>
@@ -658,10 +658,12 @@ function WhatsAppStatusCard({ status, onOpenQr, onReset, onRefresh }) {
   )
 }
 
-function ViajesView({ data, empresas, onSelect }) {
+function ViajesView({ data, empresas, camiones, onSelect }) {
   const [empresaId, setEmpresaId] = useState('')
-  const activos = data.activos.filter((viaje) => matchesCompanyFilter(viaje, empresaId))
+  const [camionId, setCamionId] = useState('')
+  const activos = data.activos.filter((viaje) => matchesCompanyFilter(viaje, empresaId) && matchesUnitFilter(viaje, camionId))
   const opciones = companyFilterOptions(empresas)
+  const opcionesUnidad = unitFilterOptions(camiones)
 
   const descargarReporteViaticos = async () => {
     const [{ jsPDF }, { default: autoTable }] = await Promise.all([
@@ -677,7 +679,7 @@ function ViajesView({ data, empresas, onSelect }) {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(9)
     doc.setTextColor(90)
-    doc.text(`Empresa: ${empresaId ? (opciones.find((opcion) => opcion.value === empresaId)?.label || 'Sin empresa') : 'Todas'}`, 50, 23)
+    doc.text(`Empresa: ${empresaId ? (opciones.find((opcion) => opcion.value === empresaId)?.label || 'Sin empresa') : 'Todas'} | Unidad: ${camionId ? (opcionesUnidad.find((opcion) => opcion.value === camionId)?.label || '') : 'Todas'}`, 50, 23)
     doc.text(`Generado: ${new Date().toLocaleString('es-VE')}`, 50, 28)
 
     autoTable(doc, {
@@ -700,17 +702,23 @@ function ViajesView({ data, empresas, onSelect }) {
 
   return (
     <div className="space-y-6">
-      <section className="border-b border-neutral-200 pb-4">
-        <div className="max-w-md">
-          <Field label="Filtrar viajes por empresa">
-            <SearchableSelect
-              value={empresaId}
-              options={opciones}
-              onChange={setEmpresaId}
-              placeholder="Todas las empresas"
-            />
-          </Field>
-        </div>
+      <section className="grid gap-4 border-b border-neutral-200 pb-4 sm:grid-cols-2 sm:max-w-2xl">
+        <Field label="Filtrar viajes por empresa">
+          <SearchableSelect
+            value={empresaId}
+            options={opciones}
+            onChange={setEmpresaId}
+            placeholder="Todas las empresas"
+          />
+        </Field>
+        <Field label="Filtrar viajes por unidad">
+          <SearchableSelect
+            value={camionId}
+            options={opcionesUnidad}
+            onChange={setCamionId}
+            placeholder="Todas las unidades"
+          />
+        </Field>
       </section>
       <TripList
         title="En curso"
@@ -723,7 +731,7 @@ function ViajesView({ data, empresas, onSelect }) {
           </button>
         )}
       />
-      <PendientesLiquidacion key={'pendientes-' + empresaId} empresaId={empresaId} onSelect={onSelect} />
+      <PendientesLiquidacion key={'pendientes-' + empresaId + camionId} empresaId={empresaId} camionId={camionId} onSelect={onSelect} />
     </div>
   )
 }
@@ -891,7 +899,7 @@ function ReportesTableView({ reportes, onSelectViaje }) {
   )
 }
 
-function PendientesLiquidacion({ empresaId, onSelect }) {
+function PendientesLiquidacion({ empresaId, camionId, onSelect }) {
   const [page, setPage] = useState(1)
   const [data, setData] = useState({ items: [], total: 0, pageSize: 10 })
   const [loading, setLoading] = useState(false)
@@ -905,7 +913,7 @@ function PendientesLiquidacion({ empresaId, onSelect }) {
       setLoadError('')
       try {
         const response = await api.get('/viajes/pendientes-liquidacion/listado', {
-          params: { page, pageSize: data.pageSize, empresaId: empresaId || undefined },
+          params: { page, pageSize: data.pageSize, empresaId: empresaId || undefined, camionId: camionId || undefined },
         })
         if (active) setData(response.data?.data || { items: [], total: 0, pageSize: 10 })
       } catch (err) {
@@ -918,7 +926,7 @@ function PendientesLiquidacion({ empresaId, onSelect }) {
     return () => {
       active = false
     }
-  }, [page, data.pageSize, empresaId])
+  }, [page, data.pageSize, empresaId, camionId])
 
   return (
     <section className="space-y-3">
@@ -954,8 +962,9 @@ function PendientesLiquidacion({ empresaId, onSelect }) {
   )
 }
 
-function ArchivoView({ empresas, onSelect }) {
+function ArchivoView({ empresas, camiones, onSelect }) {
   const [empresaId, setEmpresaId] = useState('')
+  const [camionId, setCamionId] = useState('')
   const [periodo, setPeriodo] = useState('todos')
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10))
   const [estadoFinanciero, setEstadoFinanciero] = useState('')
@@ -963,8 +972,18 @@ function ArchivoView({ empresas, onSelect }) {
   const [archivo, setArchivo] = useState({ items: [], total: 0, pageSize: 10 })
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
+  const [descargando, setDescargando] = useState(false)
   const opciones = companyFilterOptions(empresas)
+  const opcionesUnidad = unitFilterOptions(camiones)
   useClampPage(page, archivo.total, archivo.pageSize, setPage)
+
+  const parametrosFiltro = {
+    periodo,
+    fecha,
+    empresaId: empresaId || undefined,
+    camionId: camionId || undefined,
+    estadoFinanciero: estadoFinanciero || undefined,
+  }
 
   useEffect(() => {
     let active = true
@@ -976,10 +995,11 @@ function ArchivoView({ empresas, onSelect }) {
           params: {
             periodo,
             fecha,
+            empresaId: empresaId || undefined,
+            camionId: camionId || undefined,
+            estadoFinanciero: estadoFinanciero || undefined,
             page,
             pageSize: archivo.pageSize,
-            empresaId: empresaId || undefined,
-            estadoFinanciero: estadoFinanciero || undefined,
           },
         })
         if (active) setArchivo(response.data?.data || { items: [], total: 0, pageSize: 10 })
@@ -993,10 +1013,15 @@ function ArchivoView({ empresas, onSelect }) {
     return () => {
       active = false
     }
-  }, [periodo, fecha, page, archivo.pageSize, empresaId, estadoFinanciero])
+  }, [periodo, fecha, page, archivo.pageSize, empresaId, camionId, estadoFinanciero])
 
   const cambiarEmpresa = (value) => {
     setEmpresaId(value)
+    setPage(1)
+  }
+
+  const cambiarUnidad = (value) => {
+    setCamionId(value)
     setPage(1)
   }
 
@@ -1010,12 +1035,67 @@ function ArchivoView({ empresas, onSelect }) {
     setPage(1)
   }
 
+  const descargarPdf = async () => {
+    setDescargando(true)
+    try {
+      const response = await api.get('/viajes/archivo/listado', {
+        params: { ...parametrosFiltro, page: 1, pageSize: Math.min(archivo.total || 500, 500) },
+      })
+      const items = response.data?.data?.items || []
+      const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+        import('jspdf'),
+        import('jspdf-autotable'),
+      ])
+      const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+      const logoData = await imageToDataUrl(logo)
+      doc.addImage(logoData, 'PNG', 14, 10, 30, 17)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(14)
+      doc.text('Archivo logistico', 50, 17)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9)
+      doc.setTextColor(90)
+      const empresaLabel = empresaId ? (opciones.find((o) => o.value === empresaId)?.label || '') : 'Todas'
+      const unidadLabel = camionId ? (opcionesUnidad.find((o) => o.value === camionId)?.label || '') : 'Todas'
+      doc.text(`Empresa: ${empresaLabel} | Unidad: ${unidadLabel} | Periodo: ${periodo === 'todos' ? 'Todos' : periodo}`, 50, 23)
+      doc.text(`Generado: ${new Date().toLocaleString('es-VE')} | Registros: ${items.length}`, 50, 28)
+
+      autoTable(doc, {
+        startY: 36,
+        theme: 'grid',
+        head: [['Viaje', 'Empresa', 'Chofer', 'Unidad', 'Ruta', 'Cierre', 'Estado financiero']],
+        body: items.map((viaje) => [
+          viaje.codigo,
+          companyName(viaje),
+          viaje.chofer?.nombre || 'Sin chofer',
+          formatTripUnits(viaje),
+          formatRoute(viaje),
+          formatDate(viaje.fechaCierre),
+          formatStatus(viaje.estadoFinanciero),
+        ]),
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [24, 24, 27], textColor: 255 },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+      })
+
+      doc.save(`archivo-logistico-${new Date().toISOString().slice(0, 10)}.pdf`)
+      await notifySuccess('PDF generado', 'El archivo filtrado fue descargado.')
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo generar el PDF.')
+    } finally {
+      setDescargando(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <section className="space-y-4 border-b border-neutral-200 pb-4">
-        <div className="max-w-md">
+        <div className="grid gap-4 sm:grid-cols-2 sm:max-w-2xl">
           <Field label="Filtrar por empresa">
             <SearchableSelect value={empresaId} options={opciones} onChange={cambiarEmpresa} placeholder="Todas las empresas" />
+          </Field>
+          <Field label="Filtrar por unidad">
+            <SearchableSelect value={camionId} options={opcionesUnidad} onChange={cambiarUnidad} placeholder="Todas las unidades" />
           </Field>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -1067,7 +1147,13 @@ function ArchivoView({ empresas, onSelect }) {
       </section>
 
       <section className="space-y-3">
-        <SectionTitle title="Archivo logistico" subtitle={`${archivo.total} registros`} />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <SectionTitle title="Archivo logistico" subtitle={`${archivo.total} registros`} />
+          <button type="button" onClick={descargarPdf} disabled={descargando || archivo.total === 0} className="btn-secondary">
+            <Download size={16} />
+            {descargando ? 'Generando...' : 'Descargar PDF'}
+          </button>
+        </div>
         {loadError && <Banner tone="danger" icon={AlertTriangle} text={loadError} />}
         <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">
           {archivo.items.map((viaje) => (
@@ -1112,6 +1198,7 @@ function TripList({ title, viajes, onSelect, actions = null }) {
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium">{viaje.codigo}</p>
               <p className="truncate text-xs text-neutral-500">{companyName(viaje)} - {viaje.chofer?.nombre || 'Sin chofer'} - {formatRoute(viaje)}</p>
+              <p className="mt-0.5 truncate text-xs text-neutral-400">{tripLastReportSummary(viaje)}</p>
             </div>
             <div className="hidden text-right sm:block">
               <p className="text-sm font-medium">{ves(balance(viaje))}</p>
@@ -2704,16 +2791,20 @@ function TallerView({ camiones, onDone }) {
   )
 }
 
-function LiquidacionesView({ viajes, choferes, empresas }) {
+function LiquidacionesView({ viajes, choferes, empresas, camiones }) {
   const [periodo, setPeriodo] = useState('mes')
   const [choferId, setChoferId] = useState('')
   const [empresaId, setEmpresaId] = useState('')
+  const [camionId, setCamionId] = useState('')
   const [page, setPage] = useState(1)
   const pageSize = 10
   const desde = periodStart(periodo)
   const filtrados = viajes.filter((viaje) => {
     const fecha = new Date(viaje.fechaLiquidacion || viaje.fechaCierre || viaje.updatedAt)
-    return fecha >= desde && (!choferId || viaje.choferId === choferId) && matchesCompanyFilter(viaje, empresaId)
+    return fecha >= desde
+      && (!choferId || viaje.choferId === choferId)
+      && matchesCompanyFilter(viaje, empresaId)
+      && matchesUnitFilter(viaje, camionId)
   })
   const pageItems = paginate(filtrados, page, pageSize)
   const totalGastos = filtrados.reduce((total, viaje) => total + Number(viaje.viaticosGastados || 0), 0)
@@ -2734,7 +2825,7 @@ function LiquidacionesView({ viajes, choferes, empresas }) {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(9)
     doc.setTextColor(90)
-    doc.text(`Periodo: ${periodLabel(periodo)} | Chofer: ${choferes.find((chofer) => chofer.id === choferId)?.nombre || 'Todos'} | Empresa: ${empresaId ? (empresas.find((empresa) => empresa.id === empresaId)?.nombre || 'Sin empresa') : 'Todas'}`, 58, 24)
+    doc.text(`Periodo: ${periodLabel(periodo)} | Chofer: ${choferes.find((chofer) => chofer.id === choferId)?.nombre || 'Todos'} | Empresa: ${empresaId ? (empresas.find((empresa) => empresa.id === empresaId)?.nombre || 'Sin empresa') : 'Todas'} | Unidad: ${camionId ? (camiones.find((camion) => camion.id === camionId) ? vehicleLabel(camiones.find((camion) => camion.id === camionId)) : '') : 'Todas'}`, 58, 24)
     doc.text(`Generado: ${new Date().toLocaleString('es-VE')}`, 58, 29)
 
     autoTable(doc, {
@@ -2822,6 +2913,14 @@ function LiquidacionesView({ viajes, choferes, empresas }) {
                 options={companyFilterOptions(empresas)}
                 onChange={(value) => { setEmpresaId(value); setPage(1) }}
                 placeholder="Todas las empresas"
+              />
+            </div>
+            <div className="w-full sm:w-60">
+              <SearchableSelect
+                value={camionId}
+                options={unitFilterOptions(camiones)}
+                onChange={(value) => { setCamionId(value); setPage(1) }}
+                placeholder="Todas las unidades"
               />
             </div>
           </div>
@@ -4336,6 +4435,21 @@ function companyFilterOptions(empresas = []) {
   ]
 }
 
+function matchesUnitFilter(viaje, camionId) {
+  if (!camionId) return true
+  return tripUnitIds(viaje).includes(camionId)
+}
+
+function unitFilterOptions(camiones = []) {
+  return [
+    { value: '', label: 'Todas las unidades' },
+    ...camiones.map((camion) => ({
+      value: camion.id,
+      label: camion.activo === false ? `${vehicleLabel(camion)} (inactiva)` : vehicleLabel(camion),
+    })),
+  ]
+}
+
 function getCurrentLocationDetails(viaje) {
   const ultimoReporte = viaje.reportes?.[0] || null
   const ultimaPosicion = latestTripGpsPosition(viaje)
@@ -4394,6 +4508,14 @@ function formatLastReportLocation(reporte) {
   const texto = formatReportTitle(reporte)
   if (ubicacion) return `${labelReporte(reporte.tipoReporte)}  -  ${ubicacion}`
   return `${labelReporte(reporte.tipoReporte)}  -  ${texto || 'Sin detalle'}`
+}
+
+function tripLastReportSummary(viaje) {
+  const ultimoReporte = viaje.reportes?.[0]
+  if (ultimoReporte) return formatLastReportLocation(ultimoReporte)
+  const ubicacionTexto = viaje.chofer?.ubicacionActual || viaje.camion?.ubicacionActual || ''
+  if (ubicacionTexto && !coordsFromText(ubicacionTexto)) return `Ubicacion: ${ubicacionTexto}`
+  return 'Sin reportes aun'
 }
 
 function coordsFromText(value = '') {

@@ -1,6 +1,7 @@
 const prisma = require('../../config/database')
 const { generarCodigoViaje } = require('../../utils/generarCodigo')
 const { choferPanelSelect, camionPanelSelect, reportePanelSelect } = require('../../utils/prismaSelects')
+const { construirRangoPeriodo } = require('../../utils/rangoFechas')
 
 const DIAS_RETENCION_REPORTES = Math.max(1, Number(process.env.DIAS_RETENCION_REPORTES) || 5)
 
@@ -99,6 +100,10 @@ const aplicarFiltroEmpresa = (where, empresaId) => {
   where.empresaId = empresaId === 'sin_empresa' ? null : empresaId
 }
 
+const condicionFiltroCamion = (camionId) => (
+  camionId ? { OR: [{ camionId }, { unidades: { some: { camionId } } }] } : null
+)
+
 const normalizarUnidadIdsViaje = (datos) => {
   const ids = Array.isArray(datos.camionIds) ? datos.camionIds : [datos.camionId]
   return [...new Set(ids.filter((id) => typeof id === 'string' && id.trim()).map((id) => id.trim()))]
@@ -136,6 +141,8 @@ const listar = async (filtros = {}) => {
   if (filtros.estadoLogistico) where.estadoLogistico = filtros.estadoLogistico
   if (filtros.estadoFinanciero) where.estadoFinanciero = filtros.estadoFinanciero
   aplicarFiltroEmpresa(where, filtros.empresaId)
+  const filtroCamion = condicionFiltroCamion(filtros.camionId)
+  if (filtroCamion) where.OR = filtroCamion.OR
 
   return prisma.viaje.findMany({
     where,
@@ -148,14 +155,19 @@ const listar = async (filtros = {}) => {
 const listarArchivo = async (filtros = {}) => {
   const page = Math.max(1, Number(filtros.page) || 1)
   const pageSize = Math.min(50, Math.max(1, Number(filtros.pageSize) || 10))
-  const where = {
-    OR: [
-      { estadoLogistico: { notIn: ['PENDIENTE', 'EN_CURSO'] } },
-      estaPendienteDeLiquidacionWhere
-    ]
-  }
+  const condiciones = [
+    {
+      OR: [
+        { estadoLogistico: { notIn: ['PENDIENTE', 'EN_CURSO'] } },
+        estaPendienteDeLiquidacionWhere
+      ]
+    }
+  ]
+  const filtroCamion = condicionFiltroCamion(filtros.camionId)
+  if (filtroCamion) condiciones.push(filtroCamion)
+  const where = { AND: condiciones }
   aplicarFiltroEmpresa(where, filtros.empresaId)
-  const rango = construirRangoArchivo(filtros.periodo, filtros.fecha)
+  const rango = construirRangoPeriodo(filtros.periodo, filtros.fecha)
 
   if (rango) {
     where.fechaCierre = { gte: rango.desde, lte: rango.hasta }
@@ -177,36 +189,6 @@ const listarArchivo = async (filtros = {}) => {
   ])
 
   return { items, total, page, pageSize }
-}
-
-const construirRangoArchivo = (periodo, fecha) => {
-  if (!periodo || periodo === 'todos') return null
-  const base = fecha ? new Date(`${fecha}T12:00:00`) : new Date()
-  if (Number.isNaN(base.getTime())) return null
-  const desde = new Date(base)
-  const hasta = new Date(base)
-
-  if (periodo === 'dia') {
-    desde.setHours(0, 0, 0, 0)
-    hasta.setHours(23, 59, 59, 999)
-  } else if (periodo === 'semana') {
-    const day = desde.getDay()
-    const offset = day === 0 ? -6 : 1 - day
-    desde.setDate(desde.getDate() + offset)
-    desde.setHours(0, 0, 0, 0)
-    hasta.setTime(desde.getTime())
-    hasta.setDate(hasta.getDate() + 6)
-    hasta.setHours(23, 59, 59, 999)
-  } else if (periodo === 'mes') {
-    desde.setDate(1)
-    desde.setHours(0, 0, 0, 0)
-    hasta.setMonth(hasta.getMonth() + 1, 0)
-    hasta.setHours(23, 59, 59, 999)
-  } else {
-    return null
-  }
-
-  return { desde, hasta }
 }
 
 const obtener = async (id) => {
@@ -600,6 +582,8 @@ const listarPendientesLiquidacion = async (filtros = {}) => {
   const pageSize = Math.min(50, Math.max(1, Number(filtros.pageSize) || 10))
   const where = { ...estaPendienteDeLiquidacionWhere }
   aplicarFiltroEmpresa(where, filtros.empresaId)
+  const filtroCamion = condicionFiltroCamion(filtros.camionId)
+  if (filtroCamion) where.OR = filtroCamion.OR
 
   const [items, total] = await prisma.$transaction([
     prisma.viaje.findMany({
