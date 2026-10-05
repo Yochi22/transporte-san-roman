@@ -106,6 +106,8 @@ const requestNumber = (title, value = '', placeholder = '0.00') => Swal.fire({
   inputValidator: (inputValue) => (inputValue === '' || Number(inputValue) < 0 ? 'Ingresa un monto valido' : undefined),
 })
 
+const UBICACIONES_DISPONIBLE = ['TSR1', 'TSR2', 'Estacionamiento Cagua']
+
 const tabs = [
   { id: 'monitor', label: 'Resumen', icon: LayoutDashboard },
   { id: 'viajes', label: 'Viajes', icon: Route },
@@ -532,6 +534,14 @@ function Monitor({
   useClampPage(tripPage, data.activos.length, tripPageSize, setTripPage)
   useClampPage(reportPage, data.reportes.length, reportPageSize, setReportPage)
 
+  const flota = data.camionesOperativos || []
+  const enViaje = flota.filter((camion) => camion.estadoCalculado === 'EN_RUTA').length
+  const enTaller = flota.filter((camion) => camion.estadoCalculado === 'EN_TALLER').length
+  const disponibles = flota.filter((camion) => camion.estadoCalculado === 'DISPONIBLE')
+  const contarPorUbicacion = (nombre) => disponibles.filter((camion) => normalize(camion.ubicacionActual) === normalize(nombre)).length
+  const enUbicacionesConocidas = UBICACIONES_DISPONIBLE.reduce((total, nombre) => total + contarPorUbicacion(nombre), 0)
+  const enOtraUbicacion = disponibles.length - enUbicacionesConocidas
+
   return (
     <div className="space-y-5">
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -539,6 +549,18 @@ function Monitor({
         <Metric title="Esperando" value={data.esperando.length} icon={Bell} tone="amber" />
         <Metric title="Por liquidar" value={data.pendientesLiquidacion.length} icon={Wallet} tone="blue" />
         <Metric title="Fuera de servicio" value={data.camionesTaller.length} icon={Wrench} tone="amber" />
+      </section>
+
+      <section className="space-y-2">
+        <SectionTitle title="Disponibilidad de la flota" subtitle={`${flota.length} unidades activas`} />
+        <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
+          <Metric title="En viaje" value={enViaje} icon={Route} />
+          <Metric title="En taller" value={enTaller} icon={Wrench} tone="amber" />
+          {UBICACIONES_DISPONIBLE.map((nombre) => (
+            <Metric key={nombre} title={nombre} value={contarPorUbicacion(nombre)} icon={MapPin} tone="emerald" />
+          ))}
+          <Metric title="Otra ubicacion" value={enOtraUbicacion} icon={MapPin} />
+        </div>
       </section>
 
       {isAdmin && (
@@ -3790,7 +3812,6 @@ function ChoferApp({ onLogout }) {
   const [reporteAbierto, setReporteAbierto] = useState(null)
   const [reporteTexto, setReporteTexto] = useState('')
   const [disponibleAbierto, setDisponibleAbierto] = useState(null)
-  const [disponibleUbicacion, setDisponibleUbicacion] = useState('Sede Barquisimeto')
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -3970,22 +3991,22 @@ function ChoferApp({ onLogout }) {
 
               {disponibleAbierto === viaje.id && (
                 <div className="space-y-2 rounded-md border border-neutral-200 bg-stone-50 p-3">
-                  <input
-                    value={disponibleUbicacion}
-                    onChange={(event) => setDisponibleUbicacion(event.target.value)}
-                    placeholder="Donde quedaron disponibles"
-                    className="input"
-                  />
-                  <div className="flex justify-end gap-2">
+                  <p className="text-xs font-medium text-neutral-600">Donde quedaron disponibles</p>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {UBICACIONES_DISPONIBLE.map((ubicacion) => (
+                      <button
+                        key={ubicacion}
+                        type="button"
+                        disabled={bloqueado}
+                        onClick={() => enviarReporte(viaje.id, { tipoReporte: 'LIBRE', ubicacion })}
+                        className="btn-primary justify-center"
+                      >
+                        {ubicacion}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex justify-end">
                     <button type="button" onClick={() => setDisponibleAbierto(null)} className="btn-secondary">Cancelar</button>
-                    <button
-                      type="button"
-                      disabled={!disponibleUbicacion.trim() || bloqueado}
-                      onClick={() => enviarReporte(viaje.id, { tipoReporte: 'LIBRE', ubicacion: disponibleUbicacion })}
-                      className="btn-primary"
-                    >
-                      Confirmar
-                    </button>
                   </div>
                 </div>
               )}
