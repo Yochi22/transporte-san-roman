@@ -42,7 +42,10 @@ import {
   X,
 } from 'lucide-react'
 
-const socket = io(SOCKET_URL, { autoConnect: false, withCredentials: true })
+// Solo long-polling: algunas redes corporativas (inspeccion SSL profunda) rompen
+// el upgrade a WebSocket aunque el resto del trafico HTTPS funcione bien. El polling
+// usa peticiones HTTPS normales y es mucho mas confiable detras de ese tipo de firewall.
+const socket = io(SOCKET_URL, { autoConnect: false, withCredentials: true, transports: ['polling'] })
 
 const createClientId = () => {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID()
@@ -477,7 +480,7 @@ export default function App() {
               <RetornablesView retornables={data.retornables} viajes={viajes} choferes={choferes} camiones={camiones} onDone={() => fetchData({ refreshSelected: true })} />
             )}
             {activeTab === 'despacho' && (
-              <DespachoView choferes={data.choferesOperativos} camiones={data.camionesOperativos} empresas={empresas.filter((empresa) => empresa.activo)} viajesPendientes={data.pendientesLiquidacion} onDone={() => fetchData()} />
+              <DespachoView choferes={data.choferesOperativos} camiones={data.camionesActivosTodos} empresas={empresas.filter((empresa) => empresa.activo)} viajesPendientes={data.pendientesLiquidacion} onDone={() => fetchData()} />
             )}
             {activeTab === 'empresas' && (
               <EmpresasView empresas={empresas} isAdmin={isAdmin} onDone={() => fetchData()} />
@@ -489,7 +492,7 @@ export default function App() {
               <UsuariosView currentUser={usuario} />
             )}
             {activeTab === 'taller' && (
-              <TallerView camiones={data.camionesOperativos} onDone={() => fetchData()} />
+              <TallerView camiones={data.camionesActivosTodos} onDone={() => fetchData()} />
             )}
             {isAdmin && activeTab === 'liquidaciones' && (
               <LiquidacionesView viajes={data.liquidados} choferes={choferes} empresas={empresas} onDone={() => fetchData()} />
@@ -2037,7 +2040,7 @@ function EmpresasView({ empresas, isAdmin, onDone }) {
 function RecursosView({ data, isAdmin, onDone }) {
   return (
     <div className="grid gap-5 xl:grid-cols-2">
-      <ResourcePanel title="Choferes" items={data.choferesRecursos} type="chofer" isAdmin={isAdmin} onDone={onDone} camiones={data.camionesOperativos} />
+      <ResourcePanel title="Choferes" items={data.choferesRecursos} type="chofer" isAdmin={isAdmin} onDone={onDone} camiones={data.camionesActivosTodos} />
       <ResourcePanel title="Camiones" items={data.camionesRecursos} type="camion" isAdmin={isAdmin} onDone={onDone} />
     </div>
   )
@@ -4256,14 +4259,15 @@ function buildOperationalData({ viajes, choferes, camiones, retornables = [], qu
       .some((value) => normalize(value).includes(q))
   )
 
-  const camionesRecursos = camiones.map((camion) => ({
+  const camionesConEstado = camiones.map((camion) => ({
     ...camion,
     estadoCalculado: estadosCamiones.get(camion.id)?.estado || camion.estado,
     ubicacionActual:
       formatGpsLocation(camion.posicionGps) ||
       activos.find((viaje) => tripUnitIds(viaje).includes(camion.id))?.chofer?.ubicacionActual ||
       camion.ubicacionActual,
-  })).filter((camion) =>
+  }))
+  const camionesRecursos = camionesConEstado.filter((camion) =>
     !q || [
       camion.placa,
       camion.placaFurgon,
@@ -4277,6 +4281,9 @@ function buildOperationalData({ viajes, choferes, camiones, retornables = [], qu
   )
   const choferesOperativos = choferesRecursos.filter((chofer) => chofer.activo)
   const camionesOperativos = camionesRecursos.filter((camion) => camion.activo)
+  // Sin filtrar por el buscador global: el modal de asignar unidades a un chofer
+  // no debe vaciarse solo porque el buscador tenga texto de otra entidad (ej. un nombre de chofer).
+  const camionesActivosTodos = camionesConEstado.filter((camion) => camion.activo)
 
   const retornablesFiltrados = retornables.filter((item) => !q || [
     item.empresa,
@@ -4297,6 +4304,7 @@ function buildOperationalData({ viajes, choferes, camiones, retornables = [], qu
     camionesRecursos,
     choferesOperativos,
     camionesOperativos,
+    camionesActivosTodos,
     choferesDisponibles: choferes.filter((chofer) => chofer.estado === 'DISPONIBLE' && !choferesOcupados.has(chofer.id)),
     camionesDisponibles: camiones.filter((camion) => camion.estado === 'DISPONIBLE' && !camionesOcupados.has(camion.id)),
     camionesTaller: camiones.filter((camion) => camion.estado === 'EN_TALLER'),
