@@ -553,7 +553,7 @@ function Monitor({
       <section className="space-y-2">
         <SectionTitle title="Disponibilidad de la flota" subtitle={`${flota.length} unidades activas`} />
         <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
-          <Metric title="En viaje" value={enViaje} icon={Route} />
+          <Metric title="Unidades en viaje" value={enViaje} icon={Route} />
           <Metric title="En taller" value={enTaller} icon={Wrench} tone="amber" />
           {UBICACIONES_DISPONIBLE.map((nombre) => (
             <Metric key={nombre} title={nombre} value={contarPorUbicacion(nombre)} icon={MapPin} tone="emerald" />
