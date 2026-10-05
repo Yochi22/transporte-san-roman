@@ -535,7 +535,7 @@ function Monitor({
   useClampPage(tripPage, data.activos.length, tripPageSize, setTripPage)
   useClampPage(reportPage, data.reportes.length, reportPageSize, setReportPage)
 
-  const flota = data.camionesOperativos || []
+  const flota = data.camionesActivosTodos || []
   const camionViajeMap = new Map()
   data.activos.forEach((viaje) => {
     tripUnitIds(viaje).forEach((camionId) => {
