@@ -527,6 +527,7 @@ function Monitor({
 }) {
   const [tripPage, setTripPage] = useState(1)
   const [reportPage, setReportPage] = useState(1)
+  const [seleccionFlota, setSeleccionFlota] = useState(null)
   const tripPageSize = 6
   const reportPageSize = 6
   const activeTrips = paginate(data.activos, tripPage, tripPageSize)
@@ -535,31 +536,99 @@ function Monitor({
   useClampPage(reportPage, data.reportes.length, reportPageSize, setReportPage)
 
   const flota = data.camionesOperativos || []
-  const unidadesEnViaje = new Set(data.activos.flatMap((viaje) => tripUnitIds(viaje)))
+  const camionViajeMap = new Map()
+  data.activos.forEach((viaje) => {
+    tripUnitIds(viaje).forEach((camionId) => {
+      if (!camionViajeMap.has(camionId)) camionViajeMap.set(camionId, viaje)
+    })
+  })
+  const unidadesEnViaje = new Set(camionViajeMap.keys())
   const enViaje = flota.filter((camion) => unidadesEnViaje.has(camion.id)).length
   const enTaller = flota.filter((camion) => camion.estado === 'EN_TALLER').length
   const disponibles = flota.filter((camion) => !unidadesEnViaje.has(camion.id) && camion.estado !== 'EN_TALLER')
   const contarPorUbicacion = (nombre) => disponibles.filter((camion) => normalize(camion.ubicacionActual) === normalize(nombre)).length
-  const enUbicacionesConocidas = UBICACIONES_DISPONIBLE.reduce((total, nombre) => total + contarPorUbicacion(nombre), 0)
-  const enOtraUbicacion = disponibles.length - enUbicacionesConocidas
+  const esOtraUbicacion = (camion) => !UBICACIONES_DISPONIBLE.some((nombre) => normalize(camion.ubicacionActual) === normalize(nombre))
+  const enOtraUbicacion = disponibles.filter(esOtraUbicacion).length
+
+  const alternarSeleccion = (clave) => setSeleccionFlota((actual) => (actual === clave ? null : clave))
+
+  const listaSeleccion = (() => {
+    if (seleccionFlota === 'viaje') return flota.filter((camion) => unidadesEnViaje.has(camion.id))
+    if (seleccionFlota === 'taller') return flota.filter((camion) => camion.estado === 'EN_TALLER')
+    if (seleccionFlota === 'otra') return disponibles.filter(esOtraUbicacion)
+    if (seleccionFlota) return disponibles.filter((camion) => normalize(camion.ubicacionActual) === normalize(seleccionFlota))
+    return []
+  })()
 
   return (
     <div className="space-y-5">
-      <section className="grid gap-3 sm:grid-cols-2">
-        <Metric title="En curso" value={data.activos.length} icon={Route} />
+      <section className="grid gap-3 sm:grid-cols-3">
+        <Metric title="Viajes en curso" value={data.activos.length} icon={Route} />
         <Metric title="Por liquidar" value={data.pendientesLiquidacion.length} icon={Wallet} tone="blue" />
+        <Metric
+          title="En taller"
+          value={enTaller}
+          icon={Wrench}
+          tone="amber"
+          active={seleccionFlota === 'taller'}
+          onClick={() => alternarSeleccion('taller')}
+        />
       </section>
 
       <section className="space-y-2">
-        <SectionTitle title="Disponibilidad de la flota" subtitle={`${flota.length} unidades activas`} />
-        <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-6">
-          <Metric title="Unidades en viaje" value={enViaje} icon={Route} />
-          <Metric title="En taller" value={enTaller} icon={Wrench} tone="amber" />
+        <SectionTitle title="Disponibilidad de la flota" subtitle={`${flota.length} unidades activas - haz clic en una tarjeta para ver el detalle`} />
+        <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          <Metric
+            title="Unidades en viaje"
+            value={enViaje}
+            icon={Route}
+            active={seleccionFlota === 'viaje'}
+            onClick={() => alternarSeleccion('viaje')}
+          />
           {UBICACIONES_DISPONIBLE.map((nombre) => (
-            <Metric key={nombre} title={nombre} value={contarPorUbicacion(nombre)} icon={MapPin} tone="emerald" />
+            <Metric
+              key={nombre}
+              title={nombre}
+              value={contarPorUbicacion(nombre)}
+              icon={MapPin}
+              tone="emerald"
+              active={seleccionFlota === nombre}
+              onClick={() => alternarSeleccion(nombre)}
+            />
           ))}
-          <Metric title="Otra ubicacion" value={enOtraUbicacion} icon={MapPin} />
+          <Metric
+            title="Otra ubicacion"
+            value={enOtraUbicacion}
+            icon={MapPin}
+            active={seleccionFlota === 'otra'}
+            onClick={() => alternarSeleccion('otra')}
+          />
         </div>
+        {seleccionFlota && (
+          <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">
+            {listaSeleccion.map((camion) => {
+              const viaje = camionViajeMap.get(camion.id)
+              return (
+                <button
+                  key={camion.id}
+                  type="button"
+                  onClick={() => viaje && onSelect(viaje)}
+                  disabled={!viaje}
+                  className="flex w-full items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3 text-left last:border-b-0 hover:bg-neutral-50 disabled:cursor-default disabled:hover:bg-white"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{vehicleLabel(camion)}</p>
+                    <p className="truncate text-xs text-neutral-500">
+                      {viaje ? `${viaje.codigo} - ${viaje.chofer?.nombre || 'Sin chofer'}` : formatUnitDrivers(camion)}
+                    </p>
+                  </div>
+                  {viaje && <ChevronRight className="shrink-0 text-neutral-400" size={18} />}
+                </button>
+              )
+            })}
+            {listaSeleccion.length === 0 && <Empty text="Sin unidades en esta categoria." />}
+          </div>
+        )}
       </section>
 
       {isAdmin && (
@@ -4031,16 +4100,21 @@ function ChoferApp({ onLogout }) {
   )
 }
 
-function Metric({ title, value, icon: Icon, tone = 'neutral' }) {
+function Metric({ title, value, icon: Icon, tone = 'neutral', onClick, active = false }) {
   const tones = {
     neutral: 'bg-neutral-950 text-white',
     amber: 'bg-amber-100 text-amber-800',
     blue: 'bg-blue-100 text-blue-800',
     emerald: 'bg-emerald-100 text-emerald-800',
   }
+  const Comp = onClick ? 'button' : 'div'
 
   return (
-    <div className="rounded-md border border-neutral-200 bg-white p-4">
+    <Comp
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      className={`w-full rounded-md border bg-white p-4 text-left transition ${active ? 'border-neutral-950 ring-1 ring-neutral-950' : 'border-neutral-200'} ${onClick ? 'cursor-pointer hover:border-neutral-400' : ''}`}
+    >
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium text-neutral-500">{title}</p>
         <div className={`grid h-8 w-8 place-items-center rounded-md ${tones[tone]}`}>
@@ -4048,7 +4122,7 @@ function Metric({ title, value, icon: Icon, tone = 'neutral' }) {
         </div>
       </div>
       <p className="mt-4 text-3xl font-semibold tabular-nums">{value}</p>
-    </div>
+    </Comp>
   )
 }
 
