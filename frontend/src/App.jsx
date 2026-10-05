@@ -728,16 +728,83 @@ function ViajesView({ data, empresas, onSelect }) {
 function ReportesTableView({ reportes, onSelectViaje }) {
   const [page, setPage] = useState(1)
   const [expandedId, setExpandedId] = useState(null)
+  const [filtroTipo, setFiltroTipo] = useState('todos')
   const pageSize = 12
-  const visibleReports = paginate(reportes, page, pageSize)
-  useClampPage(page, reportes.length, pageSize, setPage)
+  const reportesFiltrados = reportes.filter((reporte) => {
+    if (filtroTipo === 'novedades') return reporte.tipoReporte === 'NOVEDAD'
+    if (filtroTipo === 'transito') return reporte.tipoReporte !== 'NOVEDAD'
+    return true
+  })
+  const visibleReports = paginate(reportesFiltrados, page, pageSize)
+  useClampPage(page, reportesFiltrados.length, pageSize, setPage)
+
+  const descargarPdf = async () => {
+    const [{ jsPDF }, { default: autoTable }] = await Promise.all([
+      import('jspdf'),
+      import('jspdf-autotable'),
+    ])
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+    const logoData = await imageToDataUrl(logo)
+    doc.addImage(logoData, 'PNG', 14, 10, 30, 17)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(14)
+    const titulo = filtroTipo === 'novedades' ? 'Reporte de novedades' : filtroTipo === 'transito' ? 'Reporte de transito' : 'Reporte de choferes (todos)'
+    doc.text(titulo, 50, 17)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.setTextColor(90)
+    doc.text(`Generado: ${new Date().toLocaleString('es-VE')} | Registros: ${reportesFiltrados.length}`, 50, 23)
+
+    autoTable(doc, {
+      startY: 32,
+      theme: 'grid',
+      head: [['Fecha', 'Chofer', 'Viaje', 'Tipo', 'Ubicacion', 'Reporte', 'Origen']],
+      body: reportesFiltrados.map((reporte) => [
+        formatDate(reporte.createdAt),
+        reporte.chofer?.nombre || reporte.viaje?.chofer?.nombre || 'Sin chofer',
+        reporte.viaje?.codigo || 'Sin viaje',
+        labelReporte(reporte.tipoReporte),
+        reporte.ubicacion || 'Sin ubicacion',
+        formatReportTitle(reporte),
+        reporte.origen === 'APP' ? 'App' : 'WhatsApp',
+      ]),
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [24, 24, 27], textColor: 255 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+    })
+
+    doc.save(`reportes-${filtroTipo}-${new Date().toISOString().slice(0, 10)}.pdf`)
+    await notifySuccess('PDF generado', 'El reporte fue descargado.')
+  }
 
   return (
     <div className="space-y-4">
       <section className="border border-neutral-200 bg-white">
         <div className="flex flex-col gap-3 border-b border-neutral-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <SectionTitle title="Reportes de choferes" subtitle={`${reportes.length} registros recientes`} />
+          <SectionTitle title="Reportes de choferes" subtitle={`${reportesFiltrados.length} registros`} />
           <span className="text-xs text-neutral-500">Conservación automática: 5 días</span>
+        </div>
+        <div className="flex flex-col gap-3 border-b border-neutral-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex rounded-md border border-neutral-200 bg-white p-1">
+            {[
+              ['todos', 'Todos'],
+              ['transito', 'Transito'],
+              ['novedades', 'Novedades'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => { setFiltroTipo(value); setPage(1) }}
+                className={`h-8 px-3 text-xs font-medium ${filtroTipo === value ? 'rounded bg-neutral-950 text-white' : 'text-neutral-600'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <button type="button" onClick={descargarPdf} disabled={reportesFiltrados.length === 0} className="btn-secondary">
+            <Download size={16} />
+            Descargar PDF
+          </button>
         </div>
 
         <div className="overflow-x-auto">
@@ -816,7 +883,7 @@ function ReportesTableView({ reportes, onSelectViaje }) {
         </div>
       </section>
 
-      <Pagination page={page} total={reportes.length} pageSize={pageSize} onChange={setPage} />
+      <Pagination page={page} total={reportesFiltrados.length} pageSize={pageSize} onChange={setPage} />
     </div>
   )
 }
@@ -3927,6 +3994,7 @@ function SearchableSelect({
             setSearch('')
             setOpen(true)
           }}
+          onClick={() => setOpen(true)}
           onChange={(event) => {
             setSearch(event.target.value)
             setOpen(true)

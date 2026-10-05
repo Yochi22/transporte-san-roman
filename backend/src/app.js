@@ -42,12 +42,7 @@ app.disable('x-powered-by')
 const trustProxy = process.env.TRUST_PROXY || (process.env.NODE_ENV === 'production' ? '1' : '')
 if (trustProxy) app.set('trust proxy', Number.isNaN(Number(trustProxy)) ? trustProxy : Number(trustProxy))
 app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      imgSrc: ["'self'", 'data:', 'https://*.tile.openstreetmap.org'],
-      frameSrc: ["'self'", 'https://www.openstreetmap.org'],
-    },
-  },
+  contentSecurityPolicy: false,
   crossOriginResourcePolicy: { policy: 'same-origin' },
   referrerPolicy: { policy: 'no-referrer' }
 }))
