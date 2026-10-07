@@ -3970,7 +3970,11 @@ function ChoferApp({ onLogout }) {
                 {viaje.paradas.map((parada) => (
                   <div key={parada.id} className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${paradaStyles[parada.estado] || paradaStyles.PENDIENTE}`}>
                     <StatusDot estado={parada.estado === 'COMPLETADA' ? 'COMPLETADO' : parada.estado === 'EN_CURSO' ? 'EN_CURSO' : ''} />
-                    <span className="min-w-0 flex-1 truncate">{formatStatus(parada.tipo)} - {parada.lugar}, {parada.ciudad}</span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {parada.oculta
+                        ? 'Siguiente etapa - se revela al completar la actual'
+                        : `${formatStatus(parada.tipo)} - ${parada.lugar}, ${parada.ciudad}`}
+                    </span>
                   </div>
                 ))}
               </div>

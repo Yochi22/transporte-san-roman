@@ -44,6 +44,30 @@ const viajeChoferSelect = {
   },
 }
 
+// El chofer solo debe ver la etapa actual (y las ya completadas). Las etapas
+// futuras (ej. el destino de descarga) se ocultan hasta que le toque: a veces
+// el propio operador aun no conoce o no cargo ese dato, igual que hoy pasa por
+// WhatsApp (el aviso de agendamiento tampoco revela paradas que no sean la
+// vigente al momento de cada reporte).
+const ocultarEtapasFuturas = (paradas) => {
+  const indiceActual = paradas.findIndex((parada) => parada.estado !== 'COMPLETADA')
+  return paradas.map((parada, indice) => {
+    if (indiceActual === -1 || indice <= indiceActual) return parada
+    return {
+      id: parada.id,
+      orden: parada.orden,
+      tramo: parada.tramo,
+      tipo: parada.tipo,
+      estado: parada.estado,
+      lugar: null,
+      ciudad: null,
+      fechaProgramada: null,
+      cargarAlDescargar: false,
+      oculta: true,
+    }
+  })
+}
+
 const obtenerMiViaje = async (choferId) => {
   const chofer = await prisma.chofer.findUniqueOrThrow({
     where: { id: choferId },
@@ -54,7 +78,10 @@ const obtenerMiViaje = async (choferId) => {
     orderBy: { createdAt: 'asc' },
     select: viajeChoferSelect,
   })
-  return { chofer, viajes }
+  return {
+    chofer,
+    viajes: viajes.map((viaje) => ({ ...viaje, paradas: ocultarEtapasFuturas(viaje.paradas) })),
+  }
 }
 
 const registrarReporte = async ({ choferId, viajeId, paradaId, tipoReporte, estadoParada, ubicacion, mensaje }, socketIO) => {
