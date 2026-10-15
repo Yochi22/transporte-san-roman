@@ -80,7 +80,7 @@ const server = net.createServer((client) => {
 
   primary.on('error', (err) => {
     console.warn(label(id, `error Traccar ${primaryHost}:${primaryPort}: ${err.code || err.message}`))
-    primary.destroy()
+    closeAll()
   })
   mirror.on('error', (err) => {
     console.warn(label(id, `error espejo ${mirrorHost}:${mirrorPort}: ${err.code || err.message}`))
@@ -91,7 +91,13 @@ const server = net.createServer((client) => {
     closeAll()
   })
   client.on('close', closeAll)
-  primary.on('close', () => primary.destroy())
+  // Si se pierde Traccar (ej. reinicio del contenedor), cerramos tambien al
+  // equipo GPS para forzar su reconexion propia: de lo contrario el socket al
+  // GPS queda abierto pero "primary" ya esta destruido, y el equipo sigue
+  // enviando datos solo al espejo de forma silenciosa hasta que el reinicie
+  // por su cuenta (puede tardar horas). El espejo puede seguir fallando sin
+  // cortar la sesion: no es critico para el panel.
+  primary.on('close', closeAll)
   mirror.on('close', () => mirror.destroy())
 })
 
