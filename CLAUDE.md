@@ -939,6 +939,37 @@ El frontend ya sirve `manifest.webmanifest` y `sw.js` (ver `frontend/public/`) p
 8. Ejecuta el chequeo productivo.
 9. Realiza y restaura una copia de prueba antes de incorporar la flota.
 
+### 13.9 Nuevo equipo de trabajo
+
+Objetivo: habilitar una segunda computadora para desarrollar y desplegar sin afectar la que ya funciona. No se revoca ni se modifica nada del equipo actual; todo lo de esta seccion es aditivo.
+
+1. Prerrequisitos en el equipo nuevo: Git, Node.js 20, Docker Desktop (solo si se correra Traccar local).
+2. Clonar el repositorio:
+
+```bash
+git clone https://github.com/Yochi22/transporte-san-roman.git
+```
+
+3. Configurar acceso a GitHub desde el equipo nuevo (llave SSH propia agregada a la cuenta de GitHub, o un token personal) para poder hacer `git push`. No reutilices la llave SSH del VPS para esto; son credenciales distintas.
+4. Generar una llave SSH **nueva y propia de ese equipo** para el VPS. Nunca copies la llave privada existente entre computadoras:
+
+```powershell
+$key = Join-Path $env:USERPROFILE '.ssh\sanroman_vps_ed25519'
+ssh-keygen -t ed25519 -a 64 -f $key -C "sanroman-equipo-2"
+Get-Content ($key + '.pub')
+```
+
+5. Agregar esa clave publica nueva a `~/.ssh/authorized_keys` del VPS **sin tocar las que ya existen** (se agrega, nunca se reemplaza el archivo):
+
+```bash
+echo "PEGAR_AQUI_LA_CLAVE_PUBLICA_NUEVA" >> ~/.ssh/authorized_keys
+```
+
+6. Confirmar acceso desde el equipo nuevo: `ssh -i ~/.ssh/sanroman_vps_ed25519 root@104.251.219.40`. El equipo original sigue entrando exactamente igual que antes.
+7. Los secretos (`backend/.env`, `.env` raiz de SinoTrack, `traccar/conf/traccar.xml` real) **nunca viajan por Git ni por copia entre computadoras**. Viven unicamente en el VPS. El despliegue desde el equipo nuevo se hace por SSH directamente sobre el checkout `/opt/sanroman`, igual que en la seccion 14; no hace falta subir ni bajar ningun `.env` para desplegar.
+8. Para desarrollar localmente en el equipo nuevo, crea tu propio `backend/.env` local (nunca el del VPS) siguiendo la tabla de la seccion 11. Antes de copiar `DATABASE_URL`/`DIRECT_URL` del equipo original, ten presente que ese `.env` local **apunta hoy al mismo proyecto Supabase de produccion** (puerto `6543`, pooler de transacciones) y no a una base de prueba separada: cualquier dato que crees o borres en desarrollo local es dato real de produccion. Mientras no exista una base de desarrollo aparte, ten el mismo cuidado en el equipo nuevo que en el original al correr el backend en local.
+9. Validar el flujo de despliegue continuo (seccion 14) desde el equipo nuevo: `git status`, `git fetch`, `git pull --ff-only`, build y recreate, sin que pida contrasena y sin que ningun secreto aparezca en pantalla.
+
 ## 14. Despliegue continuo
 
 Antes: arbol limpio o cambios conocidos, backup reciente, variables nuevas creadas, migracion revisada y rollback definido.
