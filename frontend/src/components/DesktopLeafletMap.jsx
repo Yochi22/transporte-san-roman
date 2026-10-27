@@ -60,9 +60,8 @@ export default function DesktopLeafletMap({ position, positions = [], truckId })
       <MapContainer key={`${truckId}-${position?.updatedAt || 'empty'}`} center={center} zoom={position ? 14 : 7} scrollWheelZoom={false} className="h-full w-full">
         <ResizeMap position={position} />
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-          subdomains="abcd"
+          attribution='Tiles &copy; Esri &mdash; Esri, HERE, Garmin, FAO, NOAA, USGS, &copy; OpenStreetMap contributors'
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
         />
         {visiblePositions.length > 0 && (
           <>
