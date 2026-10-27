@@ -1286,7 +1286,7 @@ function TripList({ title, viajes, onSelect, actions = null }) {
           <button key={viaje.id} onClick={() => onSelect(viaje)} className="flex w-full items-center gap-3 border-b border-neutral-100 px-4 py-3 text-left last:border-b-0 hover:bg-neutral-50">
             <StatusDot estado={viaje.estadoLogistico} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{viaje.codigo}</p>
+              <p className="truncate text-sm font-medium">{viaje.codigo} <span className="font-normal text-neutral-400">- Agendado: {formatDate(viaje.createdAt)}</span></p>
               <p className="truncate text-xs text-neutral-500">{companyName(viaje)} - {viaje.chofer?.nombre || 'Sin chofer'} - {formatRoute(viaje)}</p>
               <p className="mt-0.5 truncate text-xs text-neutral-400">{tripLastReportSummary(viaje)}</p>
             </div>
@@ -3225,6 +3225,7 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
           <div className="min-w-0">
             <p className="text-xs font-medium text-neutral-500">{formatStatus(viaje.estadoLogistico)}  -  {formatStatus(viaje.estadoFinanciero)}</p>
             <h2 className="truncate text-lg font-semibold">{viaje.codigo}</h2>
+            <p className="text-xs text-neutral-400">Agendado: {formatDate(viaje.createdAt)}</p>
           </div>
           <button onClick={onClose} className="grid h-10 w-10 place-items-center rounded-md hover:bg-neutral-100">
             <X size={18} />

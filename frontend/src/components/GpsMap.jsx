@@ -1,7 +1,7 @@
 import { Component, Suspense, lazy, useEffect, useState } from 'react'
 import { api } from '../lib/api'
 
-const DesktopLeafletMap = lazy(() => import('./DesktopLeafletMap.jsx'))
+const LeafletMap = lazy(() => import('./DesktopLeafletMap.jsx'))
 
 class MapErrorBoundary extends Component {
   constructor(props) {
@@ -35,38 +35,15 @@ const normalizePosition = (row) => {
   }
 }
 
-const isMobileViewport = () => {
-  if (typeof window === 'undefined') return false
-  return window.matchMedia('(max-width: 767px), (pointer: coarse)').matches
-}
-
-const osmEmbedUrl = (position) => {
-  const delta = 0.006
-  const minLon = position.longitude - delta
-  const minLat = position.latitude - delta
-  const maxLon = position.longitude + delta
-  const maxLat = position.latitude + delta
-  const bbox = [minLon, minLat, maxLon, maxLat].map((value) => value.toFixed(6)).join('%2C')
-  return `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${position.latitude.toFixed(6)}%2C${position.longitude.toFixed(6)}`
-}
-
 export default function GpsMap({ truckId, truckIds = [], initialPositions = [] }) {
   const ids = [...new Set((truckIds.length > 0 ? truckIds : [truckId]).filter(Boolean))]
   const labelsByTruck = new Map(initialPositions.map((position) => [position.truckId || position.truck_id, position.label]).filter(([id]) => Boolean(id)))
   const [positions, setPositions] = useState(() => initialPositions.map(normalizePosition).filter(Boolean))
   const [status, setStatus] = useState('idle')
-  const [mobileMap, setMobileMap] = useState(() => isMobileViewport())
   const currentPositions = positions
     .filter((position) => ids.includes(position.truckId))
     .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0))
   const currentPosition = currentPositions[0] || null
-
-  useEffect(() => {
-    const updateMode = () => setMobileMap(isMobileViewport())
-    updateMode()
-    window.addEventListener('resize', updateMode)
-    return () => window.removeEventListener('resize', updateMode)
-  }, [])
 
   useEffect(() => {
     if (ids.length === 0) return undefined
@@ -114,36 +91,19 @@ export default function GpsMap({ truckId, truckIds = [], initialPositions = [] }
           {currentPosition && status === 'online' ? 'EN VIVO' : status === 'error' ? 'ERROR' : 'SIN SEÑAL'}
       </span>
       </div>
-      {mobileMap ? (
-        <MobileMap position={currentPosition} />
-      ) : (
-        <MapErrorBoundary fallback={<PositionFallback position={currentPosition} />}>
-          <Suspense fallback={<MapState text="Cargando mapa." />}>
-            <DesktopLeafletMap position={currentPosition} positions={currentPositions} truckId={ids.join('-')} />
-          </Suspense>
-        </MapErrorBoundary>
+      <MapErrorBoundary fallback={<PositionFallback position={currentPosition} />}>
+        <Suspense fallback={<MapState text="Cargando mapa." />}>
+          <LeafletMap position={currentPosition} positions={currentPositions} truckId={ids.join('-')} />
+        </Suspense>
+      </MapErrorBoundary>
+      {currentPosition && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 px-4 py-3">
+          <span className="text-xs text-neutral-500">Motor: {currentPosition.engineStatus || 'Sin dato'} · Velocidad: {currentPosition.speed.toFixed(1)}</span>
+          <a href={`https://maps.apple.com/?ll=${currentPosition.latitude},${currentPosition.longitude}`} target="_blank" rel="noreferrer" className="rounded-md bg-neutral-950 px-3 py-2 text-xs font-medium text-white">
+            Abrir en Mapas
+          </a>
+        </div>
       )}
-    </div>
-  )
-}
-
-function MobileMap({ position }) {
-  if (!position) return <MapState text="Sin posición recibida." />
-
-  return (
-    <div>
-      <iframe
-        title="Mapa GPS"
-        src={osmEmbedUrl(position)}
-        className="block h-[260px] min-h-[260px] w-full border-0"
-        loading="lazy"
-      />
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-neutral-100 px-4 py-3">
-        <span className="text-xs text-neutral-500">Motor: {position.engineStatus || 'Sin dato'} · Velocidad: {position.speed.toFixed(1)}</span>
-        <a href={`https://maps.apple.com/?ll=${position.latitude},${position.longitude}`} target="_blank" rel="noreferrer" className="rounded-md bg-neutral-950 px-3 py-2 text-xs font-medium text-white">
-          Abrir en Mapas
-        </a>
-      </div>
     </div>
   )
 }
