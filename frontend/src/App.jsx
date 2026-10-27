@@ -3273,8 +3273,8 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
                         {parada.fechaProgramada && (
                           <p className="mt-1 text-xs font-medium text-blue-700">Carga programada: {formatDate(parada.fechaProgramada)}</p>
                         )}
-                        {parada.tipo === 'DESCARGA' && parada.completadaAt && (
-                          <p className="mt-1 text-xs font-medium text-emerald-700">Descarga completada: {formatDate(parada.completadaAt)}</p>
+                        {parada.completadaAt && (
+                          <p className="mt-1 text-xs font-medium text-emerald-700">{formatStatus(parada.tipo)} completada: {formatDate(parada.completadaAt)}</p>
                         )}
                         {parada.cargarAlDescargar && (
                           <p className="mt-1 text-xs font-medium text-amber-700">Carga: al descargar el viaje anterior</p>
