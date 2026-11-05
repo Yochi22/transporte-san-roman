@@ -1851,7 +1851,7 @@ function DespachoView({ choferes, camiones, empresas, viajesPendientes, onDone }
         viajeContinuacionId: form.tipoAgendamiento === 'CONTINUAR' ? form.viajeContinuacionId : null,
         paradas: paradas.map(({ tipo, empresaSedeId, lugar, ciudad, fechaProgramada, programacion }) => ({
           tipo,
-          empresaSedeId: tipo === 'CARGA' ? empresaSedeId || null : null,
+          empresaSedeId: (tipo === 'CARGA' || tipo === 'DESCARGA') ? empresaSedeId || null : null,
           lugar,
           ciudad,
           fechaProgramada: tipo === 'CARGA' && programacion === 'FECHA_HORA' ? fechaProgramada : null,
@@ -1995,7 +1995,7 @@ function DespachoView({ choferes, camiones, empresas, viajesPendientes, onDone }
           {paradas.map((parada, index) => (
             <div key={parada.id} className="grid gap-3 rounded-md border border-neutral-200 p-3 md:grid-cols-[52px_130px_1fr_1fr_220px_40px]">
               <div className="flex h-9 items-center text-[13px] font-medium text-neutral-500">#{index + 1}</div>
-              <select value={parada.tipo} onChange={(event) => updateParada(parada.id, { tipo: event.target.value, empresaSedeId: event.target.value === 'CARGA' ? parada.empresaSedeId : '', fechaProgramada: event.target.value === 'CARGA' ? parada.fechaProgramada : '', programacion: 'SIN_PROGRAMAR' })} className="input">
+              <select value={parada.tipo} onChange={(event) => updateParada(parada.id, { tipo: event.target.value, empresaSedeId: event.target.value === 'CARGA' || event.target.value === 'DESCARGA' ? parada.empresaSedeId : '', fechaProgramada: event.target.value === 'CARGA' ? parada.fechaProgramada : '', programacion: 'SIN_PROGRAMAR' })} className="input">
                 <option value="CARGA">Carga</option>
                 <option value="DESCARGA">Descarga</option>
                 <option value="PERNOCTA">Pernocta</option>
@@ -2019,9 +2019,9 @@ function DespachoView({ choferes, camiones, empresas, viajesPendientes, onDone }
               <button type="button" onClick={() => removeParada(parada.id)} className="grid h-10 w-10 place-items-center rounded-md text-neutral-400 hover:bg-red-50 hover:text-red-600">
                 <X size={16} />
               </button>
-              {parada.tipo === 'CARGA' && (
+              {(parada.tipo === 'CARGA' || parada.tipo === 'DESCARGA') && (
                 <div className="md:col-start-3 md:col-span-4">
-                  <p className="mb-1 text-xs font-medium text-neutral-600">Punto de carga de {selectedEmpresa?.nombre || 'la empresa'}</p>
+                  <p className="mb-1 text-xs font-medium text-neutral-600">Punto de {parada.tipo === 'CARGA' ? 'carga' : 'descarga'} de {selectedEmpresa?.nombre || 'la empresa'}</p>
                   <SearchableSelect
                     value={parada.empresaSedeId}
                     options={sedesActivas.map((sede) => ({
@@ -2031,7 +2031,7 @@ function DespachoView({ choferes, camiones, empresas, viajesPendientes, onDone }
                     }))}
                     onChange={(sedeId) => seleccionarSede(parada.id, sedeId)}
                     disabled={!form.empresaId || sedesActivas.length === 0}
-                    placeholder={sedesActivas.length > 0 ? 'Buscar punto de carga' : 'Sin puntos registrados; completa lugar y ciudad'}
+                    placeholder={sedesActivas.length > 0 ? 'Buscar punto (opcional, tambien puedes escribir lugar y ciudad)' : 'Sin puntos registrados; completa lugar y ciudad'}
                     allowClear
                   />
                 </div>
@@ -3510,7 +3510,7 @@ function RutaEditorModal({ viaje, onClose, onSaved }) {
         paradas: paradas.map((parada) => ({
           id: parada.id && !String(parada.id).startsWith('tmp-') ? parada.id : undefined,
           tipo: parada.tipo,
-          empresaSedeId: parada.tipo === 'CARGA' ? parada.empresaSedeId || null : null,
+          empresaSedeId: (parada.tipo === 'CARGA' || parada.tipo === 'DESCARGA') ? parada.empresaSedeId || null : null,
           lugar: parada.lugar,
           ciudad: parada.ciudad,
           tramo: parada.tramo || 1,

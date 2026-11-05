@@ -136,7 +136,7 @@ No mezcles procedimientos del modo unificado con el Compose separado sin adaptar
 - `EmpresaSede`: sede o punto de carga de una empresa, con nombre, ciudad y direccion opcional.
 - `Viaje`: cabecera logistica y financiera; `empresaId` identifica al cliente.
 - `ViajeUnidad`: una o varias unidades por viaje.
-- `Parada`: secuencia por `orden`, agrupada por `tramo`; una parada `CARGA` puede referenciar `empresaSedeId`.
+- `Parada`: secuencia por `orden`, agrupada por `tramo`; una parada `CARGA` o `DESCARGA` puede referenciar `empresaSedeId` (una `PERNOCTA` no, solo texto libre).
 - `ReporteChofer`: viaje/chofer obligatorios, parada opcional.
 - `Gasto`: monto VES, moneda/monto originales, tasa y fuente.
 - `TruckPosition`: una fila por camion; no es historial.
@@ -181,7 +181,7 @@ Compatibilidad de empresas: `Viaje.empresaId` y `Parada.empresaSedeId` son nulla
 - Inactivar preserva historial. Una empresa inactiva no aparece como opcion de un viaje o tramo nuevo; una sede inactiva no puede asignarse a una carga nueva.
 - La eliminacion fisica solo se permite si no hay viajes o paradas vinculados. Si existe uso historico, se debe inactivar.
 - No borres ni reasignes relaciones historicas al editar nombres. `lugar` y `ciudad` de cada parada siguen siendo el dato mostrado para ese viaje.
-- Las sedes son opcionales: si una empresa aun no tiene sedes, la carga puede capturarse manualmente. Si se elige sede, el frontend completa `lugar` y `ciudad`, y el backend comprueba que sea activa y pertenezca a la empresa seleccionada.
+- Las sedes son opcionales: si una empresa aun no tiene sedes, la parada (carga o descarga) puede capturarse manualmente. Si se elige sede, el frontend completa `lugar` y `ciudad`, y el backend comprueba que sea activa y pertenezca a la empresa seleccionada. Una `PERNOCTA` siempre es texto libre, sin sede.
 - `GET /api/empresas` entrega cada empresa con sedes y estadisticas. `total` excluye cancelados; `activos` cuenta viajes con alguna parada incompleta; `finalizados` cuenta viajes no cancelados con todas sus paradas completas e incluye los ya liquidados; `liquidados` usa `estadoFinanciero=LIQUIDADO`.
 
 ### Viajes

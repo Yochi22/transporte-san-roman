@@ -61,7 +61,7 @@ const validarParadas = (paradas) => {
     if (fechaProgramada && Number.isNaN(fechaProgramada.getTime())) {
       throw { status: 400, message: 'Fecha programada invalida' }
     }
-    const empresaSedeId = tipo === 'CARGA' && typeof parada.empresaSedeId === 'string' && parada.empresaSedeId.trim()
+    const empresaSedeId = (tipo === 'CARGA' || tipo === 'DESCARGA') && typeof parada.empresaSedeId === 'string' && parada.empresaSedeId.trim()
       ? parada.empresaSedeId.trim()
       : null
     return { ...parada, tipo, lugar, ciudad, fechaProgramada, empresaSedeId }
@@ -472,7 +472,7 @@ const actualizarRuta = async (viajeId, paradasInput) => {
         orden: index + 1,
         tramo: actual?.tramo || parada.tramo || 1,
         tipo: actual && actual.estado !== 'PENDIENTE' ? actual.tipo : parada.tipo,
-        empresaSedeId: parada.tipo === 'CARGA' ? parada.empresaSedeId : null,
+        empresaSedeId: (parada.tipo === 'CARGA' || parada.tipo === 'DESCARGA') ? parada.empresaSedeId : null,
         lugar: parada.lugar,
         ciudad: parada.ciudad,
         fechaProgramada: parada.tipo === 'CARGA' ? parada.fechaProgramada : null,
