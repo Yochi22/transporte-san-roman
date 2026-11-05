@@ -14,6 +14,7 @@ const main = async () => {
     const paradas = await tx.parada.deleteMany()
     const viajeUnidades = await tx.viajeUnidad.deleteMany()
     const viajes = await tx.viaje.deleteMany()
+    const choferUnidades = await tx.choferUnidad.deleteMany()
 
     const choferes = await tx.chofer.updateMany({
       data: { estado: 'DISPONIBLE', ubicacionActual: 'Sede', ultimoReporteAt: null }
@@ -22,7 +23,7 @@ const main = async () => {
       data: { estado: 'DISPONIBLE', ubicacionActual: 'Sede' }
     })
 
-    return { movimientos, retornables, gastos, reportes, paradas, viajeUnidades, viajes, choferes, camiones }
+    return { movimientos, retornables, gastos, reportes, paradas, viajeUnidades, viajes, choferUnidades, choferes, camiones }
   })
 
   console.log('Viajes y datos relacionados eliminados:')
@@ -33,9 +34,10 @@ const main = async () => {
   console.log(`  Gastos: ${resumen.gastos.count}`)
   console.log(`  Retornables: ${resumen.retornables.count}`)
   console.log(`  Movimientos de retornables: ${resumen.movimientos.count}`)
-  console.log(`Choferes reseteados a DISPONIBLE: ${resumen.choferes.count}`)
-  console.log(`Camiones reseteados a DISPONIBLE: ${resumen.camiones.count}`)
-  console.log('Choferes, camiones, usuarios y empresas se conservaron intactos (solo se reseteo estado/ubicacion de choferes y camiones).')
+  console.log(`  Asignaciones chofer-unidad desvinculadas: ${resumen.choferUnidades.count}`)
+  console.log(`Choferes reseteados a DISPONIBLE/Sede: ${resumen.choferes.count}`)
+  console.log(`Camiones reseteados a DISPONIBLE/Sede: ${resumen.camiones.count}`)
+  console.log('Choferes, camiones, usuarios y empresas se conservaron intactos (solo se reseteo estado/ubicacion de choferes y camiones, y se desvincularon sus asignaciones de unidad).')
 }
 
 main()
