@@ -57,7 +57,7 @@ export default function DesktopLeafletMap({ position, positions = [], truckId })
 
   return (
     <div className="h-[320px] min-h-[320px]">
-      <MapContainer key={`${truckId}-${position?.updatedAt || 'empty'}`} center={center} zoom={position ? 14 : 7} scrollWheelZoom={false} className="h-full w-full">
+      <MapContainer key={truckId} center={center} zoom={position ? 14 : 7} scrollWheelZoom={false} className="h-full w-full">
         <ResizeMap position={position} />
         <TileLayer
           attribution='Tiles &copy; Esri &mdash; Esri, HERE, Garmin, FAO, NOAA, USGS, &copy; OpenStreetMap contributors'

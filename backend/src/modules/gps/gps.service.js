@@ -68,52 +68,30 @@ const registrarPosicionPorImei = async (data) => {
 
   if (!camion) throw { status: 404, message: 'No existe camion activo asociado a ese IMEI GPS' }
 
-  const ubicacionActual = `${data.latitude.toFixed(6)}, ${data.longitude.toFixed(6)}`
-
-  const [position, viajesActivos] = await prisma.$transaction([
-    prisma.truckPosition.upsert({
-      where: { truckId: camion.id },
-      update: {
-        latitude: data.latitude,
-        longitude: data.longitude,
-        speed: data.speed,
-        engineStatus: data.engineStatus,
-        updatedAt: new Date()
-      },
-      create: {
-        truckId: camion.id,
-        latitude: data.latitude,
-        longitude: data.longitude,
-        speed: data.speed,
-        engineStatus: data.engineStatus
-      }
-    }),
-    prisma.viaje.findMany({
-      where: {
-        estadoLogistico: 'EN_CURSO',
-        OR: [
-          { camionId: camion.id },
-          { unidades: { some: { camionId: camion.id } } }
-        ]
-      },
-      select: { choferId: true }
-    }),
-    prisma.camion.update({
-      where: { id: camion.id },
-      data: { ubicacionActual }
-    })
-  ])
-
-  const choferIds = [...new Set(viajesActivos.map((viaje) => viaje.choferId).filter(Boolean))]
-  if (choferIds.length > 0) {
-    await prisma.chofer.updateMany({
-      where: { id: { in: choferIds } },
-      data: { ubicacionActual }
-    })
-  }
+  // La posicion GPS vive solo en TruckPosition. `ubicacionActual` (de camion y de
+  // chofer) es el estado operativo reportado por el chofer (TSR1/TSR2/Cagua,
+  // "Cargando: <lugar>", etc.) y nunca debe pisarse con coordenadas crudas: son
+  // dos cosas distintas, aunque ambas describan "donde esta la unidad".
+  const position = await prisma.truckPosition.upsert({
+    where: { truckId: camion.id },
+    update: {
+      latitude: data.latitude,
+      longitude: data.longitude,
+      speed: data.speed,
+      engineStatus: data.engineStatus,
+      updatedAt: new Date()
+    },
+    create: {
+      truckId: camion.id,
+      latitude: data.latitude,
+      longitude: data.longitude,
+      speed: data.speed,
+      engineStatus: data.engineStatus
+    }
+  })
 
   return {
-    camion: { ...camion, ubicacionActual },
+    camion,
     position
   }
 }

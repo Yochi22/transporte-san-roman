@@ -315,6 +315,7 @@ export default function App() {
       refresh()
     }
     const pushAlerta = (alerta) => {
+      playAlertSound()
       setAlertas((prev) => {
         const clave = [alerta?.tipo, alerta?.chofer?.id, alerta?.viaje?.id, alerta?.mensaje].filter(Boolean).join('|')
         const filtradas = prev.filter((item) => (
