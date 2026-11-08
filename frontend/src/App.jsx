@@ -547,8 +547,9 @@ function Monitor({
   const enViaje = flota.filter((camion) => unidadesEnViaje.has(camion.id)).length
   const enTaller = flota.filter((camion) => camion.estado === 'EN_TALLER').length
   const disponibles = flota.filter((camion) => !unidadesEnViaje.has(camion.id) && camion.estado !== 'EN_TALLER')
-  const contarPorUbicacion = (nombre) => disponibles.filter((camion) => normalize(camion.ubicacionActual) === normalize(nombre)).length
-  const esOtraUbicacion = (camion) => !UBICACIONES_DISPONIBLE.some((nombre) => normalize(camion.ubicacionActual) === normalize(nombre))
+  const ubicacionDeFlota = (camion) => camion.ubicacionReportada ?? camion.ubicacionActual
+  const contarPorUbicacion = (nombre) => disponibles.filter((camion) => normalize(ubicacionDeFlota(camion)) === normalize(nombre)).length
+  const esOtraUbicacion = (camion) => !UBICACIONES_DISPONIBLE.some((nombre) => normalize(ubicacionDeFlota(camion)) === normalize(nombre))
   const enOtraUbicacion = disponibles.filter(esOtraUbicacion).length
 
   const alternarSeleccion = (clave) => setSeleccionFlota((actual) => (actual === clave ? null : clave))
@@ -557,7 +558,7 @@ function Monitor({
     if (seleccionFlota === 'viaje') return flota.filter((camion) => unidadesEnViaje.has(camion.id))
     if (seleccionFlota === 'taller') return flota.filter((camion) => camion.estado === 'EN_TALLER')
     if (seleccionFlota === 'otra') return disponibles.filter(esOtraUbicacion)
-    if (seleccionFlota) return disponibles.filter((camion) => normalize(camion.ubicacionActual) === normalize(seleccionFlota))
+    if (seleccionFlota) return disponibles.filter((camion) => normalize(ubicacionDeFlota(camion)) === normalize(seleccionFlota))
     return []
   })()
 
@@ -4461,6 +4462,12 @@ function buildOperationalData({ viajes, choferes, camiones, retornables = [], qu
   const camionesConEstado = camiones.map((camion) => ({
     ...camion,
     estadoCalculado: estadosCamiones.get(camion.id)?.estado || camion.estado,
+    // La posicion GPS en vivo y el estado operativo reportado (TSR1/TSR2/Cagua,
+    // "Cargando: <lugar>", etc.) son cosas distintas. `ubicacionReportada` conserva
+    // el estado reportado sin tocar, para comparaciones exactas (ej. el resumen de
+    // flota); `ubicacionActual` sigue priorizando el GPS en vivo para mostrar la
+    // posicion fisica de la unidad (ej. las tarjetas de Recursos).
+    ubicacionReportada: camion.ubicacionActual,
     ubicacionActual:
       formatGpsLocation(camion.posicionGps) ||
       activos.find((viaje) => tripUnitIds(viaje).includes(camion.id))?.chofer?.ubicacionActual ||
