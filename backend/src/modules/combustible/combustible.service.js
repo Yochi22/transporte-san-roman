@@ -127,30 +127,29 @@ const guardarConfiguracion = async (camionId, datos) => {
 
 // --- Conversion cm -> litros ---------------------------------------------------
 
+// Metodo real de la oficina: se busca el punto de la tabla mas cercano
+// "hacia arriba" (el primer cm de la tabla que sea >= a la lectura, nunca
+// uno menor) y se hace una regla de 3 directa contra ese punto:
+// litros = lectura_cm * punto.litros / punto.alturaCm. No se interpola
+// entre dos puntos. Ejemplo real: con 18 cm y la tabla trae 16,50->80 y
+// 20,50->100, se usa 20,50 (18 <= 20,50) => 18*100/20,50 = 87,8 L.
 const interpolarLitros = (tanque, alturaCm) => {
   const puntos = tanque.puntosCalibracion
   const altura = Number(alturaCm)
   if (!Number.isFinite(altura) || altura < 0) {
     throw { status: 400, message: `Lectura de varilla invalida en tanque ${tanque.numero}` }
   }
-  if (altura <= puntos[0].alturaCm) {
-    return { litros: puntos[0].litros, fueraDeRango: altura < puntos[0].alturaCm }
+  if (altura === 0) return { litros: 0, fueraDeRango: false }
+
+  const puntoSuperior = puntos.find((punto) => punto.alturaCm >= altura)
+  if (puntoSuperior) {
+    return { litros: (altura / puntoSuperior.alturaCm) * puntoSuperior.litros, fueraDeRango: false }
   }
+
+  // La lectura supera el punto mas alto calibrado (no deberia pasar en un
+  // tanque real): se extiende la misma regla de 3 con el ultimo punto.
   const ultimo = puntos[puntos.length - 1]
-  if (altura >= ultimo.alturaCm) {
-    return { litros: ultimo.litros, fueraDeRango: altura > ultimo.alturaCm }
-  }
-  for (let i = 0; i < puntos.length - 1; i += 1) {
-    const inferior = puntos[i]
-    const superior = puntos[i + 1]
-    if (altura >= inferior.alturaCm && altura <= superior.alturaCm) {
-      const rango = superior.alturaCm - inferior.alturaCm
-      const proporcion = rango === 0 ? 0 : (altura - inferior.alturaCm) / rango
-      const litros = inferior.litros + proporcion * (superior.litros - inferior.litros)
-      return { litros, fueraDeRango: false }
-    }
-  }
-  return { litros: ultimo.litros, fueraDeRango: true }
+  return { litros: (altura / ultimo.alturaCm) * ultimo.litros, fueraDeRango: true }
 }
 
 const calcularLecturas = (tanques, lecturas) => {
