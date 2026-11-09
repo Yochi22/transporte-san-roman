@@ -3054,7 +3054,9 @@ function ControlesCombustibleActivos({ camiones, viajesActivos = [], controlesAb
         camionId,
         viajeId: viajeId || undefined,
         odometroInicial: Number(odometroInicial),
-        lecturas: (configuracion?.tanques || []).map((tanque) => ({ numero: tanque.numero, alturaCm: Number(lecturas[tanque.numero] || 0) })),
+        lecturas: (configuracion?.tanques || [])
+          .filter((tanque) => tanque.requiereVarilla !== false)
+          .map((tanque) => ({ numero: tanque.numero, alturaCm: Number(lecturas[tanque.numero] || 0) })),
       }
       const { data } = await api.post('/combustible/controles', payload)
       setAbrirForm(false)
@@ -3108,7 +3110,9 @@ function ControlesCombustibleActivos({ camiones, viajesActivos = [], controlesAb
             )}
             {configuracion?.tanques?.length > 0 && (
               <div className="grid gap-3 md:grid-cols-2">
-                {configuracion.tanques.map((tanque) => (
+                {configuracion.tanques.map((tanque) => tanque.requiereVarilla === false ? (
+                  <p key={tanque.numero} className="text-xs text-neutral-500">Tanque {tanque.numero}: no se mide con varilla, se asume lleno ({tanque.capacidadLitros} L).</p>
+                ) : (
                   <Field key={tanque.numero} label={`Tanque ${tanque.numero} - lectura de varilla (cm)`}>
                     <input
                       required
@@ -3184,15 +3188,20 @@ function ControlCombustibleRow({ control, expandido, onToggle, camiones, onDone 
   }
 
   const cerrar = async () => {
+    const tanquesConVarilla = (control.lecturasInicialesTanques || []).filter((lectura) => lectura.modo !== 'FULL')
+    const tanquesSinVarilla = (control.lecturasInicialesTanques || []).filter((lectura) => lectura.modo === 'FULL')
     const result = await Swal.fire({
       ...alertOptions,
       title: `Cerrar control - ${control.camion?.placa || ''}`,
       html: `
         <label class="sanroman-alert-label">Odometro final (km)</label>
         <input id="cc-odometro" class="swal2-input sanroman-alert-field" type="number" min="0">
-        ${(control.lecturasInicialesTanques || []).map((lectura) => `
+        ${tanquesConVarilla.map((lectura) => `
           <label class="sanroman-alert-label">Tanque ${lectura.numero} - lectura final (cm)</label>
           <input id="cc-tanque-${lectura.numero}" class="swal2-input sanroman-alert-field" type="number" min="0" step="0.1">
+        `).join('')}
+        ${tanquesSinVarilla.map((lectura) => `
+          <p class="sanroman-alert-label">Tanque ${lectura.numero}: no se mide con varilla, se asume lleno (${lectura.litros} L).</p>
         `).join('')}
       `,
       showCancelButton: true,
@@ -3201,7 +3210,7 @@ function ControlCombustibleRow({ control, expandido, onToggle, camiones, onDone 
       reverseButtons: true,
       preConfirm: () => ({
         odometroFinal: document.getElementById('cc-odometro').value,
-        lecturas: (control.lecturasInicialesTanques || []).map((lectura) => ({
+        lecturas: tanquesConVarilla.map((lectura) => ({
           numero: lectura.numero,
           alturaCm: document.getElementById(`cc-tanque-${lectura.numero}`).value,
         })),
@@ -3302,10 +3311,12 @@ function ConfiguracionCombustibleView({ camiones, isAdmin }) {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  const tanqueVacio = (numero) => ({ numero, capacidadLitros: '', requiereVarilla: true, puntosCalibracion: [{ alturaCm: '', litros: '' }, { alturaCm: '', litros: '' }] })
+
   const cargarEnFormulario = (config) => {
     setTanques(config?.tanques?.length > 0
-      ? config.tanques.map((tanque) => ({ ...tanque, puntosCalibracion: [...tanque.puntosCalibracion] }))
-      : [{ numero: 1, capacidadLitros: '', puntosCalibracion: [{ alturaCm: '', litros: '' }, { alturaCm: '', litros: '' }] }])
+      ? config.tanques.map((tanque) => ({ ...tanque, requiereVarilla: tanque.requiereVarilla !== false, puntosCalibracion: [...tanque.puntosCalibracion] }))
+      : [tanqueVacio(1)])
     setUmbralOptimo(config?.umbralOptimoKmLitro ?? '')
     setUmbralDeficiente(config?.umbralDeficienteKmLitro ?? '')
   }
@@ -3344,7 +3355,15 @@ function ConfiguracionCombustibleView({ camiones, isAdmin }) {
   const agregarTanque = () => {
     if (tanques.length >= 2) return
     const numero = tanques.some((t) => t.numero === 1) ? 2 : 1
-    setTanques((prev) => [...prev, { numero, capacidadLitros: '', puntosCalibracion: [{ alturaCm: '', litros: '' }, { alturaCm: '', litros: '' }] }])
+    setTanques((prev) => [...prev, tanqueVacio(numero)])
+  }
+
+  const alternarRequiereVarilla = (tanqueIdx) => {
+    setTanques((prev) => prev.map((tanque, i) => i !== tanqueIdx ? tanque : {
+      ...tanque,
+      requiereVarilla: !(tanque.requiereVarilla !== false),
+      puntosCalibracion: tanque.puntosCalibracion.length > 0 ? tanque.puntosCalibracion : [{ alturaCm: '', litros: '' }, { alturaCm: '', litros: '' }],
+    }))
   }
 
   const quitarTanque = (tanqueIdx) => {
@@ -3361,7 +3380,10 @@ function ConfiguracionCombustibleView({ camiones, isAdmin }) {
         tanques: tanques.map((tanque) => ({
           numero: tanque.numero,
           capacidadLitros: Number(tanque.capacidadLitros),
-          puntosCalibracion: tanque.puntosCalibracion.map((punto) => ({ alturaCm: Number(punto.alturaCm), litros: Number(punto.litros) })),
+          requiereVarilla: tanque.requiereVarilla !== false,
+          puntosCalibracion: tanque.requiereVarilla === false
+            ? []
+            : tanque.puntosCalibracion.map((punto) => ({ alturaCm: Number(punto.alturaCm), litros: Number(punto.litros) })),
         })),
       })
       await notifySuccess('Configuracion guardada')
@@ -3405,23 +3427,31 @@ function ConfiguracionCombustibleView({ camiones, isAdmin }) {
               <Field label="Capacidad total (litros)">
                 <input required type="number" min="0" value={tanque.capacidadLitros} onChange={(event) => setTanques((prev) => prev.map((t, i) => i !== tanqueIdx ? t : { ...t, capacidadLitros: event.target.value }))} className="input" disabled={!isAdmin} />
               </Field>
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-neutral-600">Tabla de calibracion (altura de varilla en cm -&gt; litros)</p>
-                {tanque.puntosCalibracion.map((punto, puntoIdx) => (
-                  <div key={puntoIdx} className="flex items-center gap-2">
-                    <input type="number" min="0" step="0.1" value={punto.alturaCm} onChange={(event) => actualizarPunto(tanqueIdx, puntoIdx, 'alturaCm', event.target.value)} className="input" placeholder="cm" disabled={!isAdmin} />
-                    <input type="number" min="0" step="0.1" value={punto.litros} onChange={(event) => actualizarPunto(tanqueIdx, puntoIdx, 'litros', event.target.value)} className="input" placeholder="litros" disabled={!isAdmin} />
-                    {isAdmin && tanque.puntosCalibracion.length > 2 && (
-                      <button type="button" onClick={() => quitarPunto(tanqueIdx, puntoIdx)} className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-neutral-400 hover:bg-red-50 hover:text-red-600">
-                        <X size={16} />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                {isAdmin && (
-                  <button type="button" onClick={() => agregarPunto(tanqueIdx)} className="text-xs font-medium text-neutral-600 hover:text-neutral-950">+ Agregar punto</button>
-                )}
-              </div>
+              <label className="flex items-center gap-2 text-xs text-neutral-600">
+                <input type="checkbox" checked={tanque.requiereVarilla === false} onChange={() => alternarRequiereVarilla(tanqueIdx)} disabled={!isAdmin} />
+                No se mide con varilla: siempre se carga full y el consumo de la ruta es lo que se equipa en estacion
+              </label>
+              {tanque.requiereVarilla === false ? (
+                <p className="text-xs text-neutral-500">Cada control de esta unidad abrira y cerrara asumiendo el tanque lleno ({tanque.capacidadLitros || '?'} L); no se pide lectura de varilla.</p>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-neutral-600">Tabla de calibracion (altura de varilla en cm -&gt; litros)</p>
+                  {tanque.puntosCalibracion.map((punto, puntoIdx) => (
+                    <div key={puntoIdx} className="flex items-center gap-2">
+                      <input type="number" min="0" step="0.1" value={punto.alturaCm} onChange={(event) => actualizarPunto(tanqueIdx, puntoIdx, 'alturaCm', event.target.value)} className="input" placeholder="cm" disabled={!isAdmin} />
+                      <input type="number" min="0" step="0.1" value={punto.litros} onChange={(event) => actualizarPunto(tanqueIdx, puntoIdx, 'litros', event.target.value)} className="input" placeholder="litros" disabled={!isAdmin} />
+                      {isAdmin && tanque.puntosCalibracion.length > 2 && (
+                        <button type="button" onClick={() => quitarPunto(tanqueIdx, puntoIdx)} className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-neutral-400 hover:bg-red-50 hover:text-red-600">
+                          <X size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {isAdmin && (
+                    <button type="button" onClick={() => agregarPunto(tanqueIdx)} className="text-xs font-medium text-neutral-600 hover:text-neutral-950">+ Agregar punto</button>
+                  )}
+                </div>
+              )}
             </div>
           ))}
 
@@ -4844,7 +4874,7 @@ function ChoferCombustibleSection({ unidadesDisponibles, controlesAbiertos, onDo
       const { data } = await api.post('/mi/combustible/controles', {
         camionId: unidad.id,
         odometroInicial: Number(odometroInicial),
-        lecturas: unidad.tanques.map((tanque) => ({ numero: tanque.numero, alturaCm: Number(lecturas[tanque.numero] || 0) })),
+        lecturas: unidad.tanques.filter((tanque) => tanque.requiereVarilla !== false).map((tanque) => ({ numero: tanque.numero, alturaCm: Number(lecturas[tanque.numero] || 0) })),
       })
       setUnidadAbierta(null)
       setOdometroInicial('')
@@ -4886,7 +4916,7 @@ function ChoferCombustibleSection({ unidadesDisponibles, controlesAbiertos, onDo
       const unidad = unidadesDisponibles.find((u) => u.id === control.camion?.id)
       await api.post(`/mi/combustible/controles/${control.id}/cerrar`, {
         odometroFinal: Number(odometroFinal),
-        lecturas: (unidad?.tanques || []).map((tanque) => ({ numero: tanque.numero, alturaCm: Number(lecturasFinales[tanque.numero] || 0) })),
+        lecturas: (unidad?.tanques || []).filter((tanque) => tanque.requiereVarilla !== false).map((tanque) => ({ numero: tanque.numero, alturaCm: Number(lecturasFinales[tanque.numero] || 0) })),
       })
       setCierreAbierto(null)
       setOdometroFinal('')
@@ -4918,7 +4948,9 @@ function ChoferCombustibleSection({ unidadesDisponibles, controlesAbiertos, onDo
                 <form onSubmit={(event) => abrir(unidad, event)} className="space-y-2 rounded-md border border-neutral-200 bg-stone-50 p-3">
                   <p className="text-xs font-medium text-neutral-600">Lectura inicial - {unidad.placa}</p>
                   <input required type="number" min="0" placeholder="Odometro (km)" value={odometroInicial} onChange={(event) => setOdometroInicial(event.target.value)} className="input" />
-                  {unidad.tanques.map((tanque) => (
+                  {unidad.tanques.map((tanque) => tanque.requiereVarilla === false ? (
+                    <p key={tanque.numero} className="text-xs text-neutral-500">Tanque {tanque.numero}: sin varilla, se asume lleno ({tanque.capacidadLitros} L).</p>
+                  ) : (
                     <input
                       key={tanque.numero}
                       required
@@ -4967,7 +4999,9 @@ function ChoferCombustibleSection({ unidadesDisponibles, controlesAbiertos, onDo
               <form onSubmit={(event) => cerrar(control, event)} className="space-y-2 rounded-md border border-neutral-200 bg-white p-3">
                 <p className="text-xs font-medium text-neutral-600">Lectura final</p>
                 <input required type="number" min="0" placeholder="Odometro final (km)" value={odometroFinal} onChange={(event) => setOdometroFinal(event.target.value)} className="input" />
-                {unidad.tanques.map((tanque) => (
+                {unidad.tanques.map((tanque) => tanque.requiereVarilla === false ? (
+                  <p key={tanque.numero} className="text-xs text-neutral-500">Tanque {tanque.numero}: sin varilla, se asume lleno ({tanque.capacidadLitros} L).</p>
+                ) : (
                   <input
                     key={tanque.numero}
                     required

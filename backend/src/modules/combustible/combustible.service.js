@@ -8,6 +8,7 @@ const tanqueConPuntosSelect = {
   id: true,
   numero: true,
   capacidadLitros: true,
+  requiereVarilla: true,
   puntosCalibracion: { orderBy: { alturaCm: 'asc' }, select: { alturaCm: true, litros: true } }
 }
 
@@ -51,6 +52,14 @@ const validarTanques = (tanques) => {
       throw { status: 400, message: 'Capacidad de tanque invalida' }
     }
 
+    // Unidades que no se miden con varilla: siempre se cargan full y el
+    // consumo de la ruta es directamente lo que se equipa en estacion. No
+    // necesitan tabla de calibracion.
+    const requiereVarilla = tanque.requiereVarilla !== false
+    if (!requiereVarilla) {
+      return { numero, capacidadLitros, requiereVarilla: false, puntosCalibracion: [] }
+    }
+
     const puntos = Array.isArray(tanque.puntosCalibracion) ? tanque.puntosCalibracion : []
     if (puntos.length < 2) {
       throw { status: 400, message: `El tanque ${numero} necesita al menos 2 puntos de calibracion` }
@@ -69,7 +78,7 @@ const validarTanques = (tanques) => {
       return { alturaCm, litros }
     }).sort((a, b) => a.alturaCm - b.alturaCm)
 
-    return { numero, capacidadLitros, puntosCalibracion: puntosNormalizados }
+    return { numero, capacidadLitros, requiereVarilla: true, puntosCalibracion: puntosNormalizados }
   })
 }
 
@@ -107,6 +116,7 @@ const guardarConfiguracion = async (camionId, datos) => {
           configuracionId: configuracion.id,
           numero: tanque.numero,
           capacidadLitros: tanque.capacidadLitros,
+          requiereVarilla: tanque.requiereVarilla,
           puntosCalibracion: { create: tanque.puntosCalibracion }
         }
       })
@@ -152,19 +162,23 @@ const interpolarLitros = (tanque, alturaCm) => {
   return { litros: (altura / ultimo.alturaCm) * ultimo.litros, fueraDeRango: true }
 }
 
-const calcularLecturas = (tanques, lecturas) => {
-  if (!Array.isArray(lecturas) || lecturas.length === 0) {
-    throw { status: 400, message: 'Debes indicar la lectura de al menos un tanque' }
-  }
-  const tanquesPorNumero = new Map(tanques.map((tanque) => [tanque.numero, tanque]))
+// Recorre los tanques CONFIGURADOS (no las lecturas recibidas): asi un
+// tanque sin varilla queda cubierto aunque el cliente no mande nada para
+// el, y un tanque con varilla faltante da error claro en vez de perderse
+// en silencio.
+const calcularLecturas = (tanques, lecturas = []) => {
+  const lecturasPorNumero = new Map((lecturas || []).map((lectura) => [Number(lectura.numero), lectura]))
   let litrosTotal = 0
-  const detalle = lecturas.map((lectura) => {
-    const numero = Number(lectura.numero)
-    const tanque = tanquesPorNumero.get(numero)
-    if (!tanque) throw { status: 400, message: `La unidad no tiene configurado el tanque ${numero}` }
+  const detalle = tanques.map((tanque) => {
+    if (tanque.requiereVarilla === false) {
+      litrosTotal += tanque.capacidadLitros
+      return { numero: tanque.numero, alturaCm: null, litros: tanque.capacidadLitros, fueraDeRango: false, modo: 'FULL' }
+    }
+    const lectura = lecturasPorNumero.get(tanque.numero)
+    if (!lectura) throw { status: 400, message: `Falta la lectura de varilla del tanque ${tanque.numero}` }
     const { litros, fueraDeRango } = interpolarLitros(tanque, lectura.alturaCm)
     litrosTotal += litros
-    return { numero, alturaCm: Number(lectura.alturaCm), litros, fueraDeRango }
+    return { numero: tanque.numero, alturaCm: Number(lectura.alturaCm), litros, fueraDeRango }
   })
   return { detalle, litrosTotal }
 }

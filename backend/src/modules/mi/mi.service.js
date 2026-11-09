@@ -155,7 +155,7 @@ const camionConTanquesSelect = {
   id: true,
   placa: true,
   tipoVehiculo: true,
-  configuracionCombustible: { select: { tanques: { select: { numero: true }, orderBy: { numero: 'asc' } } } },
+  configuracionCombustible: { select: { tanques: { select: { numero: true, capacidadLitros: true, requiereVarilla: true }, orderBy: { numero: 'asc' } } } },
 }
 
 // Solo expone unidades que ya tienen tanques configurados: si una unidad no

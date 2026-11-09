@@ -501,10 +501,13 @@ model ConfiguracionCombustibleCamion {
 }
 
 model TanqueCombustible {
-  id              String @id @default(uuid())
-  configuracionId String @map("configuracion_id")
+  id              String  @id @default(uuid())
+  configuracionId String  @map("configuracion_id")
   numero          Int
-  capacidadLitros Float  @map("capacidad_litros")
+  capacidadLitros Float   @map("capacidad_litros")
+  // Algunas unidades no se miden con varilla: siempre se cargan full y el
+  // consumo de la ruta es directamente lo que se les equipa en estacion.
+  requiereVarilla Boolean @default(true) @map("requiere_varilla")
 
   configuracion     ConfiguracionCombustibleCamion @relation(fields: [configuracionId], references: [id], onDelete: Cascade)
   puntosCalibracion PuntoCalibracionTanque[]
