@@ -506,7 +506,7 @@ export default function App() {
               <TallerView camiones={data.camionesActivosTodos} onDone={() => fetchData()} />
             )}
             {activeTab === 'combustible' && (
-              <CombustibleView camiones={data.camionesActivosTodos} choferes={data.choferesOperativos} controlesAbiertos={controlesCombustible} isAdmin={isAdmin} onDone={() => fetchData()} />
+              <CombustibleView camiones={data.camionesActivosTodos} choferes={data.choferesOperativos} viajesActivos={data.activos} controlesAbiertos={controlesCombustible} isAdmin={isAdmin} onDone={() => fetchData()} />
             )}
             {isAdmin && activeTab === 'liquidaciones' && (
               <LiquidacionesView viajes={data.liquidados} choferes={choferes} empresas={empresas} camiones={data.camionesActivosTodos} onDone={() => fetchData()} />
@@ -2949,7 +2949,7 @@ const CLASIFICACION_STYLES = {
   CRITICO: 'bg-red-50 text-red-700',
 }
 
-function CombustibleView({ camiones, choferes, controlesAbiertos, isAdmin, onDone }) {
+function CombustibleView({ camiones, choferes, viajesActivos, controlesAbiertos, isAdmin, onDone }) {
   const [subTab, setSubTab] = useState('activos')
   const subTabs = [
     { id: 'activos', label: 'Controles activos' },
@@ -2972,7 +2972,7 @@ function CombustibleView({ camiones, choferes, controlesAbiertos, isAdmin, onDon
           </button>
         ))}
       </div>
-      {subTab === 'activos' && <ControlesCombustibleActivos camiones={camiones} controlesAbiertos={controlesAbiertos} onDone={onDone} />}
+      {subTab === 'activos' && <ControlesCombustibleActivos camiones={camiones} viajesActivos={viajesActivos} controlesAbiertos={controlesAbiertos} onDone={onDone} />}
       {subTab === 'configuracion' && <ConfiguracionCombustibleView camiones={camiones} isAdmin={isAdmin} />}
       {subTab === 'historico' && <HistoricoCombustibleView camiones={camiones} choferes={choferes} />}
     </div>
@@ -3010,9 +3010,10 @@ function AlertasRendimientoCritico({ onSelect }) {
   )
 }
 
-function ControlesCombustibleActivos({ camiones, controlesAbiertos, onDone }) {
+function ControlesCombustibleActivos({ camiones, viajesActivos = [], controlesAbiertos, onDone }) {
   const [abrirForm, setAbrirForm] = useState(false)
   const [camionId, setCamionId] = useState('')
+  const [viajeId, setViajeId] = useState('')
   const [configuracion, setConfiguracion] = useState(null)
   const [cargandoConfig, setCargandoConfig] = useState(false)
   const [odometroInicial, setOdometroInicial] = useState('')
@@ -3021,8 +3022,12 @@ function ControlesCombustibleActivos({ camiones, controlesAbiertos, onDone }) {
   const [expandido, setExpandido] = useState(null)
 
   const opcionesCamion = unitFilterOptions(camiones)
+  const opcionesViaje = viajesActivos
+    .filter((viaje) => tripUnitIds(viaje).includes(camionId))
+    .map((viaje) => ({ value: viaje.id, label: `${viaje.codigo} - ${formatRoute(viaje)}` }))
 
   useEffect(() => {
+    setViajeId('')
     if (!camionId) { setConfiguracion(null); return }
     let active = true
     setCargandoConfig(true)
@@ -3039,12 +3044,14 @@ function ControlesCombustibleActivos({ camiones, controlesAbiertos, onDone }) {
     try {
       const payload = {
         camionId,
+        viajeId: viajeId || undefined,
         odometroInicial: Number(odometroInicial),
         lecturas: (configuracion?.tanques || []).map((tanque) => ({ numero: tanque.numero, alturaCm: Number(lecturas[tanque.numero] || 0) })),
       }
       await api.post('/combustible/controles', payload)
       setAbrirForm(false)
       setCamionId('')
+      setViajeId('')
       setOdometroInicial('')
       setLecturas({})
       await notifySuccess('Control de combustible abierto')
@@ -3077,6 +3084,11 @@ function ControlesCombustibleActivos({ camiones, controlesAbiertos, onDone }) {
                 <input required type="number" min="0" value={odometroInicial} onChange={(event) => setOdometroInicial(event.target.value)} className="input" />
               </Field>
             </div>
+            {opcionesViaje.length > 0 && (
+              <Field label="Vincular a un viaje en curso de esta unidad (opcional)">
+                <SearchableSelect value={viajeId} options={opcionesViaje} onChange={setViajeId} placeholder="Sin vincular a ningun viaje" allowClear />
+              </Field>
+            )}
             {cargandoConfig && <p className="text-xs text-neutral-500">Cargando configuracion de la unidad...</p>}
             {camionId && !cargandoConfig && !configuracion && (
               <Banner tone="danger" icon={AlertTriangle} text="Esta unidad no tiene tanques/calibracion configurados. Ve a Configuracion de unidades primero." />
