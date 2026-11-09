@@ -187,6 +187,27 @@ const requerirConfiguracionConTanques = async (camionId) => {
   return configuracion
 }
 
+const calcularAdvertenciaNivel = async (camionId, tanques, litrosNuevoInicio) => {
+  const ultimoCerrado = await prisma.controlCombustible.findFirst({
+    where: { camionId, estado: 'CERRADO', litrosFinalesTotal: { not: null } },
+    orderBy: { cerradoAt: 'desc' },
+    select: { litrosFinalesTotal: true, cerradoAt: true }
+  })
+  if (!ultimoCerrado) return null
+
+  const capacidadTotal = tanques.reduce((total, tanque) => total + tanque.capacidadLitros, 0)
+  const tolerancia = Math.max(5, capacidadTotal * 0.03)
+  const diferencia = litrosNuevoInicio - ultimoCerrado.litrosFinalesTotal
+  if (diferencia >= -tolerancia) return null
+
+  return {
+    litrosUltimoCierre: ultimoCerrado.litrosFinalesTotal,
+    litrosAhora: litrosNuevoInicio,
+    diferencia,
+    mensaje: `El ultimo cierre de esta unidad termino con ${ultimoCerrado.litrosFinalesTotal.toFixed(1)} L y ahora abre con ${litrosNuevoInicio.toFixed(1)} L (${diferencia.toFixed(1)} L), sin una recarga que lo explique. Verifica la lectura o si falta combustible.`
+  }
+}
+
 const abrirControl = async ({ viajeId = null, camionId, choferId = null, odometroInicial, lecturas, creadoPorId = null }) => {
   const camion = await prisma.camion.findUniqueOrThrow({ where: { id: camionId } })
   const configuracion = await requerirConfiguracionConTanques(camionId)
@@ -201,7 +222,7 @@ const abrirControl = async ({ viajeId = null, camionId, choferId = null, odometr
 
   const { detalle, litrosTotal } = calcularLecturas(configuracion.tanques, lecturas)
 
-  return prisma.controlCombustible.create({
+  const control = await prisma.controlCombustible.create({
     data: {
       viajeId,
       camionId,
@@ -213,6 +234,14 @@ const abrirControl = async ({ viajeId = null, camionId, choferId = null, odometr
     },
     include: controlIncludeBasico
   })
+
+  // Aviso de un solo momento (no se guarda en la base): compara contra el
+  // cierre del ultimo control de esta misma unidad. Si el nivel bajo sin
+  // que haya una recarga/transferencia que lo explique, puede ser una mala
+  // lectura o combustible que falta.
+  const advertenciaNivel = await calcularAdvertenciaNivel(camionId, configuracion.tanques, litrosTotal)
+
+  return { ...control, advertenciaNivel }
 }
 
 const normalizarCosto = (costo, moneda) => {

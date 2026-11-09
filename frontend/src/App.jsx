@@ -80,6 +80,13 @@ const notifyError = (text) => Swal.fire({
   text,
 })
 
+const notifyWarning = (title, text) => Swal.fire({
+  ...alertOptions,
+  icon: 'warning',
+  title,
+  text,
+})
+
 const confirmAction = (title, text, confirmButtonText = 'Confirmar') => Swal.fire({
   ...alertOptions,
   imageUrl: logo,
@@ -3048,13 +3055,18 @@ function ControlesCombustibleActivos({ camiones, viajesActivos = [], controlesAb
         odometroInicial: Number(odometroInicial),
         lecturas: (configuracion?.tanques || []).map((tanque) => ({ numero: tanque.numero, alturaCm: Number(lecturas[tanque.numero] || 0) })),
       }
-      await api.post('/combustible/controles', payload)
+      const { data } = await api.post('/combustible/controles', payload)
       setAbrirForm(false)
       setCamionId('')
       setViajeId('')
       setOdometroInicial('')
       setLecturas({})
-      await notifySuccess('Control de combustible abierto')
+      const advertencia = data?.data?.advertenciaNivel
+      if (advertencia) {
+        await notifyWarning('Nivel de combustible inesperado', advertencia.mensaje)
+      } else {
+        await notifySuccess('Control de combustible abierto')
+      }
       onDone()
     } catch (err) {
       await notifyError(err.response?.data?.mensaje || 'No se pudo abrir el control.')
@@ -4797,7 +4809,7 @@ function ChoferCombustibleSection({ unidadesDisponibles, controlesAbiertos, onDo
     event.preventDefault()
     setSaving(true)
     try {
-      await api.post('/mi/combustible/controles', {
+      const { data } = await api.post('/mi/combustible/controles', {
         camionId: unidad.id,
         odometroInicial: Number(odometroInicial),
         lecturas: unidad.tanques.map((tanque) => ({ numero: tanque.numero, alturaCm: Number(lecturas[tanque.numero] || 0) })),
@@ -4805,7 +4817,12 @@ function ChoferCombustibleSection({ unidadesDisponibles, controlesAbiertos, onDo
       setUnidadAbierta(null)
       setOdometroInicial('')
       setLecturas({})
-      await notifySuccess('Control de combustible abierto')
+      const advertencia = data?.data?.advertenciaNivel
+      if (advertencia) {
+        await notifyWarning('Nivel de combustible inesperado', advertencia.mensaje)
+      } else {
+        await notifySuccess('Control de combustible abierto')
+      }
       onDone()
     } catch (err) {
       await notifyError(err.response?.data?.mensaje || 'No se pudo abrir el control de combustible.')
