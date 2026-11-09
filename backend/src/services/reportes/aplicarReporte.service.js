@@ -39,10 +39,12 @@ const aplicarReporteChofer = async ({
     // LLEGADA no cambia el estado de la parada (sigue PENDIENTE hasta que
     // reporte Cargando/Descargando): solo marca la hora de llegada al sitio,
     // para poder auditar cuanto tiempo paso desde que llego hasta que empezo
-    // a cargar/descargar y hasta que termino. Se marca una sola vez.
-    if (tipoReporte === 'LLEGADA' && paradaIdFinal && !paradaValida.llegadaAt) {
-      await tx.parada.update({
-        where: { id: paradaIdFinal },
+    // a cargar/descargar y hasta que termino. Se marca una sola vez: el
+    // "where: llegadaAt: null" lo hace atomico, sin depender de si la copia
+    // de `viaje` recibida por el llamador estaba fresca.
+    if (tipoReporte === 'LLEGADA' && paradaIdFinal) {
+      await tx.parada.updateMany({
+        where: { id: paradaIdFinal, llegadaAt: null },
         data: { llegadaAt: new Date() },
       })
     }

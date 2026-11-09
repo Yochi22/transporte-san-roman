@@ -380,9 +380,8 @@ const marcarLlegadaParada = async (viajeId, paradaId) => {
   if (parada.viaje.estadoFinanciero === 'LIQUIDADO') {
     throw { status: 409, message: 'No se puede modificar un viaje liquidado' }
   }
-  if (parada.llegadaAt) return parada
-
-  return prisma.parada.update({ where: { id: parada.id }, data: { llegadaAt: new Date() } })
+  await prisma.parada.updateMany({ where: { id: parada.id, llegadaAt: null }, data: { llegadaAt: new Date() } })
+  return prisma.parada.findUniqueOrThrow({ where: { id: parada.id } })
 }
 
 const actualizarParada = async (viajeId, paradaId, estado) => {
