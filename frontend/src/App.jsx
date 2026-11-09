@@ -1533,6 +1533,55 @@ function RetornablesTripSection({ viaje, onDone }) {
   )
 }
 
+// Solo lectura: el control de combustible se abre/cierra desde Combustible
+// o desde la app del chofer, no desde aqui. Esto es para que, al revisar un
+// viaje puntual (ej. Barquisimeto-Caracas), se pueda comparar de un vistazo
+// la ruta con los km y el consumo reales de esa unidad en ese viaje.
+function CombustibleTripSection({ viaje }) {
+  const [controles, setControles] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    api.get('/combustible/controles', { params: { viajeId: viaje.id, pageSize: 10 } })
+      .then(({ data }) => { if (active) setControles(data?.data?.items || []) })
+      .catch(() => { if (active) setControles([]) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [viaje.id])
+
+  if (loading) return null
+
+  return (
+    <section className="space-y-3">
+      <SectionTitle title="Combustible" subtitle={`Ruta: ${formatRoute(viaje)}`} />
+      <div className="overflow-hidden rounded-md border border-neutral-200 bg-white">
+        {controles.map((control) => (
+          <div key={control.id} className="grid gap-1 border-b border-neutral-100 px-4 py-3 text-sm last:border-b-0 sm:grid-cols-[1fr_1fr_1fr_auto]">
+            <div>
+              <p className="font-medium">{control.camion?.placa || 'Sin unidad'}</p>
+              <p className="text-xs text-neutral-500">{control.estado === 'ABIERTO' ? 'Control abierto' : 'Control cerrado'}</p>
+            </div>
+            <p className="text-xs text-neutral-500">
+              Odometro: {control.odometroInicial} km{control.odometroFinal ? ` -> ${control.odometroFinal} km` : ''}
+              {control.kmRecorridos != null && ` (${control.kmRecorridos.toFixed(0)} km)`}
+            </p>
+            <p className="text-xs text-neutral-500">
+              {control.consumoNetoLitros != null ? `Consumo: ${control.consumoNetoLitros.toFixed(1)} L` : 'Aun sin cerrar'}
+              {control.rendimientoKmLitro != null && ` - ${control.rendimientoKmLitro.toFixed(2)} km/L`}
+            </p>
+            {control.clasificacion && (
+              <span className={`w-fit self-center rounded-md px-2 py-1 text-xs font-medium ${CLASIFICACION_STYLES[control.clasificacion] || ''}`}>{formatStatus(control.clasificacion)}</span>
+            )}
+          </div>
+        ))}
+        {controles.length === 0 && <Empty text="Sin control de combustible vinculado a este viaje." />}
+      </div>
+    </section>
+  )
+}
+
 function RetornableModal({ title, subtitle, children, onClose }) {
   return (
     <div className="fixed inset-0 z-[70] grid min-h-[100svh] place-items-center bg-neutral-950/40 p-4">
@@ -3840,6 +3889,8 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
           <GpsMap truckIds={gpsTruckIds} initialPositions={gpsInitialPositions} />
 
           <RetornablesTripSection viaje={viaje} onDone={onDone} />
+
+          <CombustibleTripSection viaje={viaje} />
 
           <section className="space-y-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">

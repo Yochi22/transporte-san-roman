@@ -394,10 +394,11 @@ const editarControl = async (controlId, datos) => {
 
 // --- Consultas --------------------------------------------------------------
 
-const listarControles = async ({ camionId, choferId, estado, clasificacion, page = 1, pageSize = 20 } = {}) => {
+const listarControles = async ({ camionId, choferId, viajeId, estado, clasificacion, page = 1, pageSize = 20 } = {}) => {
   const where = {}
   if (camionId) where.camionId = camionId
   if (choferId) where.choferId = choferId
+  if (viajeId) where.viajeId = viajeId
   if (estado) where.estado = estado
   if (clasificacion) where.clasificacion = clasificacion
 
