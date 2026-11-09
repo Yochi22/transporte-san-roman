@@ -12,6 +12,7 @@ enum Rol {
   ADMIN
   OPERACIONES
   CHOFER
+  COMBUSTIBLE_TALLER
 }
 
 enum OrigenReporte {

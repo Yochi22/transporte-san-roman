@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs')
 const prisma = require('../../config/database')
-const ROLES = new Set(['ADMIN', 'OPERACIONES'])
+const ROLES = new Set(['ADMIN', 'OPERACIONES', 'COMBUSTIBLE_TALLER'])
 
 const selectUsuario = {
   id: true,

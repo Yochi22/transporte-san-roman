@@ -195,13 +195,16 @@ export default function App() {
     setLoading(true)
     setError('')
 
+    const sinAcceso = Promise.resolve({ data: { data: [] } })
+    const soloCombustibleTaller = usuario?.rol === 'COMBUSTIBLE_TALLER'
+
     try {
       const resultados = await Promise.allSettled([
-        api.get('/viajes'),
+        soloCombustibleTaller ? sinAcceso : api.get('/viajes'),
         api.get('/choferes', { params: { estado: 'todos' } }),
         api.get('/camiones', { params: { estado: 'todos' } }),
-        api.get('/empresas', { params: { estado: 'todos' } }),
-        api.get('/retornables', { params: { estado: 'todos', pageSize: 500 } }),
+        soloCombustibleTaller ? sinAcceso : api.get('/empresas', { params: { estado: 'todos' } }),
+        soloCombustibleTaller ? sinAcceso : api.get('/retornables', { params: { estado: 'todos', pageSize: 500 } }),
         api.get('/combustible/controles', { params: { estado: 'ABIERTO', pageSize: 100 } }),
       ])
       const [viajesResult, choferesResult, camionesResult, empresasResult, retornablesResult, combustibleResult] = resultados
@@ -241,7 +244,7 @@ export default function App() {
     } finally {
       setLoading(false)
     }
-  }, [isAuthenticated, logout])
+  }, [isAuthenticated, logout, usuario?.rol])
 
   const cargarWhatsappStatus = useCallback(async () => {
     if (!isAuthenticated || usuario?.rol !== 'ADMIN') return
@@ -361,6 +364,7 @@ export default function App() {
 
   const data = useMemo(() => buildOperationalData({ viajes, choferes, camiones, retornables, query }), [viajes, choferes, camiones, retornables, query])
   const isAdmin = usuario?.rol === 'ADMIN'
+  const isCombustibleTaller = usuario?.rol === 'COMBUSTIBLE_TALLER'
 
   useEffect(() => {
     if (!isAuthenticated || !isAdmin) return
@@ -370,10 +374,12 @@ export default function App() {
     return () => clearInterval(interval)
   }, [cargarWhatsappStatus, isAdmin, isAuthenticated])
 
-  const visibleTabs = useMemo(
-    () => tabs.filter((tab) => !['liquidaciones', 'usuarios'].includes(tab.id) || isAdmin),
-    [isAdmin]
-  )
+  const visibleTabs = useMemo(() => {
+    if (isCombustibleTaller) return tabs.filter((tab) => ['combustible', 'taller', 'recursos'].includes(tab.id))
+    return tabs.filter((tab) => !['liquidaciones', 'usuarios'].includes(tab.id) || isAdmin)
+  }, [isAdmin, isCombustibleTaller])
+
+  const effectiveTab = isCombustibleTaller && !['combustible', 'taller', 'recursos'].includes(activeTab) ? 'combustible' : activeTab
 
   if (authChecking) {
     return (
@@ -407,7 +413,7 @@ export default function App() {
             <nav className="mt-8 space-y-1.5">
               {visibleTabs.map((tab) => {
                 const Icon = tab.icon
-                const active = activeTab === tab.id
+                const active = effectiveTab === tab.id
                 return (
                   <button
                     key={tab.id}
@@ -446,7 +452,7 @@ export default function App() {
                 <Menu size={18} />
               </button>
               <div className="min-w-0 flex-1">
-                <h1 className="truncate text-base font-semibold">{pageTitle(activeTab)}</h1>
+                <h1 className="truncate text-base font-semibold">{pageTitle(effectiveTab)}</h1>
                 <p className="hidden text-xs text-neutral-500 sm:block">{data.activos.length} viajes en curso · {data.pendientesLiquidacion.length} por liquidar</p>
               </div>
               <div className="relative hidden w-full max-w-sm md:block">
@@ -474,7 +480,7 @@ export default function App() {
             {error && <Banner tone="danger" icon={AlertTriangle} text={error} />}
             {loading && <Banner tone="neutral" icon={RefreshCw} text="Actualizando datos..." />}
 
-            {activeTab === 'monitor' && (
+            {effectiveTab === 'monitor' && (
               <Monitor
                 data={data}
                 alertas={alertas}
@@ -486,37 +492,37 @@ export default function App() {
                 onSelect={setSelectedViaje}
               />
             )}
-            {activeTab === 'viajes' && (
+            {effectiveTab === 'viajes' && (
               <ViajesView data={data} empresas={empresas} camiones={data.camionesActivosTodos} onSelect={setSelectedViaje} />
             )}
-            {activeTab === 'archivo' && (
+            {effectiveTab === 'archivo' && (
               <ArchivoView empresas={empresas} camiones={data.camionesActivosTodos} onSelect={setSelectedViaje} />
             )}
-            {activeTab === 'reportes' && (
+            {effectiveTab === 'reportes' && (
               <ReportesTableView reportes={data.reportes} onSelectViaje={setSelectedViaje} />
             )}
-            {activeTab === 'retornables' && (
+            {effectiveTab === 'retornables' && (
               <RetornablesView retornables={data.retornables} viajes={viajes} choferes={choferes} camiones={camiones} onDone={() => fetchData({ refreshSelected: true })} />
             )}
-            {activeTab === 'despacho' && (
+            {effectiveTab === 'despacho' && (
               <DespachoView choferes={data.choferesOperativos} camiones={data.camionesActivosTodos} empresas={empresas.filter((empresa) => empresa.activo)} viajesPendientes={data.pendientesLiquidacion} onDone={() => fetchData()} />
             )}
-            {activeTab === 'empresas' && (
+            {effectiveTab === 'empresas' && (
               <EmpresasView empresas={empresas} isAdmin={isAdmin} onDone={() => fetchData()} />
             )}
-            {activeTab === 'recursos' && (
+            {effectiveTab === 'recursos' && (
               <RecursosView data={data} isAdmin={isAdmin} onDone={() => fetchData()} />
             )}
-            {isAdmin && activeTab === 'usuarios' && (
+            {isAdmin && effectiveTab === 'usuarios' && (
               <UsuariosView currentUser={usuario} />
             )}
-            {activeTab === 'taller' && (
+            {effectiveTab === 'taller' && (
               <TallerView camiones={data.camionesActivosTodos} onDone={() => fetchData()} />
             )}
-            {activeTab === 'combustible' && (
-              <CombustibleView camiones={data.camionesActivosTodos} choferes={data.choferesOperativos} viajesActivos={data.activos} controlesAbiertos={controlesCombustible} isAdmin={isAdmin} onDone={() => fetchData()} />
+            {effectiveTab === 'combustible' && (
+              <CombustibleView camiones={data.camionesActivosTodos} choferes={data.choferesOperativos} viajesActivos={data.activos} controlesAbiertos={controlesCombustible} isAdmin={isAdmin || isCombustibleTaller} onDone={() => fetchData()} />
             )}
-            {isAdmin && activeTab === 'liquidaciones' && (
+            {isAdmin && effectiveTab === 'liquidaciones' && (
               <LiquidacionesView viajes={data.liquidados} choferes={choferes} empresas={empresas} camiones={data.camionesActivosTodos} onDone={() => fetchData()} />
             )}
           </div>
@@ -4514,6 +4520,7 @@ function UsuariosView({ currentUser }) {
                 <select value={form.rol} onChange={(event) => setForm({ ...form, rol: event.target.value })} className="input">
                   <option value="OPERACIONES">Operaciones</option>
                   <option value="ADMIN">Admin</option>
+                  <option value="COMBUSTIBLE_TALLER">Combustible y Taller</option>
                 </select>
               </Field>
               <Field label={editingId ? 'Nueva clave (opcional)' : 'Clave'}>

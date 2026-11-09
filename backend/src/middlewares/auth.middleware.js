@@ -50,4 +50,11 @@ const soloChofer = (req, res, next) => {
   next()
 }
 
-module.exports = { autenticar, soloAdmin, adminOOperaciones, soloChofer }
+const rolesPermitidos = (...roles) => (req, res, next) => {
+  if (!roles.includes(req.usuario?.rol)) {
+    return error(res, 'Acceso no autorizado', 403)
+  }
+  next()
+}
+
+module.exports = { autenticar, soloAdmin, adminOOperaciones, soloChofer, rolesPermitidos }

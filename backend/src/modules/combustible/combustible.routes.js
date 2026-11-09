@@ -1,12 +1,12 @@
 const express = require('express')
 const router = express.Router()
 const ctrl = require('./combustible.controller')
-const { autenticar, adminOOperaciones, soloAdmin } = require('../../middlewares/auth.middleware')
+const { autenticar, soloAdmin, rolesPermitidos } = require('../../middlewares/auth.middleware')
 
-router.use(autenticar, adminOOperaciones)
+router.use(autenticar, rolesPermitidos('ADMIN', 'OPERACIONES', 'COMBUSTIBLE_TALLER'))
 
 router.get('/configuracion/:camionId', ctrl.obtenerConfiguracion)
-router.put('/configuracion/:camionId', soloAdmin, ctrl.guardarConfiguracion)
+router.put('/configuracion/:camionId', rolesPermitidos('ADMIN', 'COMBUSTIBLE_TALLER'), ctrl.guardarConfiguracion)
 
 router.get('/controles', ctrl.listarControles)
 router.get('/controles/resumen', ctrl.obtenerResumen)

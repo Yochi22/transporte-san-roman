@@ -50,7 +50,7 @@ Transporte San Roman centraliza:
 - Taller e historial de mantenimiento.
 - Control de combustible por unidad: configuracion de tanques (tabla de calibracion cm->litros) y umbrales de rendimiento, controles abiertos/cerrados con lecturas de odometro y varilla, eventos de recarga/transferencia, e historico de rendimiento. Independiente del cierre/liquidacion del viaje.
 - Ultima posicion GPS por unidad mediante Traccar.
-- Usuarios `ADMIN`, `OPERACIONES` y `CHOFER`.
+- Usuarios `ADMIN`, `OPERACIONES`, `CHOFER` y `COMBUSTIBLE_TALLER` (acceso reducido a Combustible, Taller y consulta de unidades/choferes).
 
 Es un MVP operativo avanzado. Prioriza integridad de estados, trazabilidad, disponibilidad, seguridad y claridad para operadores.
 
@@ -149,7 +149,7 @@ No mezcles procedimientos del modo unificado con el Compose separado sin adaptar
 Estados principales:
 
 ```text
-Rol: ADMIN | OPERACIONES | CHOFER
+Rol: ADMIN | OPERACIONES | CHOFER | COMBUSTIBLE_TALLER
 Camion: DISPONIBLE | EN_RUTA | EN_TALLER
 Chofer: DISPONIBLE | EN_RUTA | DESCANSO
 Viaje logistico: PENDIENTE | EN_CURSO | COMPLETADO | CANCELADO
@@ -236,6 +236,8 @@ Rutas publicas/especiales:
 - `/whatsapp-qr` y su estado: admin salvo demo publica explicita.
 
 Rutas autenticadas: auth perfil/logout, choferes, camiones, viajes, retornables, taller, tasas y consulta GPS. Son solo admin: usuarios; mutaciones de choferes/camiones; gastos; recarga/documentacion; pendientes de liquidacion; administracion de WhatsApp; acceso de choferes a la app. `/api/mi/*` es exclusivo de `CHOFER` y solo ve su propio viaje.
+
+El rol `COMBUSTIBLE_TALLER` (middleware `rolesPermitidos`, `backend/src/middlewares/auth.middleware.js`) es un acceso reducido: puede usar `/api/combustible/*` y `/api/taller/*` igual que `OPERACIONES` (incluyendo editar configuracion/umbrales de combustible, algo que a `OPERACIONES` le esta vedado), y puede consultar (`GET`) `/api/choferes` y `/api/camiones` para ubicar la unidad correcta, pero no accede a `/api/viajes`, `/api/empresas`, `/api/retornables`, `/api/gastos` ni mutaciones de choferes/camiones (siguen `soloAdmin`). El frontend oculta esas secciones para este rol y evita llamarlas en el refresco general (`fetchData` en `App.jsx`) para no generar errores 403 ruidosos.
 
 ### Inventario de endpoints
 
@@ -935,6 +937,15 @@ Para el modulo de combustible, la migracion esperada es `20261109120000_add_fuel
 6. Si el control cierra en clasificacion CRITICO, confirma que aparece el aviso dentro del modulo de Combustible (no en el resumen de alertas operativas).
 7. Confirma que un viaje se puede cerrar/liquidar normalmente sin haber tocado el control de combustible, y viceversa.
 8. Elimina los datos de prueba (configuracion, control y eventos) solo si no representan operacion real.
+
+Para el rol `COMBUSTIBLE_TALLER`, la migracion esperada es `20261110230000_add_combustible_taller_role`. Es aditiva: agrega el valor `COMBUSTIBLE_TALLER` a `Rol` (`ALTER TYPE ... ADD VALUE IF NOT EXISTS`). No rellena datos ni necesita variables de entorno nuevas; ninguna tabla existente se modifica. Validacion especifica tras desplegar:
+
+1. Desde Usuarios (ADMIN), crea un usuario con rol "Combustible y Taller" y copia su clave inicial.
+2. Inicia sesion con ese usuario en un navegador aparte y confirma que el menu solo muestra Combustible, Taller y Recursos (sin Viajes, Archivo, Reportes, Retornables, Agendamiento, Empresas, Usuarios ni Liquidaciones).
+3. Confirma que puede abrir/cerrar un control de combustible, registrar un evento, editar la configuracion de tanques/umbrales de una unidad, y crear/completar una entrada de taller.
+4. Confirma que no puede crear/editar/inactivar choferes o camiones (solo lectura en Recursos) y que la API responde 403 si se fuerza una llamada a `/api/viajes`, `/api/empresas`, `/api/retornables` o `/api/gastos`.
+5. Confirma que `OPERACIONES` y `ADMIN` siguen funcionando exactamente igual que antes (el cambio es aditivo sobre los middlewares existentes).
+6. Elimina el usuario de prueba solo si no generaron historial real.
 
 ### 13.6 Aplicacion
 
