@@ -1,5 +1,6 @@
 const prisma = require('../../config/database')
 const { aplicarReporteChofer } = require('../../services/reportes/aplicarReporte.service')
+const combustibleService = require('../combustible/combustible.service')
 
 const TIPOS_VALIDOS = new Set(['CARGANDO', 'DESCARGADO', 'ESPERANDO_INSTRUCCIONES', 'LIBRE', 'NOVEDAD', 'OTRO'])
 const ESTADOS_PARADA_VALIDOS = new Set(['EN_CURSO', 'COMPLETADA'])
@@ -138,4 +139,92 @@ const registrarReporte = async ({ choferId, viajeId, paradaId, tipoReporte, esta
   })
 }
 
-module.exports = { obtenerMiViaje, registrarReporte }
+// --- Combustible: el chofer carga sus propias lecturas y eventos, pero el
+// modulo (combustible.service.js) es el mismo que usa el panel admin para
+// supervisar/corregir - una sola fuente de verdad, igual que aplicarReporteChofer.
+
+const camionConTanquesSelect = {
+  id: true,
+  placa: true,
+  tipoVehiculo: true,
+  configuracionCombustible: { select: { tanques: { select: { numero: true }, orderBy: { numero: 'asc' } } } },
+}
+
+// Solo expone unidades que ya tienen tanques configurados: si una unidad no
+// tiene combustible configurado, abrir un control fallaria igual, mejor no
+// ofrecerla en la app del chofer.
+const unidadesDeViajesActivos = async (choferId) => {
+  const viajes = await prisma.viaje.findMany({
+    where: { choferId, estadoLogistico: 'EN_CURSO' },
+    select: {
+      id: true,
+      camionId: true,
+      camion: { select: camionConTanquesSelect },
+      unidades: { select: { camion: { select: camionConTanquesSelect } } },
+    },
+  })
+  const camionesPorId = new Map()
+  for (const viaje of viajes) {
+    const candidatos = viaje.unidades.length > 0 ? viaje.unidades.map((u) => u.camion) : [viaje.camion]
+    for (const camion of candidatos.filter((c) => c?.configuracionCombustible?.tanques?.length > 0)) {
+      if (!camionesPorId.has(camion.id)) {
+        camionesPorId.set(camion.id, {
+          id: camion.id,
+          placa: camion.placa,
+          tipoVehiculo: camion.tipoVehiculo,
+          tanques: camion.configuracionCombustible.tanques,
+          viajeId: viaje.id,
+        })
+      }
+    }
+  }
+  return [...camionesPorId.values()]
+}
+
+const obtenerMiCombustible = async (choferId) => {
+  const [controlesAbiertos, unidades] = await Promise.all([
+    combustibleService.obtenerMisControlesAbiertos(choferId),
+    unidadesDeViajesActivos(choferId),
+  ])
+  return { controlesAbiertos, unidadesDisponibles: unidades }
+}
+
+const abrirMiControlCombustible = async (choferId, datos, actorUsuarioId) => {
+  const unidades = await unidadesDeViajesActivos(choferId)
+  const unidad = unidades.find((u) => u.id === datos.camionId)
+  if (!unidad) throw { status: 403, message: 'Esa unidad no corresponde a tu viaje activo' }
+
+  return combustibleService.abrirControl({
+    viajeId: unidad.viajeId,
+    camionId: unidad.id,
+    choferId,
+    odometroInicial: datos.odometroInicial,
+    lecturas: datos.lecturas,
+    creadoPorId: actorUsuarioId || null,
+  })
+}
+
+const requerirControlPropio = async (choferId, controlId) => {
+  const control = await combustibleService.obtenerControl(controlId)
+  if (control.chofer?.id !== choferId) throw { status: 403, message: 'Ese control de combustible no te pertenece' }
+  return control
+}
+
+const registrarMiEventoCombustible = async (choferId, controlId, datos, actorUsuarioId) => {
+  await requerirControlPropio(choferId, controlId)
+  return combustibleService.registrarEvento(controlId, datos, actorUsuarioId || null)
+}
+
+const cerrarMiControlCombustible = async (choferId, controlId, datos, actorUsuarioId) => {
+  await requerirControlPropio(choferId, controlId)
+  return combustibleService.cerrarControl(controlId, datos, actorUsuarioId || null)
+}
+
+module.exports = {
+  obtenerMiViaje,
+  registrarReporte,
+  obtenerMiCombustible,
+  abrirMiControlCombustible,
+  registrarMiEventoCombustible,
+  cerrarMiControlCombustible,
+}

@@ -48,6 +48,7 @@ Transporte San Roman centraliza:
 - Gastos, viaticos, tasa BCV, documentacion y liquidaciones.
 - Retornables y sus movimientos.
 - Taller e historial de mantenimiento.
+- Control de combustible por unidad: configuracion de tanques (tabla de calibracion cm->litros) y umbrales de rendimiento, controles abiertos/cerrados con lecturas de odometro y varilla, eventos de recarga/transferencia, e historico de rendimiento. Independiente del cierre/liquidacion del viaje.
 - Ultima posicion GPS por unidad mediante Traccar.
 - Usuarios `ADMIN`, `OPERACIONES` y `CHOFER`.
 
@@ -142,6 +143,8 @@ No mezcles procedimientos del modo unificado con el Compose separado sin adaptar
 - `TruckPosition`: una fila por camion; no es historial.
 - `MantenimientoVehiculo`: entradas de taller.
 - `Retornable` y `RetornableMovimiento`: saldo y trazabilidad.
+- `ConfiguracionCombustibleCamion`, `TanqueCombustible` y `PuntoCalibracionTanque`: ficha de combustible por unidad (1 o 2 tanques, tabla de calibracion cm->litros, umbrales de rendimiento optimo/deficiente; debajo del deficiente es critico). Solo `ADMIN` la edita.
+- `ControlCombustible` y `EventoCombustible`: un control por unidad entre lectura inicial y final (odometro + varilla por tanque, convertida a litros via interpolacion lineal sobre la tabla de calibracion), con eventos de recarga/transferencia durante el viaje. Una transferencia a otra unidad crea automaticamente el evento espejo en el control de la unidad destino (exige que ese control este `ABIERTO`). Al cerrar se calculan `kmRecorridos`, `consumoNetoLitros`, `rendimientoKmLitro` y `clasificacion`. Independiente de `estadoLogistico`/`estadoFinanciero` del viaje: no bloquea ni depende del cierre/liquidacion.
 
 Estados principales:
 
@@ -303,8 +306,24 @@ Rutas autenticadas: auth perfil/logout, choferes, camiones, viajes, retornables,
 | `POST /api/whatsapp/reiniciar` | ADMIN | Borra sesion y genera QR nuevo |
 | `GET /api/mi/viaje` | CHOFER | Viaje(s) propios en curso, con paradas y reportes recientes |
 | `POST /api/mi/reportes` | CHOFER | Registra un reporte estructurado desde la app |
+| `GET /api/combustible/configuracion/:camionId` | A/O | Tanques, calibracion y umbrales de una unidad |
+| `PUT /api/combustible/configuracion/:camionId` | ADMIN | Crea/edita tanques, calibracion y umbrales |
+| `GET /api/combustible/controles` | A/O | Lista controles, filtra por camion/chofer/estado/clasificacion |
+| `GET /api/combustible/controles/resumen` | A/O | Promedios de rendimiento por camion y por chofer |
+| `GET /api/combustible/controles/:id` | A/O | Detalle de un control con sus eventos |
+| `POST /api/combustible/controles` | A/O | Abre un control (fallback manual; normalmente lo abre el chofer) |
+| `PATCH /api/combustible/controles/:id` | ADMIN | Corrige lecturas/odometro de un control, recalcula si ya esta cerrado |
+| `POST /api/combustible/controles/:id/eventos` | A/O | Registra recarga/transferencia (fallback manual) |
+| `DELETE /api/combustible/controles/:id/eventos/:eventoId` | ADMIN | Elimina un evento erroneo, recalcula si el control ya esta cerrado |
+| `POST /api/combustible/controles/:id/cerrar` | A/O | Cierra con lectura final (fallback manual) |
+| `GET /api/mi/combustible` | CHOFER | Controles propios abiertos y unidades disponibles (con tanques configurados) de su viaje activo |
+| `POST /api/mi/combustible/controles` | CHOFER | Abre un control propio |
+| `POST /api/mi/combustible/controles/:id/eventos` | CHOFER | Registra una recarga en un control propio abierto |
+| `POST /api/mi/combustible/controles/:id/cerrar` | CHOFER | Cierra un control propio con lectura final |
 
 No existe endpoint independiente de reportes para ADMIN/OPERACIONES: se cargan dentro de viajes y se crean desde WhatsApp o desde la app del chofer. Los controladores de viaje filtran informacion financiera para `OPERACIONES`; conserva ese filtrado al agregar campos. `ReporteChofer.origen` distingue `WHATSAPP` de `APP`.
+
+El combustible sigue el mismo principio de doble canal: `backend/src/modules/combustible/combustible.service.js` es la unica fuente de verdad para abrir/registrar eventos/cerrar un control, y tanto `/api/combustible/*` (operador, con capacidad de correccion) como `/api/mi/combustible/*` (chofer, auto-servicio sobre su propio viaje/unidad) llaman a las mismas funciones. El chofer normalmente carga sus propias lecturas y eventos; operaciones/admin pueden ver, abrir/cerrar/registrar como respaldo manual, y solo `ADMIN` puede editar/corregir un control o borrar un evento.
 
 Autoservicio del chofer (`/api/mi`, rol `CHOFER`, requiere `autenticar` + `soloChofer`):
 
@@ -312,6 +331,10 @@ Autoservicio del chofer (`/api/mi`, rol `CHOFER`, requiere `autenticar` + `soloC
 |---|---|
 | `GET /api/mi/viaje` | Viaje(s) `EN_CURSO` del chofer autenticado, con paradas y sus reportes recientes |
 | `POST /api/mi/reportes` | Registra un reporte estructurado (botones, sin IA) para un viaje propio |
+| `GET /api/mi/combustible` | Controles de combustible propios abiertos y unidades disponibles |
+| `POST /api/mi/combustible/controles` | Abre un control de combustible para una unidad de su viaje activo |
+| `POST /api/mi/combustible/controles/:id/eventos` | Registra una recarga en un control propio |
+| `POST /api/mi/combustible/controles/:id/cerrar` | Cierra un control propio con la lectura final |
 
 Gestion de acceso del chofer (dentro de `/api/choferes`, todas `ADMIN`, paso manual separado de crear el chofer):
 
@@ -901,6 +924,17 @@ Para el rol `CHOFER`, la migracion esperada es `20260930160000_add_chofer_role_a
 4. Envia tambien un reporte por WhatsApp sobre el mismo chofer/viaje y confirma que ambos canales conviven sin pisarse.
 5. Prueba "Revocar acceso" y confirma que la sesion del chofer muere de inmediato (401 en su siguiente accion).
 6. Elimina el chofer/usuario de prueba solo si no generaron historial real.
+
+Para el modulo de combustible, la migracion esperada es `20261109120000_add_fuel_control_module`. Es aditiva: crea `configuraciones_combustible_camion`, `tanques_combustible`, `puntos_calibracion_tanque`, `controles_combustible` y `eventos_combustible`, los enums `EstadoControlCombustible`, `TipoEventoCombustible` y `ClasificacionRendimiento`, con RLS habilitado y sin grants a `PUBLIC`/`anon`/`authenticated`. No rellena datos ni necesita variables de entorno nuevas; ninguna tabla existente se modifica. Validacion especifica tras desplegar:
+
+1. Desde Combustible > Configuracion de unidades (ADMIN), configura 1-2 tanques con al menos 2 puntos de calibracion cada uno y los umbrales de rendimiento para una unidad real con viaje activo.
+2. Desde la app de un chofer con viaje en curso usando esa unidad, abre un control de combustible con odometro y varilla inicial; confirma en el panel admin (Combustible > Controles activos) que aparece con los litros calculados.
+3. Registra una recarga desde la app del chofer; confirma que aparece en el detalle del control en el panel admin.
+4. Con dos unidades activas con controles abiertos, registra una transferencia de una a otra y confirma que aparece el evento espejo (ENTRADA) en el control de la unidad destino.
+5. Cierra el control desde la app del chofer con la lectura final; confirma a mano el calculo de km recorridos, consumo neto, rendimiento y clasificacion contra los umbrales configurados, y que aparece en Combustible > Historico.
+6. Si el control cierra en clasificacion CRITICO, confirma que aparece el aviso dentro del modulo de Combustible (no en el resumen de alertas operativas).
+7. Confirma que un viaje se puede cerrar/liquidar normalmente sin haber tocado el control de combustible, y viceversa.
+8. Elimina los datos de prueba (configuracion, control y eventos) solo si no representan operacion real.
 
 ### 13.6 Aplicacion
 

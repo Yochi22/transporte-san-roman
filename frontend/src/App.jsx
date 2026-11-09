@@ -22,6 +22,7 @@ import {
   Eye,
   EyeOff,
   FileCheck,
+  Fuel,
   LayoutDashboard,
   LogOut,
   MapPin,
@@ -119,6 +120,7 @@ const tabs = [
   { id: 'recursos', label: 'Recursos', icon: Users },
   { id: 'usuarios', label: 'Usuarios', icon: User },
   { id: 'taller', label: 'Taller', icon: Wrench },
+  { id: 'combustible', label: 'Combustible', icon: Fuel },
   { id: 'liquidaciones', label: 'Liquidaciones', icon: Calculator },
 ]
 
@@ -161,6 +163,7 @@ export default function App() {
   const [camiones, setCamiones] = useState([])
   const [empresas, setEmpresas] = useState([])
   const [retornables, setRetornables] = useState([])
+  const [controlesCombustible, setControlesCombustible] = useState([])
 
   const logout = useCallback(() => {
     setIsAuthenticated(false)
@@ -191,8 +194,9 @@ export default function App() {
         api.get('/camiones', { params: { estado: 'todos' } }),
         api.get('/empresas', { params: { estado: 'todos' } }),
         api.get('/retornables', { params: { estado: 'todos', pageSize: 500 } }),
+        api.get('/combustible/controles', { params: { estado: 'ABIERTO', pageSize: 100 } }),
       ])
-      const [viajesResult, choferesResult, camionesResult, empresasResult, retornablesResult] = resultados
+      const [viajesResult, choferesResult, camionesResult, empresasResult, retornablesResult, combustibleResult] = resultados
       const rechazado = resultados.find((resultado) => resultado.status === 'rejected')
       if (rechazado?.reason?.response?.status === 401) {
         logout()
@@ -207,6 +211,10 @@ export default function App() {
       if (retornablesResult.status === 'fulfilled') {
         const dataRetornables = retornablesResult.value.data?.data
         setRetornables(dataRetornables?.items || dataRetornables || [])
+      }
+      if (combustibleResult.status === 'fulfilled') {
+        const dataCombustible = combustibleResult.value.data?.data
+        setControlesCombustible(dataCombustible?.items || dataCombustible || [])
       }
       if (rechazado) setError('Parte de la informacion no pudo cargarse. Revisa el detalle e intenta actualizar.')
 
@@ -496,6 +504,9 @@ export default function App() {
             )}
             {activeTab === 'taller' && (
               <TallerView camiones={data.camionesActivosTodos} onDone={() => fetchData()} />
+            )}
+            {activeTab === 'combustible' && (
+              <CombustibleView camiones={data.camionesActivosTodos} choferes={data.choferesOperativos} controlesAbiertos={controlesCombustible} isAdmin={isAdmin} onDone={() => fetchData()} />
             )}
             {isAdmin && activeTab === 'liquidaciones' && (
               <LiquidacionesView viajes={data.liquidados} choferes={choferes} empresas={empresas} camiones={data.camionesActivosTodos} onDone={() => fetchData()} />
@@ -2883,6 +2894,588 @@ function TallerView({ camiones, onDone }) {
   )
 }
 
+const CLASIFICACION_STYLES = {
+  OPTIMO: 'bg-emerald-50 text-emerald-700',
+  DEFICIENTE: 'bg-amber-50 text-amber-700',
+  CRITICO: 'bg-red-50 text-red-700',
+}
+
+function CombustibleView({ camiones, choferes, controlesAbiertos, isAdmin, onDone }) {
+  const [subTab, setSubTab] = useState('activos')
+  const subTabs = [
+    { id: 'activos', label: 'Controles activos' },
+    { id: 'configuracion', label: 'Configuracion de unidades' },
+    { id: 'historico', label: 'Historico' },
+  ]
+
+  return (
+    <div className="space-y-5">
+      <AlertasRendimientoCritico onSelect={() => setSubTab('historico')} />
+
+      <div className="flex gap-1 overflow-x-auto border-b border-neutral-200">
+        {subTabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setSubTab(tab.id)}
+            className={`-mb-px shrink-0 border-b-2 px-3 py-2 text-sm font-medium ${subTab === tab.id ? 'border-neutral-950 text-neutral-950' : 'border-transparent text-neutral-500 hover:text-neutral-800'}`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      {subTab === 'activos' && <ControlesCombustibleActivos camiones={camiones} controlesAbiertos={controlesAbiertos} onDone={onDone} />}
+      {subTab === 'configuracion' && <ConfiguracionCombustibleView camiones={camiones} isAdmin={isAdmin} />}
+      {subTab === 'historico' && <HistoricoCombustibleView camiones={camiones} choferes={choferes} />}
+    </div>
+  )
+}
+
+// Aparte del flujo de alertas de reportes/novedades (que tiene sonido y vive
+// en el Resumen): esto es un indicador propio del modulo de combustible,
+// visible solo mientras se esta viendo esta seccion, sin sonido ni mezcla
+// con las notificaciones operativas.
+function AlertasRendimientoCritico({ onSelect }) {
+  const [controles, setControles] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let active = true
+    api.get('/combustible/controles', { params: { estado: 'CERRADO', clasificacion: 'CRITICO', pageSize: 5 } })
+      .then(({ data }) => { if (active) setControles(data?.data?.items || []) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+
+  if (loading || controles.length === 0) return null
+
+  return (
+    <button type="button" onClick={onSelect} className="flex w-full items-start gap-3 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-left hover:bg-red-100">
+      <AlertTriangle className="mt-0.5 shrink-0 text-red-600" size={18} />
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-red-700">Rendimiento critico en {controles.length} {controles.length === 1 ? 'control' : 'controles'} recientes</p>
+        <p className="mt-0.5 truncate text-xs text-red-600">
+          {controles.map((control) => `${control.camion?.placa || 'Unidad'} (${control.rendimientoKmLitro?.toFixed(2)} km/L)`).join(' - ')}
+        </p>
+      </div>
+    </button>
+  )
+}
+
+function ControlesCombustibleActivos({ camiones, controlesAbiertos, onDone }) {
+  const [abrirForm, setAbrirForm] = useState(false)
+  const [camionId, setCamionId] = useState('')
+  const [configuracion, setConfiguracion] = useState(null)
+  const [cargandoConfig, setCargandoConfig] = useState(false)
+  const [odometroInicial, setOdometroInicial] = useState('')
+  const [lecturas, setLecturas] = useState({})
+  const [saving, setSaving] = useState(false)
+  const [expandido, setExpandido] = useState(null)
+
+  const opcionesCamion = unitFilterOptions(camiones)
+
+  useEffect(() => {
+    if (!camionId) { setConfiguracion(null); return }
+    let active = true
+    setCargandoConfig(true)
+    api.get(`/combustible/configuracion/${camionId}`)
+      .then(({ data }) => { if (active) setConfiguracion(data?.data || null) })
+      .catch(() => { if (active) setConfiguracion(null) })
+      .finally(() => { if (active) setCargandoConfig(false) })
+    return () => { active = false }
+  }, [camionId])
+
+  const abrir = async (event) => {
+    event.preventDefault()
+    setSaving(true)
+    try {
+      const payload = {
+        camionId,
+        odometroInicial: Number(odometroInicial),
+        lecturas: (configuracion?.tanques || []).map((tanque) => ({ numero: tanque.numero, alturaCm: Number(lecturas[tanque.numero] || 0) })),
+      }
+      await api.post('/combustible/controles', payload)
+      setAbrirForm(false)
+      setCamionId('')
+      setOdometroInicial('')
+      setLecturas({})
+      await notifySuccess('Control de combustible abierto')
+      onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo abrir el control.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <section className="rounded-md border border-neutral-200 bg-white">
+        <div className="flex flex-col gap-3 border-b border-neutral-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <SectionTitle title="Controles abiertos" subtitle="Lectura inicial, eventos en ruta y cierre por unidad" />
+          <button onClick={() => setAbrirForm((value) => !value)} className="btn-primary">
+            <Plus size={16} />
+            Abrir control
+          </button>
+        </div>
+
+        {abrirForm && (
+          <form onSubmit={abrir} className="space-y-3 border-b border-neutral-100 bg-neutral-50 p-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <Field label="Unidad">
+                <SearchableSelect value={camionId} options={opcionesCamion} onChange={setCamionId} placeholder="Buscar unidad" />
+              </Field>
+              <Field label="Odometro inicial (km)">
+                <input required type="number" min="0" value={odometroInicial} onChange={(event) => setOdometroInicial(event.target.value)} className="input" />
+              </Field>
+            </div>
+            {cargandoConfig && <p className="text-xs text-neutral-500">Cargando configuracion de la unidad...</p>}
+            {camionId && !cargandoConfig && !configuracion && (
+              <Banner tone="danger" icon={AlertTriangle} text="Esta unidad no tiene tanques/calibracion configurados. Ve a Configuracion de unidades primero." />
+            )}
+            {configuracion?.tanques?.length > 0 && (
+              <div className="grid gap-3 md:grid-cols-2">
+                {configuracion.tanques.map((tanque) => (
+                  <Field key={tanque.numero} label={`Tanque ${tanque.numero} - lectura de varilla (cm)`}>
+                    <input
+                      required
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      value={lecturas[tanque.numero] || ''}
+                      onChange={(event) => setLecturas((prev) => ({ ...prev, [tanque.numero]: event.target.value }))}
+                      className="input"
+                    />
+                  </Field>
+                ))}
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setAbrirForm(false)} className="btn-secondary">Cancelar</button>
+              <button disabled={saving || !configuracion} className="btn-primary">{saving ? 'Guardando' : 'Abrir control'}</button>
+            </div>
+          </form>
+        )}
+
+        <div>
+          {controlesAbiertos.length === 0 && <Empty text="No hay controles de combustible abiertos." />}
+          {controlesAbiertos.map((control) => (
+            <ControlCombustibleRow
+              key={control.id}
+              control={control}
+              expandido={expandido === control.id}
+              onToggle={() => setExpandido((value) => (value === control.id ? null : control.id))}
+              camiones={camiones}
+              onDone={onDone}
+            />
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function ControlCombustibleRow({ control, expandido, onToggle, camiones, onDone }) {
+  const [tipoEvento, setTipoEvento] = useState('RECARGA_ESTACION')
+  const [litros, setLitros] = useState('')
+  const [costo, setCosto] = useState('')
+  const [moneda, setMoneda] = useState('VES')
+  const [ubicacion, setUbicacion] = useState('')
+  const [observacion, setObservacion] = useState('')
+  const [camionDestinoId, setCamionDestinoId] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const litrosIniciales = control.lecturasInicialesTanques?.reduce((total, lectura) => total + lectura.litros, 0) || control.litrosInicialesTotal
+
+  const registrarEvento = async (event) => {
+    event.preventDefault()
+    setSaving(true)
+    try {
+      await api.post(`/combustible/controles/${control.id}/eventos`, {
+        tipo: tipoEvento,
+        litros: Number(litros),
+        costo: costo ? Number(costo) : undefined,
+        moneda: costo ? moneda : undefined,
+        ubicacion: ubicacion || undefined,
+        observacion: observacion || undefined,
+        camionDestinoId: tipoEvento === 'TRANSFERENCIA_SALIDA' ? camionDestinoId : undefined,
+      })
+      setLitros(''); setCosto(''); setUbicacion(''); setObservacion(''); setCamionDestinoId('')
+      await notifySuccess('Evento registrado')
+      onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo registrar el evento.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const cerrar = async () => {
+    const result = await Swal.fire({
+      ...alertOptions,
+      title: `Cerrar control - ${control.camion?.placa || ''}`,
+      html: `
+        <label class="sanroman-alert-label">Odometro final (km)</label>
+        <input id="cc-odometro" class="swal2-input sanroman-alert-field" type="number" min="0">
+        ${(control.lecturasInicialesTanques || []).map((lectura) => `
+          <label class="sanroman-alert-label">Tanque ${lectura.numero} - lectura final (cm)</label>
+          <input id="cc-tanque-${lectura.numero}" class="swal2-input sanroman-alert-field" type="number" min="0" step="0.1">
+        `).join('')}
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Cerrar control',
+      cancelButtonText: 'Cancelar',
+      reverseButtons: true,
+      preConfirm: () => ({
+        odometroFinal: document.getElementById('cc-odometro').value,
+        lecturas: (control.lecturasInicialesTanques || []).map((lectura) => ({
+          numero: lectura.numero,
+          alturaCm: document.getElementById(`cc-tanque-${lectura.numero}`).value,
+        })),
+      }),
+    })
+    if (!result.isConfirmed) return
+    try {
+      const { data } = await api.post(`/combustible/controles/${control.id}/cerrar`, result.value)
+      const cerrado = data?.data
+      await notifySuccess(
+        'Control cerrado',
+        `Km recorridos: ${cerrado?.kmRecorridos?.toFixed(1) ?? '-'} | Consumo: ${cerrado?.consumoNetoLitros?.toFixed(1) ?? '-'} L | Rendimiento: ${cerrado?.rendimientoKmLitro?.toFixed(2) ?? '-'} km/L (${formatStatus(cerrado?.clasificacion || '')})`
+      )
+      onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo cerrar el control.')
+    }
+  }
+
+  const otrasUnidades = camiones.filter((camion) => camion.id !== control.camionId)
+
+  return (
+    <div className="border-b border-neutral-100 last:border-b-0">
+      <button onClick={onToggle} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-neutral-50">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium">{control.camion?.placa || 'Sin unidad'} {control.chofer?.nombre ? `- ${control.chofer.nombre}` : ''}</p>
+          <p className="truncate text-xs text-neutral-500">Odometro inicial: {control.odometroInicial} km - Litros iniciales: {litrosIniciales?.toFixed(1)} L - {control.eventos?.length || 0} eventos</p>
+        </div>
+        <ChevronRight className={`shrink-0 text-neutral-400 transition-transform ${expandido ? 'rotate-90' : ''}`} size={18} />
+      </button>
+      {expandido && (
+        <div className="space-y-4 border-t border-neutral-100 bg-neutral-50 px-4 py-4">
+          {control.eventos?.length === 0 && <p className="text-xs text-neutral-500">Sin eventos registrados todavia.</p>}
+          {control.eventos?.length > 0 && (
+            <div>
+              {control.eventos.map((evento) => (
+                <div key={evento.id} className="flex items-center justify-between border-b border-neutral-200 py-1.5 text-xs last:border-b-0">
+                  <span>{formatStatus(evento.tipo)} - {evento.litros} L{evento.ubicacion ? ` - ${evento.ubicacion}` : ''}</span>
+                  <span className="text-neutral-400">{formatDate(evento.createdAt)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <form onSubmit={registrarEvento} className="grid gap-3 md:grid-cols-3">
+            <Field label="Tipo de evento">
+              <select value={tipoEvento} onChange={(event) => setTipoEvento(event.target.value)} className="input">
+                <option value="RECARGA_TRANSPORTE">Recarga en el transporte</option>
+                <option value="RECARGA_ESTACION">Recarga en estacion</option>
+                <option value="TRANSFERENCIA_SALIDA">Transferencia a otra unidad</option>
+              </select>
+            </Field>
+            <Field label="Litros">
+              <input required type="number" min="0" step="0.1" value={litros} onChange={(event) => setLitros(event.target.value)} className="input" />
+            </Field>
+            {tipoEvento === 'TRANSFERENCIA_SALIDA' ? (
+              <Field label="Unidad destino">
+                <SearchableSelect value={camionDestinoId} options={unitFilterOptions(otrasUnidades)} onChange={setCamionDestinoId} placeholder="Unidad que recibe" />
+              </Field>
+            ) : (
+              <Field label="Costo (opcional)">
+                <div className="flex gap-2">
+                  <input type="number" min="0" step="0.01" value={costo} onChange={(event) => setCosto(event.target.value)} className="input" placeholder="0.00" />
+                  <select value={moneda} onChange={(event) => setMoneda(event.target.value)} className="input w-24">
+                    <option value="VES">VES</option>
+                    <option value="USD">USD</option>
+                  </select>
+                </div>
+              </Field>
+            )}
+            <Field label="Ubicacion (opcional)">
+              <input value={ubicacion} onChange={(event) => setUbicacion(event.target.value)} className="input" />
+            </Field>
+            <div className="md:col-span-2">
+              <Field label="Observacion (opcional)">
+                <input value={observacion} onChange={(event) => setObservacion(event.target.value)} className="input" />
+              </Field>
+            </div>
+            <div className="flex items-end">
+              <button disabled={saving} className="btn-secondary w-full justify-center">{saving ? 'Guardando' : 'Registrar evento'}</button>
+            </div>
+          </form>
+
+          <div className="flex justify-end">
+            <button onClick={cerrar} className="btn-primary">Cerrar control</button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ConfiguracionCombustibleView({ camiones, isAdmin }) {
+  const [camionId, setCamionId] = useState('')
+  const [tanques, setTanques] = useState([])
+  const [umbralOptimo, setUmbralOptimo] = useState('')
+  const [umbralDeficiente, setUmbralDeficiente] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const cargarEnFormulario = (config) => {
+    setTanques(config?.tanques?.length > 0
+      ? config.tanques.map((tanque) => ({ ...tanque, puntosCalibracion: [...tanque.puntosCalibracion] }))
+      : [{ numero: 1, capacidadLitros: '', puntosCalibracion: [{ alturaCm: '', litros: '' }, { alturaCm: '', litros: '' }] }])
+    setUmbralOptimo(config?.umbralOptimoKmLitro ?? '')
+    setUmbralDeficiente(config?.umbralDeficienteKmLitro ?? '')
+  }
+
+  useEffect(() => {
+    if (!camionId) { setTanques([]); return }
+    let active = true
+    setLoading(true)
+    api.get(`/combustible/configuracion/${camionId}`)
+      .then(({ data }) => { if (active) cargarEnFormulario(data?.data || null) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [camionId])
+
+  const actualizarPunto = (tanqueIdx, puntoIdx, campo, valor) => {
+    setTanques((prev) => prev.map((tanque, i) => i !== tanqueIdx ? tanque : {
+      ...tanque,
+      puntosCalibracion: tanque.puntosCalibracion.map((punto, j) => j !== puntoIdx ? punto : { ...punto, [campo]: valor }),
+    }))
+  }
+
+  const agregarPunto = (tanqueIdx) => {
+    setTanques((prev) => prev.map((tanque, i) => i !== tanqueIdx ? tanque : {
+      ...tanque,
+      puntosCalibracion: [...tanque.puntosCalibracion, { alturaCm: '', litros: '' }],
+    }))
+  }
+
+  const quitarPunto = (tanqueIdx, puntoIdx) => {
+    setTanques((prev) => prev.map((tanque, i) => i !== tanqueIdx ? tanque : {
+      ...tanque,
+      puntosCalibracion: tanque.puntosCalibracion.filter((_, j) => j !== puntoIdx),
+    }))
+  }
+
+  const agregarTanque = () => {
+    if (tanques.length >= 2) return
+    const numero = tanques.some((t) => t.numero === 1) ? 2 : 1
+    setTanques((prev) => [...prev, { numero, capacidadLitros: '', puntosCalibracion: [{ alturaCm: '', litros: '' }, { alturaCm: '', litros: '' }] }])
+  }
+
+  const quitarTanque = (tanqueIdx) => {
+    setTanques((prev) => prev.filter((_, i) => i !== tanqueIdx))
+  }
+
+  const guardar = async (event) => {
+    event.preventDefault()
+    setSaving(true)
+    try {
+      await api.put(`/combustible/configuracion/${camionId}`, {
+        umbralOptimoKmLitro: Number(umbralOptimo),
+        umbralDeficienteKmLitro: Number(umbralDeficiente),
+        tanques: tanques.map((tanque) => ({
+          numero: tanque.numero,
+          capacidadLitros: Number(tanque.capacidadLitros),
+          puntosCalibracion: tanque.puntosCalibracion.map((punto) => ({ alturaCm: Number(punto.alturaCm), litros: Number(punto.litros) })),
+        })),
+      })
+      await notifySuccess('Configuracion guardada')
+      const { data } = await api.get(`/combustible/configuracion/${camionId}`)
+      cargarEnFormulario(data?.data || null)
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo guardar la configuracion.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="space-y-4 rounded-md border border-neutral-200 bg-white p-4">
+      <SectionTitle title="Configuracion de combustible por unidad" subtitle="Tanques, tabla de calibracion (cm a litros) y umbrales de rendimiento" />
+      <Field label="Unidad">
+        <SearchableSelect value={camionId} options={unitFilterOptions(camiones)} onChange={setCamionId} placeholder="Buscar unidad" />
+      </Field>
+
+      {loading && <p className="text-xs text-neutral-500">Cargando...</p>}
+
+      {camionId && !loading && (
+        <form onSubmit={guardar} className="space-y-5">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Umbral optimo (km/L o mas)">
+              <input required type="number" min="0" step="0.1" value={umbralOptimo} onChange={(event) => setUmbralOptimo(event.target.value)} className="input" disabled={!isAdmin} />
+            </Field>
+            <Field label="Umbral deficiente (km/L o mas; debajo es critico)">
+              <input required type="number" min="0" step="0.1" value={umbralDeficiente} onChange={(event) => setUmbralDeficiente(event.target.value)} className="input" disabled={!isAdmin} />
+            </Field>
+          </div>
+
+          {tanques.map((tanque, tanqueIdx) => (
+            <div key={tanqueIdx} className="space-y-3 border-t border-neutral-200 pt-4 first:border-t-0 first:pt-0">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">Tanque {tanque.numero}</p>
+                {isAdmin && tanques.length > 1 && (
+                  <button type="button" onClick={() => quitarTanque(tanqueIdx)} className="text-xs font-medium text-red-600">Quitar tanque</button>
+                )}
+              </div>
+              <Field label="Capacidad total (litros)">
+                <input required type="number" min="0" value={tanque.capacidadLitros} onChange={(event) => setTanques((prev) => prev.map((t, i) => i !== tanqueIdx ? t : { ...t, capacidadLitros: event.target.value }))} className="input" disabled={!isAdmin} />
+              </Field>
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-neutral-600">Tabla de calibracion (altura de varilla en cm -&gt; litros)</p>
+                {tanque.puntosCalibracion.map((punto, puntoIdx) => (
+                  <div key={puntoIdx} className="flex items-center gap-2">
+                    <input type="number" min="0" step="0.1" value={punto.alturaCm} onChange={(event) => actualizarPunto(tanqueIdx, puntoIdx, 'alturaCm', event.target.value)} className="input" placeholder="cm" disabled={!isAdmin} />
+                    <input type="number" min="0" step="0.1" value={punto.litros} onChange={(event) => actualizarPunto(tanqueIdx, puntoIdx, 'litros', event.target.value)} className="input" placeholder="litros" disabled={!isAdmin} />
+                    {isAdmin && tanque.puntosCalibracion.length > 2 && (
+                      <button type="button" onClick={() => quitarPunto(tanqueIdx, puntoIdx)} className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-neutral-400 hover:bg-red-50 hover:text-red-600">
+                        <X size={16} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {isAdmin && (
+                  <button type="button" onClick={() => agregarPunto(tanqueIdx)} className="text-xs font-medium text-neutral-600 hover:text-neutral-950">+ Agregar punto</button>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {isAdmin && (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              {tanques.length < 2 ? (
+                <button type="button" onClick={agregarTanque} className="btn-secondary">+ Agregar segundo tanque</button>
+              ) : <span />}
+              <button disabled={saving} className="btn-primary">{saving ? 'Guardando' : 'Guardar configuracion'}</button>
+            </div>
+          )}
+        </form>
+      )}
+    </section>
+  )
+}
+
+function HistoricoCombustibleView({ camiones, choferes }) {
+  const [camionId, setCamionId] = useState('')
+  const [choferId, setChoferId] = useState('')
+  const [page, setPage] = useState(1)
+  const [data, setData] = useState({ items: [], total: 0, pageSize: 20 })
+  const [loading, setLoading] = useState(false)
+  useClampPage(page, data.total, data.pageSize, setPage)
+
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    api.get('/combustible/controles', { params: { estado: 'CERRADO', camionId: camionId || undefined, choferId: choferId || undefined, page, pageSize: data.pageSize } })
+      .then(({ data: response }) => { if (active) setData(response?.data || { items: [], total: 0, pageSize: 20 }) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [camionId, choferId, page, data.pageSize])
+
+  const descargarReporte = async () => {
+    const [{ jsPDF }, { default: autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' })
+    const logoData = await imageToDataUrl(logo)
+    doc.addImage(logoData, 'PNG', 14, 10, 30, 17)
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(14)
+    doc.text('Historico de rendimiento de combustible', 50, 17)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(9)
+    doc.setTextColor(90)
+    doc.text(`Generado: ${new Date().toLocaleString('es-VE')}`, 50, 23)
+
+    autoTable(doc, {
+      startY: 32,
+      theme: 'grid',
+      head: [['Unidad', 'Chofer', 'Km recorridos', 'Consumo neto (L)', 'Rendimiento (km/L)', 'Clasificacion', 'Cierre']],
+      body: data.items.map((control) => [
+        control.camion?.placa || '-',
+        control.chofer?.nombre || '-',
+        control.kmRecorridos?.toFixed(1) ?? '-',
+        control.consumoNetoLitros?.toFixed(1) ?? '-',
+        control.rendimientoKmLitro?.toFixed(2) ?? '-',
+        formatStatus(control.clasificacion || ''),
+        formatDate(control.cerradoAt),
+      ]),
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [24, 24, 27], textColor: 255 },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+    })
+
+    doc.save(`combustible-historico-${new Date().toISOString().slice(0, 10)}.pdf`)
+    await notifySuccess('PDF generado')
+  }
+
+  return (
+    <section className="space-y-3">
+      <div className="grid gap-3 sm:grid-cols-2 sm:max-w-xl">
+        <Field label="Filtrar por unidad">
+          <SearchableSelect value={camionId} options={unitFilterOptions(camiones)} onChange={setCamionId} placeholder="Todas las unidades" />
+        </Field>
+        <Field label="Filtrar por chofer">
+          <SearchableSelect value={choferId} options={choferes.map((chofer) => ({ value: chofer.id, label: chofer.nombre }))} onChange={setChoferId} placeholder="Todos los choferes" />
+        </Field>
+      </div>
+
+      <div className="rounded-md border border-neutral-200 bg-white">
+        <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
+          <SectionTitle title="Controles cerrados" subtitle={`${data.total} registros`} />
+          <button onClick={descargarReporte} disabled={data.items.length === 0} className="btn-secondary">
+            <Download size={16} />
+            Exportar PDF
+          </button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[800px] text-left text-sm">
+            <thead className="bg-neutral-50 text-xs text-neutral-500">
+              <tr>
+                <th className="px-4 py-3">Unidad</th>
+                <th className="px-4 py-3">Chofer</th>
+                <th className="px-4 py-3">Km</th>
+                <th className="px-4 py-3">Consumo (L)</th>
+                <th className="px-4 py-3">Rendimiento</th>
+                <th className="px-4 py-3">Clasificacion</th>
+                <th className="px-4 py-3">Cierre</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.items.map((control) => (
+                <tr key={control.id} className="border-t border-neutral-100">
+                  <td className="px-4 py-3 font-medium">{control.camion?.placa || '-'}</td>
+                  <td className="px-4 py-3 text-neutral-500">{control.chofer?.nombre || '-'}</td>
+                  <td className="px-4 py-3 text-neutral-500">{control.kmRecorridos?.toFixed(1) ?? '-'}</td>
+                  <td className="px-4 py-3 text-neutral-500">{control.consumoNetoLitros?.toFixed(1) ?? '-'}</td>
+                  <td className="px-4 py-3 text-neutral-500">{control.rendimientoKmLitro?.toFixed(2) ?? '-'} km/L</td>
+                  <td className="px-4 py-3">
+                    {control.clasificacion && (
+                      <span className={`rounded-md px-2 py-1 text-xs font-medium ${CLASIFICACION_STYLES[control.clasificacion] || ''}`}>{formatStatus(control.clasificacion)}</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-neutral-500">{formatDate(control.cerradoAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!loading && data.items.length === 0 && <Empty text="Sin controles cerrados en este filtro." />}
+          {loading && <Empty text="Cargando historico..." />}
+        </div>
+        <Pagination page={page} total={data.total} pageSize={data.pageSize} onChange={setPage} />
+      </div>
+    </section>
+  )
+}
+
 function LiquidacionesView({ viajes, choferes, empresas, camiones }) {
   const [periodo, setPeriodo] = useState('mes')
   const [choferId, setChoferId] = useState('')
@@ -3875,6 +4468,7 @@ function Login({ onLogin }) {
 
 function ChoferApp({ onLogout }) {
   const [data, setData] = useState({ chofer: null, viajes: [] })
+  const [combustible, setCombustible] = useState({ controlesAbiertos: [], unidadesDisponibles: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [enviando, setEnviando] = useState('')
@@ -3888,10 +4482,18 @@ function ChoferApp({ onLogout }) {
     setLoading(true)
     setError('')
     try {
-      const response = await api.get('/mi/viaje')
-      setData(response.data?.data || { chofer: null, viajes: [] })
-    } catch (err) {
-      setError(err.response?.data?.mensaje || 'No se pudo cargar tu viaje.')
+      const [viajeResponse, combustibleResponse] = await Promise.allSettled([
+        api.get('/mi/viaje'),
+        api.get('/mi/combustible'),
+      ])
+      if (viajeResponse.status === 'fulfilled') {
+        setData(viajeResponse.value.data?.data || { chofer: null, viajes: [] })
+      } else {
+        setError(viajeResponse.reason?.response?.data?.mensaje || 'No se pudo cargar tu viaje.')
+      }
+      if (combustibleResponse.status === 'fulfilled') {
+        setCombustible(combustibleResponse.value.data?.data || { controlesAbiertos: [], unidadesDisponibles: [] })
+      }
     } finally {
       setLoading(false)
     }
@@ -4086,6 +4688,13 @@ function ChoferApp({ onLogout }) {
                 </div>
               )}
 
+              <ChoferCombustibleSection
+                viaje={viaje}
+                unidadesDisponibles={combustible.unidadesDisponibles.filter((unidad) => unidad.viajeId === viaje.id)}
+                controlesAbiertos={combustible.controlesAbiertos.filter((control) => control.viaje?.id === viaje.id || combustible.unidadesDisponibles.some((u) => u.viajeId === viaje.id && u.id === control.camion?.id))}
+                onDone={cargar}
+              />
+
               {viaje.reportes?.length > 0 && (
                 <details className="text-xs text-neutral-500">
                   <summary className="cursor-pointer select-none font-medium text-neutral-600">Tus ultimos reportes</summary>
@@ -4103,6 +4712,171 @@ function ChoferApp({ onLogout }) {
           )
         })}
       </main>
+    </div>
+  )
+}
+
+function ChoferCombustibleSection({ unidadesDisponibles, controlesAbiertos, onDone }) {
+  const [unidadAbierta, setUnidadAbierta] = useState(null)
+  const [odometroInicial, setOdometroInicial] = useState('')
+  const [lecturas, setLecturas] = useState({})
+  const [saving, setSaving] = useState(false)
+  const [eventoAbierto, setEventoAbierto] = useState(null)
+  const [tipoEvento, setTipoEvento] = useState('RECARGA_ESTACION')
+  const [litrosEvento, setLitrosEvento] = useState('')
+  const [cierreAbierto, setCierreAbierto] = useState(null)
+  const [odometroFinal, setOdometroFinal] = useState('')
+  const [lecturasFinales, setLecturasFinales] = useState({})
+
+  if (unidadesDisponibles.length === 0) return null
+
+  const abrir = async (unidad, event) => {
+    event.preventDefault()
+    setSaving(true)
+    try {
+      await api.post('/mi/combustible/controles', {
+        camionId: unidad.id,
+        odometroInicial: Number(odometroInicial),
+        lecturas: unidad.tanques.map((tanque) => ({ numero: tanque.numero, alturaCm: Number(lecturas[tanque.numero] || 0) })),
+      })
+      setUnidadAbierta(null)
+      setOdometroInicial('')
+      setLecturas({})
+      await notifySuccess('Control de combustible abierto')
+      onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo abrir el control de combustible.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const registrarEvento = async (control, event) => {
+    event.preventDefault()
+    setSaving(true)
+    try {
+      await api.post(`/mi/combustible/controles/${control.id}/eventos`, { tipo: tipoEvento, litros: Number(litrosEvento) })
+      setEventoAbierto(null)
+      setLitrosEvento('')
+      await notifySuccess('Evento de combustible registrado')
+      onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo registrar el evento.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const cerrar = async (control, event) => {
+    event.preventDefault()
+    setSaving(true)
+    try {
+      const unidad = unidadesDisponibles.find((u) => u.id === control.camion?.id)
+      await api.post(`/mi/combustible/controles/${control.id}/cerrar`, {
+        odometroFinal: Number(odometroFinal),
+        lecturas: (unidad?.tanques || []).map((tanque) => ({ numero: tanque.numero, alturaCm: Number(lecturasFinales[tanque.numero] || 0) })),
+      })
+      setCierreAbierto(null)
+      setOdometroFinal('')
+      setLecturasFinales({})
+      await notifySuccess('Control de combustible cerrado')
+      onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo cerrar el control de combustible.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-neutral-200 bg-white p-3">
+      <p className="flex items-center gap-1.5 text-xs font-semibold text-neutral-600"><Fuel size={14} /> Combustible</p>
+
+      {unidadesDisponibles.map((unidad) => {
+        const control = controlesAbiertos.find((c) => c.camion?.id === unidad.id)
+
+        if (!control) {
+          return (
+            <div key={unidad.id} className="space-y-2">
+              {unidadAbierta !== unidad.id ? (
+                <button type="button" onClick={() => setUnidadAbierta(unidad.id)} className="btn-secondary w-full justify-center">
+                  Registrar combustible - {unidad.placa}
+                </button>
+              ) : (
+                <form onSubmit={(event) => abrir(unidad, event)} className="space-y-2 rounded-md border border-neutral-200 bg-stone-50 p-3">
+                  <p className="text-xs font-medium text-neutral-600">Lectura inicial - {unidad.placa}</p>
+                  <input required type="number" min="0" placeholder="Odometro (km)" value={odometroInicial} onChange={(event) => setOdometroInicial(event.target.value)} className="input" />
+                  {unidad.tanques.map((tanque) => (
+                    <input
+                      key={tanque.numero}
+                      required
+                      type="number"
+                      min="0"
+                      step="0.1"
+                      placeholder={`Tanque ${tanque.numero} - varilla (cm)`}
+                      value={lecturas[tanque.numero] || ''}
+                      onChange={(event) => setLecturas((prev) => ({ ...prev, [tanque.numero]: event.target.value }))}
+                      className="input"
+                    />
+                  ))}
+                  <div className="flex justify-end gap-2">
+                    <button type="button" onClick={() => setUnidadAbierta(null)} className="btn-secondary">Cancelar</button>
+                    <button disabled={saving} className="btn-primary">{saving ? 'Guardando' : 'Abrir'}</button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )
+        }
+
+        return (
+          <div key={unidad.id} className="space-y-2 rounded-md border border-neutral-200 bg-stone-50 p-3">
+            <p className="text-xs font-medium text-neutral-600">{unidad.placa} - control abierto ({control.eventos?.length || 0} eventos)</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => setEventoAbierto(eventoAbierto === control.id ? null : control.id)} className="btn-secondary">Registrar recarga</button>
+              <button type="button" onClick={() => setCierreAbierto(cierreAbierto === control.id ? null : control.id)} className="btn-secondary">Cerrar control</button>
+            </div>
+
+            {eventoAbierto === control.id && (
+              <form onSubmit={(event) => registrarEvento(control, event)} className="space-y-2 rounded-md border border-neutral-200 bg-white p-3">
+                <select value={tipoEvento} onChange={(event) => setTipoEvento(event.target.value)} className="input">
+                  <option value="RECARGA_ESTACION">Recarga en estacion</option>
+                  <option value="RECARGA_TRANSPORTE">Recarga en el transporte</option>
+                </select>
+                <input required type="number" min="0" step="0.1" placeholder="Litros" value={litrosEvento} onChange={(event) => setLitrosEvento(event.target.value)} className="input" />
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setEventoAbierto(null)} className="btn-secondary">Cancelar</button>
+                  <button disabled={saving} className="btn-primary">{saving ? 'Guardando' : 'Registrar'}</button>
+                </div>
+              </form>
+            )}
+
+            {cierreAbierto === control.id && (
+              <form onSubmit={(event) => cerrar(control, event)} className="space-y-2 rounded-md border border-neutral-200 bg-white p-3">
+                <p className="text-xs font-medium text-neutral-600">Lectura final</p>
+                <input required type="number" min="0" placeholder="Odometro final (km)" value={odometroFinal} onChange={(event) => setOdometroFinal(event.target.value)} className="input" />
+                {unidad.tanques.map((tanque) => (
+                  <input
+                    key={tanque.numero}
+                    required
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    placeholder={`Tanque ${tanque.numero} - varilla (cm)`}
+                    value={lecturasFinales[tanque.numero] || ''}
+                    onChange={(event) => setLecturasFinales((prev) => ({ ...prev, [tanque.numero]: event.target.value }))}
+                    className="input"
+                  />
+                ))}
+                <div className="flex justify-end gap-2">
+                  <button type="button" onClick={() => setCierreAbierto(null)} className="btn-secondary">Cancelar</button>
+                  <button disabled={saving} className="btn-primary">{saving ? 'Guardando' : 'Cerrar control'}</button>
+                </div>
+              </form>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

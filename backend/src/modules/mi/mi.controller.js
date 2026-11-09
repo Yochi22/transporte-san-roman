@@ -15,4 +15,31 @@ const crearReporte = async (req, res) => {
   return ok(res, resultado, 'Reporte enviado', 201)
 }
 
-module.exports = { miViaje, crearReporte }
+const miCombustible = async (req, res) => {
+  const resultado = await service.obtenerMiCombustible(req.usuario.choferId)
+  return ok(res, resultado)
+}
+
+const abrirControlCombustible = async (req, res) => {
+  const control = await service.abrirMiControlCombustible(req.usuario.choferId, req.body, req.usuario.id)
+  return ok(res, control, 'Control de combustible abierto', 201)
+}
+
+const registrarEventoCombustible = async (req, res) => {
+  const evento = await service.registrarMiEventoCombustible(req.usuario.choferId, req.params.id, req.body, req.usuario.id)
+  return ok(res, evento, 'Evento de combustible registrado', 201)
+}
+
+const cerrarControlCombustible = async (req, res) => {
+  const control = await service.cerrarMiControlCombustible(req.usuario.choferId, req.params.id, req.body, req.usuario.id)
+  return ok(res, control, 'Control de combustible cerrado')
+}
+
+module.exports = {
+  miViaje,
+  crearReporte,
+  miCombustible,
+  abrirControlCombustible,
+  registrarEventoCombustible,
+  cerrarControlCombustible,
+}

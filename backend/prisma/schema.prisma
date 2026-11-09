@@ -58,6 +58,24 @@ enum TipoParada {
   PERNOCTA
 }
 
+enum EstadoControlCombustible {
+  ABIERTO
+  CERRADO
+}
+
+enum TipoEventoCombustible {
+  RECARGA_TRANSPORTE
+  RECARGA_ESTACION
+  TRANSFERENCIA_SALIDA
+  TRANSFERENCIA_ENTRADA
+}
+
+enum ClasificacionRendimiento {
+  OPTIMO
+  DEFICIENTE
+  CRITICO
+}
+
 enum EstadoParada {
   PENDIENTE
   EN_CURSO
@@ -198,6 +216,7 @@ model Chofer {
   gastos            Gasto[]
   unidadesAsignadas ChoferUnidad[]
   retornableMovimientos RetornableMovimiento[]
+  controlesCombustible ControlCombustible[]
   usuario           Usuario?
 
   @@index([estado, activo])
@@ -224,6 +243,8 @@ model Camion {
   posicionGps       TruckPosition?
   choferesAsignados ChoferUnidad[]
   retornableMovimientos RetornableMovimiento[]
+  configuracionCombustible ConfiguracionCombustibleCamion?
+  controlesCombustible ControlCombustible[]
 
   @@index([estado, activo])
   @@map("camiones")
@@ -314,6 +335,7 @@ model Viaje {
   unidades  ViajeUnidad[]
   retornablesOrigen Retornable[] @relation("RetornableViajeOrigen")
   retornableMovimientos RetornableMovimiento[]
+  controlesCombustible ControlCombustible[]
 
   @@index([estadoLogistico, estadoFinanciero])
   @@index([empresaId, estadoLogistico, estadoFinanciero])
@@ -460,4 +482,99 @@ model Gasto {
   @@index([viajeId, createdAt])
   @@index([choferId, createdAt])
   @@map("gastos")
+}
+
+model ConfiguracionCombustibleCamion {
+  id                      String   @id @default(uuid())
+  camionId                String   @unique @map("camion_id")
+  umbralOptimoKmLitro     Float    @map("umbral_optimo_km_litro")
+  umbralDeficienteKmLitro Float    @map("umbral_deficiente_km_litro")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  camion  Camion              @relation(fields: [camionId], references: [id])
+  tanques TanqueCombustible[]
+
+  @@map("configuraciones_combustible_camion")
+}
+
+model TanqueCombustible {
+  id              String @id @default(uuid())
+  configuracionId String @map("configuracion_id")
+  numero          Int
+  capacidadLitros Float  @map("capacidad_litros")
+
+  configuracion     ConfiguracionCombustibleCamion @relation(fields: [configuracionId], references: [id], onDelete: Cascade)
+  puntosCalibracion PuntoCalibracionTanque[]
+
+  @@unique([configuracionId, numero])
+  @@map("tanques_combustible")
+}
+
+model PuntoCalibracionTanque {
+  id       String @id @default(uuid())
+  tanqueId String @map("tanque_id")
+  alturaCm Float  @map("altura_cm")
+  litros   Float
+
+  tanque TanqueCombustible @relation(fields: [tanqueId], references: [id], onDelete: Cascade)
+
+  @@unique([tanqueId, alturaCm])
+  @@map("puntos_calibracion_tanque")
+}
+
+model ControlCombustible {
+  id       String                   @id @default(uuid())
+  viajeId  String?                  @map("viaje_id")
+  camionId String                   @map("camion_id")
+  choferId String?                  @map("chofer_id")
+  estado   EstadoControlCombustible @default(ABIERTO)
+
+  odometroInicial          Float @map("odometro_inicial")
+  lecturasInicialesTanques Json  @map("lecturas_iniciales_tanques")
+  litrosInicialesTotal     Float @map("litros_iniciales_total")
+
+  odometroFinal          Float? @map("odometro_final")
+  lecturasFinalesTanques Json?  @map("lecturas_finales_tanques")
+  litrosFinalesTotal     Float? @map("litros_finales_total")
+
+  kmRecorridos       Float?                     @map("km_recorridos")
+  consumoNetoLitros  Float?                     @map("consumo_neto_litros")
+  rendimientoKmLitro Float?                     @map("rendimiento_km_litro")
+  clasificacion      ClasificacionRendimiento?
+
+  creadoPorId  String?   @map("creado_por_id")
+  cerradoPorId String?   @map("cerrado_por_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  cerradoAt    DateTime? @map("cerrado_at")
+
+  viaje   Viaje?              @relation(fields: [viajeId], references: [id])
+  camion  Camion              @relation(fields: [camionId], references: [id])
+  chofer  Chofer?             @relation(fields: [choferId], references: [id])
+  eventos EventoCombustible[]
+
+  @@index([camionId, estado])
+  @@index([choferId])
+  @@map("controles_combustible")
+}
+
+model EventoCombustible {
+  id                   String                @id @default(uuid())
+  controlCombustibleId String                @map("control_combustible_id")
+  tipo                 TipoEventoCombustible
+  litros               Float
+  costo                Decimal?
+  moneda               String?
+  ubicacion            String?
+  observacion          String?
+  eventoVinculadoId    String?               @unique @map("evento_vinculado_id")
+  registradoPorId      String?               @map("registrado_por_id")
+  createdAt            DateTime              @default(now()) @map("created_at")
+
+  controlCombustible ControlCombustible @relation(fields: [controlCombustibleId], references: [id], onDelete: Cascade)
+  eventoVinculado    EventoCombustible? @relation("EventoEspejo", fields: [eventoVinculadoId], references: [id])
+  eventoOrigen       EventoCombustible? @relation("EventoEspejo")
+
+  @@index([controlCombustibleId, createdAt])
+  @@map("eventos_combustible")
 }
