@@ -2,11 +2,12 @@ const prisma = require('../../config/database')
 const { aplicarReporteChofer } = require('../../services/reportes/aplicarReporte.service')
 const combustibleService = require('../combustible/combustible.service')
 
-const TIPOS_VALIDOS = new Set(['CARGANDO', 'DESCARGADO', 'ESPERANDO_INSTRUCCIONES', 'LIBRE', 'NOVEDAD', 'OTRO'])
+const TIPOS_VALIDOS = new Set(['LLEGADA', 'CARGANDO', 'DESCARGADO', 'ESPERANDO_INSTRUCCIONES', 'LIBRE', 'NOVEDAD', 'OTRO'])
 const ESTADOS_PARADA_VALIDOS = new Set(['EN_CURSO', 'COMPLETADA'])
 const TIPOS_CON_PARADA = new Set(['CARGANDO', 'DESCARGADO'])
 
 const TEXTO_POR_DEFECTO = {
+  LLEGADA: 'Llegue al sitio',
   'CARGANDO:EN_CURSO': 'Estoy cargando',
   'CARGANDO:COMPLETADA': 'Lista la carga',
   'DESCARGADO:EN_CURSO': 'Estoy descargando',
@@ -36,6 +37,7 @@ const viajeChoferSelect = {
       estado: true,
       fechaProgramada: true,
       cargarAlDescargar: true,
+      llegadaAt: true,
     },
   },
   reportes: {
@@ -118,6 +120,12 @@ const registrarReporte = async ({ choferId, viajeId, paradaId, tipoReporte, esta
     if (!parada) throw { status: 400, message: 'La parada no pertenece a este viaje' }
     paradaIdFinal = parada.id
     estadoParadaFinal = estadoParada || 'EN_CURSO'
+  } else if (tipoReporte === 'LLEGADA' && paradaId) {
+    const parada = viaje.paradas.find((p) => p.id === paradaId)
+    if (!parada) throw { status: 400, message: 'La parada no pertenece a este viaje' }
+    paradaIdFinal = parada.id
+    // estadoParadaFinal queda null a proposito: llegar al sitio no cambia el
+    // estado de la parada (sigue pendiente hasta Cargando/Descargando).
   }
 
   const mensajeOriginal = mensaje?.trim()

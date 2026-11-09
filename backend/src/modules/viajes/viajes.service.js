@@ -369,6 +369,22 @@ const agregarTramo = async (id, datos) => {
   return { ...actualizado, tramoAgregado: nuevoTramo }
 }
 
+const marcarLlegadaParada = async (viajeId, paradaId) => {
+  const parada = await prisma.parada.findFirstOrThrow({
+    where: { id: paradaId, viajeId },
+    include: { viaje: { select: { estadoLogistico: true, estadoFinanciero: true } } }
+  })
+  if (parada.viaje.estadoLogistico === 'COMPLETADO') {
+    throw { status: 409, message: 'No se puede modificar una parada de un viaje cerrado' }
+  }
+  if (parada.viaje.estadoFinanciero === 'LIQUIDADO') {
+    throw { status: 409, message: 'No se puede modificar un viaje liquidado' }
+  }
+  if (parada.llegadaAt) return parada
+
+  return prisma.parada.update({ where: { id: parada.id }, data: { llegadaAt: new Date() } })
+}
+
 const actualizarParada = async (viajeId, paradaId, estado) => {
   if (!['PENDIENTE', 'EN_CURSO', 'COMPLETADA'].includes(estado)) {
     throw { status: 400, message: 'Estado de parada invalido' }
@@ -686,5 +702,6 @@ module.exports = {
   agregarTramo,
   actualizarRuta,
   cancelar,
-  actualizarParada
+  actualizarParada,
+  marcarLlegadaParada
 }

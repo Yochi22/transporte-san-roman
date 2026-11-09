@@ -138,6 +138,7 @@ const paradaStyles = {
 }
 
 const reporteStyles = {
+  LLEGADA: 'bg-sky-50 text-sky-700',
   CARGANDO: 'bg-blue-50 text-blue-700',
   EN_RUTA: 'bg-neutral-100 text-neutral-700',
   DESCARGADO: 'bg-emerald-50 text-emerald-700',
@@ -3845,6 +3846,19 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
     }
   }
 
+  const marcarLlegada = async (paradaId) => {
+    setSaving(paradaId)
+    try {
+      await api.patch(`/viajes/${viaje.id}/paradas/${paradaId}/llegada`, {})
+      await notifySuccess('Llegada registrada')
+      onDone()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || 'No se pudo registrar la llegada.')
+    } finally {
+      setSaving('')
+    }
+  }
+
   const registrarGasto = async (event) => {
     event.preventDefault()
     setSaving('gasto')
@@ -3943,6 +3957,9 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
                         {parada.fechaProgramada && (
                           <p className="mt-1 text-xs font-medium text-blue-700">Carga programada: {formatDate(parada.fechaProgramada)}</p>
                         )}
+                        {parada.llegadaAt && (
+                          <p className="mt-1 text-xs font-medium text-neutral-600">Llego al sitio: {formatDate(parada.llegadaAt)}</p>
+                        )}
                         {parada.completadaAt && (
                           <p className="mt-1 text-xs font-medium text-emerald-700">{formatStatus(parada.tipo)} completada: {formatDate(parada.completadaAt)}</p>
                         )}
@@ -3951,6 +3968,15 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
                         )}
                       </div>
                       <div className="flex flex-wrap gap-1">
+                        {!parada.llegadaAt && (
+                          <button
+                            onClick={() => marcarLlegada(parada.id)}
+                            disabled={Boolean(saving)}
+                            className="rounded-md border border-neutral-200 bg-white px-2 py-1 text-xs font-medium text-neutral-500 hover:bg-neutral-50"
+                          >
+                            Marcar llegada
+                          </button>
+                        )}
                         {['PENDIENTE', 'EN_CURSO', 'COMPLETADA'].map((estado) => (
                           <button
                             key={estado}
@@ -4654,6 +4680,9 @@ function ChoferApp({ onLogout }) {
                       {parada.oculta
                         ? 'Siguiente etapa - se revela al completar la actual'
                         : `${formatStatus(parada.tipo)} - ${parada.lugar}, ${parada.ciudad}`}
+                      {parada.llegadaAt && !parada.oculta && (
+                        <span className="ml-1 font-normal text-neutral-500">(llego {formatDate(parada.llegadaAt)})</span>
+                      )}
                     </span>
                   </div>
                 ))}
@@ -4669,6 +4698,9 @@ function ChoferApp({ onLogout }) {
                     <p className="w-full rounded-md bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-700">
                       Carga y descarga completas. Si ya volviste a la sede o quedaste disponible en otro lugar, confirmalo abajo.
                     </p>
+                  )}
+                  {paradaActual && !paradaActual.oculta && !paradaActual.llegadaAt && (
+                    <button type="button" disabled={bloqueado} onClick={() => enviarReporte(viaje.id, { tipoReporte: 'LLEGADA', paradaId: paradaActual.id, ubicacion: `${paradaActual.lugar}, ${paradaActual.ciudad}` })} className="btn-primary">Llegue al sitio</button>
                   )}
                   {paradaActual?.tipo === 'CARGA' && (
                     <>
@@ -5642,6 +5674,7 @@ function resourceStatusClass(value) {
 
 function labelReporte(tipo) {
   const labels = {
+    LLEGADA: 'Llegada',
     ESPERANDO_INSTRUCCIONES: 'Esperando',
     EN_PERNOCTA: 'Pernocta',
     EN_RUTA: 'En ruta',

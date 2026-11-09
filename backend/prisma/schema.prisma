@@ -83,6 +83,7 @@ enum EstadoParada {
 }
 
 enum TipoReporte {
+  LLEGADA
   CARGANDO
   EN_RUTA
   EN_PERNOCTA
@@ -373,6 +374,7 @@ model Parada {
   cargarAlDescargar Boolean      @default(false) @map("cargar_al_descargar")
   estado            EstadoParada @default(PENDIENTE)
   comprobanteUrl    String?      @map("comprobante_url")
+  llegadaAt         DateTime?    @map("llegada_at")
   completadaAt      DateTime?    @map("completada_at")
   createdAt         DateTime     @default(now()) @map("created_at")
 
