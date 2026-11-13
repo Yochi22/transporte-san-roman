@@ -2413,19 +2413,45 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
       reactivar: { metodo: 'patch', sufijo: 'acceso/reactivar' },
     }
     const { metodo, sufijo } = rutas[accion]
+    const payload = {}
+    if (accion === 'crear' || accion === 'resetear') {
+      const pedido = await Swal.fire({
+        ...alertOptions,
+        title: accion === 'crear' ? `Crear acceso - ${item.nombre}` : `Nueva clave - ${item.nombre}`,
+        text: 'Escribe la clave que quieres asignarle (minimo 8 caracteres, sin espacios) o dejala vacia para generar una aleatoria.',
+        input: 'text',
+        inputPlaceholder: 'Clave (opcional)',
+        inputAttributes: { autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' },
+        showCancelButton: true,
+        confirmButtonText: accion === 'crear' ? 'Crear acceso' : 'Asignar clave',
+        cancelButtonText: 'Cancelar',
+        reverseButtons: true,
+        inputValidator: (valor) => {
+          const clave = (valor || '').trim()
+          if (!clave) return undefined
+          if (clave.length < 8) return 'La clave debe tener al menos 8 caracteres'
+          if (clave.length > 128) return 'La clave es demasiado larga'
+          if (/\s/.test(clave)) return 'La clave no puede tener espacios'
+          return undefined
+        },
+      })
+      if (!pedido.isConfirmed) return
+      const clave = (pedido.value || '').trim()
+      if (clave) payload.clave = clave
+    }
     try {
-      const response = await api[metodo](`/choferes/${item.id}/${sufijo}`, {})
-      const { username, claveTemporal } = response.data?.data || {}
+      const response = await api[metodo](`/choferes/${item.id}/${sufijo}`, payload)
+      const { username, claveTemporal, definidaPorAdmin } = response.data?.data || {}
       if (claveTemporal) {
         await Swal.fire({
           ...alertOptions,
-          title: accion === 'crear' ? 'Acceso creado' : 'Clave restablecida',
+          title: accion === 'crear' ? 'Acceso creado' : 'Clave asignada',
           html: [
             '<p class="sanroman-alert-label">Usuario (cedula)</p>',
             `<p style="font-weight:600">${username}</p>`,
-            '<p class="sanroman-alert-label" style="margin-top:12px">Clave temporal</p>',
+            `<p class="sanroman-alert-label" style="margin-top:12px">${definidaPorAdmin ? 'Clave asignada' : 'Clave generada'}</p>`,
             `<p style="font-weight:600;font-size:18px;letter-spacing:1px">${claveTemporal}</p>`,
-            '<p style="margin-top:12px;font-size:12px;color:#78716c">Copiala ahora, no se volvera a mostrar.</p>',
+            '<p style="margin-top:12px;font-size:12px;color:#78716c">El sistema no guarda la clave en texto: si el chofer la olvida, vuelve a asignarla desde aqui.</p>',
           ].join(''),
           confirmButtonText: 'Listo',
         })

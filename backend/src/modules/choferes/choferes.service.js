@@ -166,13 +166,28 @@ const reactivar = async (id) => {
   })
 }
 
-const crearAcceso = async (choferId) => {
+// El admin puede fijar la clave que quiera (asi la oficina puede manejar una
+// clave conocida por chofer y volver a asignarla si se olvida) o dejar que se
+// genere una aleatoria. En la base solo vive el hash: nunca se puede "ver" la
+// clave actual, solo volver a asignarla.
+const resolverClaveAcceso = (claveDeseada) => {
+  if (claveDeseada === undefined || claveDeseada === null || claveDeseada === '') {
+    return { clave: generarClaveTemporal(), definidaPorAdmin: false }
+  }
+  if (typeof claveDeseada !== 'string' || claveDeseada.length < 8 || claveDeseada.length > 128) {
+    throw { status: 400, message: 'La clave debe tener entre 8 y 128 caracteres' }
+  }
+  if (/\s/.test(claveDeseada)) throw { status: 400, message: 'La clave no puede tener espacios' }
+  return { clave: claveDeseada, definidaPorAdmin: true }
+}
+
+const crearAcceso = async (choferId, claveDeseada) => {
   const chofer = await prisma.chofer.findUniqueOrThrow({ where: { id: choferId }, select: { nombre: true, cedula: true, activo: true } })
   if (!chofer.activo) throw { status: 409, message: 'El chofer debe estar activo para crear su acceso' }
   const existente = await prisma.usuario.findUnique({ where: { choferId } })
   if (existente) throw { status: 409, message: 'Este chofer ya tiene acceso creado' }
 
-  const clave = generarClaveTemporal()
+  const { clave, definidaPorAdmin } = resolverClaveAcceso(claveDeseada)
   const passwordHash = await bcrypt.hash(clave, 12)
   await prisma.usuario.create({
     data: {
@@ -183,20 +198,20 @@ const crearAcceso = async (choferId) => {
       choferId
     }
   })
-  return { username: chofer.cedula, claveTemporal: clave }
+  return { username: chofer.cedula, claveTemporal: clave, definidaPorAdmin }
 }
 
-const resetearClaveAcceso = async (choferId) => {
+const resetearClaveAcceso = async (choferId, claveDeseada) => {
   const usuario = await prisma.usuario.findUnique({ where: { choferId } })
   if (!usuario) throw { status: 404, message: 'Este chofer no tiene acceso creado' }
 
-  const clave = generarClaveTemporal()
+  const { clave, definidaPorAdmin } = resolverClaveAcceso(claveDeseada)
   const passwordHash = await bcrypt.hash(clave, 12)
   await prisma.usuario.update({
     where: { choferId },
     data: { passwordHash, activo: true, sessionVersion: { increment: 1 } }
   })
-  return { username: usuario.username, claveTemporal: clave }
+  return { username: usuario.username, claveTemporal: clave, definidaPorAdmin }
 }
 
 const revocarAcceso = async (choferId) => {

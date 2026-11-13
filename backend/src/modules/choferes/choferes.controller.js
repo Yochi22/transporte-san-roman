@@ -37,12 +37,12 @@ const reactivar = async (req, res) => {
 }
 
 const crearAcceso = async (req, res) => {
-  const resultado = await service.crearAcceso(req.params.id)
+  const resultado = await service.crearAcceso(req.params.id, req.body?.clave)
   return ok(res, resultado, 'Acceso creado', 201)
 }
 
 const resetearClaveAcceso = async (req, res) => {
-  const resultado = await service.resetearClaveAcceso(req.params.id)
+  const resultado = await service.resetearClaveAcceso(req.params.id, req.body?.clave)
   return ok(res, resultado, 'Clave restablecida')
 }
 

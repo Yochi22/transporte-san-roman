@@ -344,8 +344,8 @@ Gestion de acceso del chofer (dentro de `/api/choferes`, todas `ADMIN`, paso man
 
 | Metodo y ruta | Funcion |
 |---|---|
-| `POST /api/choferes/:id/acceso` | Crea el `Usuario` rol `CHOFER` (username = cedula); devuelve la clave una sola vez |
-| `PATCH /api/choferes/:id/acceso/resetear` | Genera clave nueva y la devuelve una sola vez; invalida sesiones previas |
+| `POST /api/choferes/:id/acceso` | Crea el `Usuario` rol `CHOFER` (username = cedula). Body opcional `{ clave }` (8-128 caracteres, sin espacios) para fijar la clave; si falta, se genera una aleatoria. Se devuelve una sola vez |
+| `PATCH /api/choferes/:id/acceso/resetear` | Asigna clave nueva (body opcional `{ clave }`, igual que al crear) y la devuelve una sola vez; invalida sesiones previas. Solo se guarda el hash: la clave vigente nunca puede consultarse, solo reasignarse |
 | `PATCH /api/choferes/:id/acceso/revocar` | Desactiva el acceso e invalida la sesion activa de inmediato |
 | `PATCH /api/choferes/:id/acceso/reactivar` | Reactiva el acceso (misma cedula, sin revelar clave) |
 
