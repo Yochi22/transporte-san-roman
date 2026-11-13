@@ -10,7 +10,7 @@ const path = require('path')
 const fs = require('fs')
 
 const { manejarErrores } = require('./middlewares/error.middleware')
-const { apiLimiter, requerirJson, protegerCsrf } = require('./middlewares/security.middleware')
+const { apiLimiter, gpsWebhookLimiter, requerirJson, protegerCsrf } = require('./middlewares/security.middleware')
 const { autenticar, soloAdmin } = require('./middlewares/auth.middleware')
 
 const authRoutes = require('./modules/auth/auth.routes')
@@ -40,7 +40,10 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
   : [...new Set([...configuredOrigins, 'http://localhost:5173', 'http://127.0.0.1:5173'])]
 
 app.disable('x-powered-by')
-const trustProxy = process.env.TRUST_PROXY || (process.env.NODE_ENV === 'production' ? '1' : '')
+// Por defecto en produccion se confia en cualquier salto de red privada
+// (Caddy y Nginx viven en la red interna de Docker), asi req.ip es la IP real
+// del cliente sin depender de contar saltos. TRUST_PROXY lo sobreescribe.
+const trustProxy = process.env.TRUST_PROXY || (process.env.NODE_ENV === 'production' ? 'loopback, linklocal, uniquelocal' : '')
 if (trustProxy) app.set('trust proxy', Number.isNaN(Number(trustProxy)) ? trustProxy : Number(trustProxy))
 app.use(helmet({
   contentSecurityPolicy: false,
@@ -59,7 +62,14 @@ app.use(cors({
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'tiny' : 'dev'))
 app.use(express.json({ limit: '100kb', strict: true }))
 app.use(cookieParser())
-app.use('/api', apiLimiter, requerirJson)
+// El webhook GPS (trafico de Traccar, protegido por token) tiene su propio
+// cupo para no agotar el limite general del panel ni perder posiciones.
+const limitarApi = (req, res, next) => (
+  req.method === 'POST' && req.path === '/gps/positions'
+    ? gpsWebhookLimiter(req, res, next)
+    : apiLimiter(req, res, next)
+)
+app.use('/api', limitarApi, requerirJson)
 app.use('/api', (req, res, next) => {
   res.set('Cache-Control', 'no-store')
   next()

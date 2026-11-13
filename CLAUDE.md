@@ -486,7 +486,7 @@ El backend usa `backend/.env`, con permisos `600` en servidor.
 |---|---|
 | `NODE_ENV` | `production` en VPS |
 | `PORT` | `3000` interno |
-| `TRUST_PROXY` | `1` tras un reverse proxy confiable |
+| `TRUST_PROXY` | Saltos de proxy confiables. En el VPS vale `2` (Caddy -> Nginx -> backend). Si falta, en produccion se confia en toda red privada (`loopback, linklocal, uniquelocal`). Con `1` todos los usuarios compartirian la IP de Caddy y el limite de intentos de login seria global |
 | `JWT_EXPIRES_IN` | `8h` por defecto |
 | `AUTH_COOKIE_MAX_AGE_MS` | 15 minutos a 24 horas |
 | `ADMIN_EMAIL`, `ADMIN_NAME` | Admin inicial |
@@ -592,10 +592,10 @@ Entorno verificado el 30 de septiembre de 2026:
 - Checkout: `/opt/sanroman`, rama `main`.
 - Llave local autorizada: `~/.ssh/sanroman_vps_ed25519`.
 - Acceso: `ssh -i $env:USERPROFILE\.ssh\sanroman_vps_ed25519 root@104.251.219.40`.
-- Panel: `http://104.251.219.40:8080` mientras no exista dominio/TLS.
+- Panel: `https://operacionestsr.site` (Caddy del Compose emite TLS y hace proxy a `frontend:80`; `www.` redirige al dominio raiz). Nginx del frontend solo escucha en `127.0.0.1:8080`.
 - `104.237.5.23` no es el despliegue vigente de San Roman; no despliegues alli sin volver a identificarlo.
 
-El VPS conserva cambios locales preparados en `docker-compose.yml` y archivos bajo `traccar/traccar/`. No los reviertas, no uses `git reset --hard` y comprueba siempre que no colisionan con el commit entrante. El override local de Compose mantiene `NODE_ENV=development` porque el panel aun usa HTTP por IP; es deuda de seguridad. Para volver a `production`, configura primero dominio/TLS y un `FRONTEND_URL=https://...` valido.
+El VPS conserva cambios locales en `traccar/conf/traccar.xml` (token real del webhook) y archivos preparados bajo `traccar/traccar/`. No los reviertas, no uses `git reset --hard` y comprueba siempre que no colisionan con el commit entrante. `docker-compose.yml` ya no tiene cambios locales y el backend corre con `NODE_ENV=production` (verificado el 13 de noviembre de 2026). `backend/.env` tiene lineas repetidas de `NODE_ENV` y `GPS_WEBHOOK_TOKEN`; dotenv toma la ultima, pero conviene dejar una sola de cada.
 
 Crear una llave dedicada desde PowerShell, solo si aun no existe:
 
