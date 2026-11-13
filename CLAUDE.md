@@ -171,7 +171,8 @@ Compatibilidad de empresas: `Viaje.empresaId` y `Parada.empresaSedeId` son nulla
 
 - Una unidad solo puede pertenecer a un chofer.
 - Inactivar preserva historial.
-- El borrado permanente valida dependencias.
+- El borrado permanente valida dependencias: una unidad o un chofer con historial (viajes, reportes, gastos, taller, retornables o combustible) devuelve 409 y debe inactivarse; nunca se borra en cascada su historial.
+- Un viaje `CANCELADO` es terminal: no admite mover paradas, marcar llegada, editar ruta, cerrar/liquidar, recargar viaticos ni registrar gastos. Un viaje `LIQUIDADO` tampoco admite eliminar gastos.
 - Un camion `EN_TALLER` no puede despacharse.
 - Al completar el ultimo mantenimiento, queda `EN_RUTA` si conserva viaje activo; si no, `DISPONIBLE`.
 
@@ -320,7 +321,8 @@ El rol `COMBUSTIBLE_TALLER` (middleware `rolesPermitidos`, `backend/src/middlewa
 | `POST /api/combustible/controles/:id/cerrar` | A/O | Cierra con lectura final (fallback manual) |
 | `GET /api/mi/combustible` | CHOFER | Controles propios abiertos y unidades disponibles (con tanques configurados) de su viaje activo |
 | `POST /api/mi/combustible/controles` | CHOFER | Abre un control propio |
-| `POST /api/mi/combustible/controles/:id/eventos` | CHOFER | Registra una recarga en un control propio abierto |
+| `POST /api/mi/combustible/controles/:id/eventos` | CHOFER | Registra una recarga en un control propio abierto (solo `RECARGA_*`, tope = capacidad total de la unidad; las transferencias son de operaciones) |
+| `GET /api/mi/combustible/historico` | CHOFER | Sus controles cerrados con rendimiento y clasificacion |
 | `POST /api/mi/combustible/controles/:id/cerrar` | CHOFER | Cierra un control propio con lectura final |
 
 No existe endpoint independiente de reportes para ADMIN/OPERACIONES: se cargan dentro de viajes y se crean desde WhatsApp o desde la app del chofer. Los controladores de viaje filtran informacion financiera para `OPERACIONES`; conserva ese filtrado al agregar campos. `ReporteChofer.origen` distingue `WHATSAPP` de `APP`.
