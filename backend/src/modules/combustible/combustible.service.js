@@ -473,6 +473,20 @@ const obtenerMisControlesAbiertos = async (choferId) => {
   })
 }
 
+// Controles abiertos de unas unidades puntuales, sin filtrar por chofer: la
+// app del chofer la usa para reconocer tambien un control que abrio
+// operaciones/admin como respaldo (sin chofer asignado todavia) en una unidad
+// de su propio viaje activo, en vez de ofrecerle abrir uno nuevo y chocar con
+// el que ya existe.
+const obtenerControlesAbiertosPorCamiones = async (camionIds) => {
+  if (!camionIds || camionIds.length === 0) return []
+  return prisma.controlCombustible.findMany({
+    where: { camionId: { in: camionIds }, estado: 'ABIERTO' },
+    include: controlIncludeBasico,
+    orderBy: { createdAt: 'desc' }
+  })
+}
+
 const obtenerResumen = async ({ camionId, choferId } = {}) => {
   const where = { estado: 'CERRADO', rendimientoKmLitro: { not: null } }
   if (camionId) where.camionId = camionId
@@ -517,5 +531,6 @@ module.exports = {
   listarControles,
   obtenerControl,
   obtenerMisControlesAbiertos,
+  obtenerControlesAbiertosPorCamiones,
   obtenerResumen
 }

@@ -35,6 +35,11 @@ const cerrarControlCombustible = async (req, res) => {
   return ok(res, control, 'Control de combustible cerrado')
 }
 
+const historicoCombustible = async (req, res) => {
+  const resultado = await service.obtenerMiHistoricoCombustible(req.usuario.choferId, req.query)
+  return ok(res, resultado)
+}
+
 module.exports = {
   miViaje,
   crearReporte,
@@ -42,4 +47,5 @@ module.exports = {
   abrirControlCombustible,
   registrarEventoCombustible,
   cerrarControlCombustible,
+  historicoCombustible,
 }

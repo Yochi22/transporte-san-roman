@@ -9,6 +9,7 @@ router.get('/viaje', ctrl.miViaje)
 router.post('/reportes', ctrl.crearReporte)
 
 router.get('/combustible', ctrl.miCombustible)
+router.get('/combustible/historico', ctrl.historicoCombustible)
 router.post('/combustible/controles', ctrl.abrirControlCombustible)
 router.post('/combustible/controles/:id/eventos', ctrl.registrarEventoCombustible)
 router.post('/combustible/controles/:id/cerrar', ctrl.cerrarControlCombustible)

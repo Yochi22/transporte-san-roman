@@ -190,10 +190,11 @@ const unidadesDeViajesActivos = async (choferId) => {
 }
 
 const obtenerMiCombustible = async (choferId) => {
-  const [controlesAbiertos, unidades] = await Promise.all([
-    combustibleService.obtenerMisControlesAbiertos(choferId),
-    unidadesDeViajesActivos(choferId),
-  ])
+  const unidades = await unidadesDeViajesActivos(choferId)
+  // Cualquier control abierto de una unidad de su propio viaje activo cuenta
+  // como "abierto" para el chofer, aunque lo haya abierto operaciones/admin
+  // como respaldo sin asignarle chofer todavia (ver requerirControlPropio).
+  const controlesAbiertos = await combustibleService.obtenerControlesAbiertosPorCamiones(unidades.map((u) => u.id))
   return { controlesAbiertos, unidadesDisponibles: unidades }
 }
 
@@ -214,7 +215,17 @@ const abrirMiControlCombustible = async (choferId, datos, actorUsuarioId) => {
 
 const requerirControlPropio = async (choferId, controlId) => {
   const control = await combustibleService.obtenerControl(controlId)
-  if (control.chofer?.id !== choferId) throw { status: 403, message: 'Ese control de combustible no te pertenece' }
+  if (control.chofer?.id === choferId) return control
+  if (control.chofer) throw { status: 403, message: 'Ese control de combustible no te pertenece' }
+
+  // Sin chofer asignado todavia (lo abrio operaciones/admin como respaldo): si
+  // la unidad es de un viaje activo de este chofer, puede operarlo y queda
+  // asignado a el desde este momento (igual que si lo hubiera abierto el).
+  const unidades = await unidadesDeViajesActivos(choferId)
+  if (!unidades.some((unidad) => unidad.id === control.camion.id)) {
+    throw { status: 403, message: 'Ese control de combustible no te pertenece' }
+  }
+  await prisma.controlCombustible.update({ where: { id: controlId }, data: { choferId } })
   return control
 }
 
@@ -228,6 +239,12 @@ const cerrarMiControlCombustible = async (choferId, controlId, datos, actorUsuar
   return combustibleService.cerrarControl(controlId, datos, actorUsuarioId || null)
 }
 
+// Historico de sus propios controles cerrados, para que el chofer vea si su
+// desempeno viene saliendo optimo/deficiente/critico en sus ultimos viajes.
+const obtenerMiHistoricoCombustible = async (choferId, { page, pageSize } = {}) => {
+  return combustibleService.listarControles({ choferId, estado: 'CERRADO', page, pageSize })
+}
+
 module.exports = {
   obtenerMiViaje,
   registrarReporte,
@@ -235,4 +252,5 @@ module.exports = {
   abrirMiControlCombustible,
   registrarMiEventoCombustible,
   cerrarMiControlCombustible,
+  obtenerMiHistoricoCombustible,
 }

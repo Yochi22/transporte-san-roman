@@ -3056,9 +3056,11 @@ function ControlesCombustibleActivos({ camiones, viajesActivos = [], controlesAb
     event.preventDefault()
     setSaving(true)
     try {
+      const viajeVinculado = viajeId ? viajesActivos.find((viaje) => viaje.id === viajeId) : null
       const payload = {
         camionId,
         viajeId: viajeId || undefined,
+        choferId: viajeVinculado?.choferId || undefined,
         odometroInicial: Number(odometroInicial),
         lecturas: (configuracion?.tanques || [])
           .filter((tanque) => tanque.requiereVarilla !== false)
@@ -4607,6 +4609,7 @@ function Login({ onLogin }) {
 function ChoferApp({ onLogout }) {
   const [data, setData] = useState({ chofer: null, viajes: [] })
   const [combustible, setCombustible] = useState({ controlesAbiertos: [], unidadesDisponibles: [] })
+  const [historicoCombustible, setHistoricoCombustible] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [enviando, setEnviando] = useState('')
@@ -4620,9 +4623,10 @@ function ChoferApp({ onLogout }) {
     setLoading(true)
     setError('')
     try {
-      const [viajeResponse, combustibleResponse] = await Promise.allSettled([
+      const [viajeResponse, combustibleResponse, historicoResponse] = await Promise.allSettled([
         api.get('/mi/viaje'),
         api.get('/mi/combustible'),
+        api.get('/mi/combustible/historico', { params: { pageSize: 10 } }),
       ])
       if (viajeResponse.status === 'fulfilled') {
         setData(viajeResponse.value.data?.data || { chofer: null, viajes: [] })
@@ -4631,6 +4635,9 @@ function ChoferApp({ onLogout }) {
       }
       if (combustibleResponse.status === 'fulfilled') {
         setCombustible(combustibleResponse.value.data?.data || { controlesAbiertos: [], unidadesDisponibles: [] })
+      }
+      if (historicoResponse.status === 'fulfilled') {
+        setHistoricoCombustible(historicoResponse.value.data?.data?.items || [])
       }
     } finally {
       setLoading(false)
@@ -4687,6 +4694,27 @@ function ChoferApp({ onLogout }) {
 
       <main className="mx-auto max-w-lg space-y-4 px-4 py-4">
         {error && <Banner tone="danger" icon={AlertTriangle} text={error} />}
+
+        {historicoCombustible.length > 0 && (
+          <section className="rounded-md border border-neutral-200 bg-white p-4">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-neutral-600"><Fuel size={14} /> Tu rendimiento de combustible</p>
+            <div className="mt-2 divide-y divide-neutral-100">
+              {historicoCombustible.map((control) => (
+                <div key={control.id} className="flex items-center justify-between gap-2 py-2 text-sm">
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{control.camion?.placa}</p>
+                    <p className="truncate text-xs text-neutral-500">
+                      {formatDate(control.cerradoAt)} · {control.rendimientoKmLitro != null ? `${control.rendimientoKmLitro.toFixed(2)} km/L` : 'Sin rendimiento'}
+                    </p>
+                  </div>
+                  {control.clasificacion && (
+                    <span className={`shrink-0 rounded-md px-2 py-1 text-xs font-medium ${CLASIFICACION_STYLES[control.clasificacion] || ''}`}>{formatStatus(control.clasificacion)}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {!loading && data.viajes.length === 0 && (
           <div className="rounded-md border border-neutral-200 bg-white p-6 text-center text-sm text-neutral-500">
