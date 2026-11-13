@@ -219,19 +219,23 @@ const reactivarAcceso = async (choferId) => {
   })
 }
 
+// La eliminacion fisica solo procede si el chofer no tiene historial. Si ya
+// tiene viajes, reportes, gastos, retornables o combustible, se debe inactivar:
+// borrarlo arrastraria viajes (incluso liquidados) y su trazabilidad.
 const eliminar = async (id) => {
-  const viajes = await prisma.viaje.findMany({
-    where: { choferId: id },
-    select: { id: true }
-  })
-  const viajeIds = viajes.map((viaje) => viaje.id)
+  await prisma.chofer.findUniqueOrThrow({ where: { id } })
+  const [viajes, reportes, gastos, retornables, controles] = await Promise.all([
+    prisma.viaje.count({ where: { choferId: id } }),
+    prisma.reporteChofer.count({ where: { choferId: id } }),
+    prisma.gasto.count({ where: { choferId: id } }),
+    prisma.retornableMovimiento.count({ where: { choferId: id } }),
+    prisma.controlCombustible.count({ where: { choferId: id } })
+  ])
+  if (viajes > 0 || reportes > 0 || gastos > 0 || retornables > 0 || controles > 0) {
+    throw { status: 409, message: 'Este chofer tiene historial (viajes, reportes, gastos, retornables o combustible). Inactivalo en lugar de eliminarlo.' }
+  }
 
   return prisma.$transaction(async (tx) => {
-    await tx.gasto.deleteMany({ where: { OR: [{ choferId: id }, { viajeId: { in: viajeIds } }] } })
-    await tx.reporteChofer.deleteMany({ where: { OR: [{ choferId: id }, { viajeId: { in: viajeIds } }] } })
-    await tx.parada.deleteMany({ where: { viajeId: { in: viajeIds } } })
-    await tx.viajeUnidad.deleteMany({ where: { viajeId: { in: viajeIds } } })
-    await tx.viaje.deleteMany({ where: { id: { in: viajeIds } } })
     await tx.choferUnidad.deleteMany({ where: { choferId: id } })
     return tx.chofer.delete({ where: { id } })
   })

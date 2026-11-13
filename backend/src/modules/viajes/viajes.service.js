@@ -377,6 +377,9 @@ const marcarLlegadaParada = async (viajeId, paradaId) => {
   if (parada.viaje.estadoLogistico === 'COMPLETADO') {
     throw { status: 409, message: 'No se puede modificar una parada de un viaje cerrado' }
   }
+  if (parada.viaje.estadoLogistico === 'CANCELADO') {
+    throw { status: 409, message: 'No se puede modificar una parada de un viaje cancelado' }
+  }
   if (parada.viaje.estadoFinanciero === 'LIQUIDADO') {
     throw { status: 409, message: 'No se puede modificar un viaje liquidado' }
   }
@@ -394,6 +397,9 @@ const actualizarParada = async (viajeId, paradaId, estado) => {
   })
   if (parada.viaje.estadoLogistico === 'COMPLETADO') {
     throw { status: 409, message: 'No se puede modificar una parada de un viaje cerrado' }
+  }
+  if (parada.viaje.estadoLogistico === 'CANCELADO') {
+    throw { status: 409, message: 'No se puede modificar una parada de un viaje cancelado' }
   }
   if (parada.viaje.estadoFinanciero === 'LIQUIDADO') {
     throw { status: 409, message: 'No se puede modificar un viaje liquidado' }
@@ -444,6 +450,9 @@ const actualizarRuta = async (viajeId, paradasInput) => {
 
   if (viaje.estadoFinanciero === 'LIQUIDADO') {
     throw { status: 409, message: 'No se puede editar la ruta de un viaje liquidado' }
+  }
+  if (viaje.estadoLogistico === 'CANCELADO') {
+    throw { status: 409, message: 'No se puede editar la ruta de un viaje cancelado' }
   }
   const actualesPorId = new Map(viaje.paradas.map((parada) => [parada.id, parada]))
   if (viaje.empresaId) {
@@ -572,10 +581,13 @@ const recargarViaticos = async (id, monto) => {
   if (montoNumerico === 0) throw { status: 400, message: 'La recarga debe ser mayor que cero' }
   const viaje = await prisma.viaje.findUniqueOrThrow({
     where: { id },
-    select: { estadoFinanciero: true }
+    select: { estadoFinanciero: true, estadoLogistico: true }
   })
   if (viaje.estadoFinanciero === 'LIQUIDADO') {
     throw { status: 409, message: 'No se pueden recargar viaticos a un viaje liquidado' }
+  }
+  if (viaje.estadoLogistico === 'CANCELADO') {
+    throw { status: 409, message: 'No se pueden recargar viaticos a un viaje cancelado' }
   }
   return prisma.viaje.update({
     where: { id },
@@ -625,6 +637,9 @@ const cerrar = async (id, soloLogistica = false, numeroGuia = null) => {
   })
   if (viaje.estadoFinanciero === 'LIQUIDADO') {
     throw { status: 409, message: 'El viaje ya fue liquidado' }
+  }
+  if (viaje.estadoLogistico === 'CANCELADO') {
+    throw { status: 409, message: 'No se puede cerrar ni liquidar un viaje cancelado' }
   }
   const yaCompletoParadas = viaje.paradas.every((parada) => parada.estado === 'COMPLETADA')
   if (soloLogistica && yaCompletoParadas) {

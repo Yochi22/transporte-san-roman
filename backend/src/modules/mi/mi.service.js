@@ -229,9 +229,26 @@ const requerirControlPropio = async (choferId, controlId) => {
   return control
 }
 
+// Desde la app el chofer solo registra recargas. Las transferencias entre
+// unidades tocan el control de otra unidad (evento espejo) y son cosa de
+// operaciones. El tope de litros es la capacidad total de la unidad.
+const TIPOS_EVENTO_CHOFER = new Set(['RECARGA_TRANSPORTE', 'RECARGA_ESTACION'])
+
 const registrarMiEventoCombustible = async (choferId, controlId, datos, actorUsuarioId) => {
-  await requerirControlPropio(choferId, controlId)
-  return combustibleService.registrarEvento(controlId, datos, actorUsuarioId || null)
+  const control = await requerirControlPropio(choferId, controlId)
+  if (!TIPOS_EVENTO_CHOFER.has(datos?.tipo)) {
+    throw { status: 400, message: 'Desde la app solo puedes registrar recargas. Las transferencias las registra operaciones.' }
+  }
+  const configuracion = await prisma.configuracionCombustibleCamion.findUnique({
+    where: { camionId: control.camion.id },
+    select: { tanques: { select: { capacidadLitros: true } } }
+  })
+  const capacidadTotal = (configuracion?.tanques || []).reduce((total, tanque) => total + tanque.capacidadLitros, 0)
+  const litros = Number(datos.litros)
+  if (capacidadTotal > 0 && litros > capacidadTotal) {
+    throw { status: 400, message: `La recarga no puede superar la capacidad total de la unidad (${capacidadTotal} L)` }
+  }
+  return combustibleService.registrarEvento(controlId, { tipo: datos.tipo, litros, ubicacion: datos.ubicacion, observacion: datos.observacion }, actorUsuarioId || null)
 }
 
 const cerrarMiControlCombustible = async (choferId, controlId, datos, actorUsuarioId) => {

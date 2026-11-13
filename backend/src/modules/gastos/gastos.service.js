@@ -21,6 +21,9 @@ const crear = async (datos, origen = 'ADMIN') => {
   if (viaje.estadoFinanciero === 'LIQUIDADO') {
     throw { status: 409, message: 'No se pueden registrar gastos en un viaje liquidado' }
   }
+  if (viaje.estadoLogistico === 'CANCELADO') {
+    throw { status: 409, message: 'No se pueden registrar gastos en un viaje cancelado' }
+  }
 
   return prisma.$transaction(async (tx) => {
     const gasto = await tx.gasto.create({
@@ -49,6 +52,13 @@ const crear = async (datos, origen = 'ADMIN') => {
 }
 
 const eliminar = async (id) => {
+  const existente = await prisma.gasto.findUniqueOrThrow({
+    where: { id },
+    select: { viaje: { select: { estadoFinanciero: true } } }
+  })
+  if (existente.viaje.estadoFinanciero === 'LIQUIDADO') {
+    throw { status: 409, message: 'No se pueden eliminar gastos de un viaje liquidado' }
+  }
   return prisma.$transaction(async (tx) => {
     const gasto = await tx.gasto.delete({ where: { id } })
     await tx.viaje.update({

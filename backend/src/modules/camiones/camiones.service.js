@@ -93,25 +93,23 @@ const reactivar = async (id) => {
   })
 }
 
+// La eliminacion fisica solo procede si la unidad no tiene historial. Si ya
+// participo en viajes, taller, retornables o combustible, se debe inactivar:
+// borrarla arrastraria viajes (incluso liquidados), gastos y reportes reales.
 const eliminar = async (id) => {
-  const viajes = await prisma.viaje.findMany({
-    where: {
-      OR: [
-        { camionId: id },
-        { unidades: { some: { camionId: id } } }
-      ]
-    },
-    select: { id: true }
-  })
-  const viajeIds = viajes.map((viaje) => viaje.id)
+  await prisma.camion.findUniqueOrThrow({ where: { id } })
+  const [viajes, mantenimientos, retornables, controles] = await Promise.all([
+    prisma.viaje.count({ where: { OR: [{ camionId: id }, { unidades: { some: { camionId: id } } }] } }),
+    prisma.mantenimientoVehiculo.count({ where: { camionId: id } }),
+    prisma.retornableMovimiento.count({ where: { camionId: id } }),
+    prisma.controlCombustible.count({ where: { camionId: id } })
+  ])
+  if (viajes > 0 || mantenimientos > 0 || retornables > 0 || controles > 0) {
+    throw { status: 409, message: 'Esta unidad tiene historial (viajes, taller, retornables o combustible). Inactivala en lugar de eliminarla.' }
+  }
 
   return prisma.$transaction(async (tx) => {
-    await tx.gasto.deleteMany({ where: { viajeId: { in: viajeIds } } })
-    await tx.reporteChofer.deleteMany({ where: { viajeId: { in: viajeIds } } })
-    await tx.parada.deleteMany({ where: { viajeId: { in: viajeIds } } })
-    await tx.viajeUnidad.deleteMany({ where: { OR: [{ viajeId: { in: viajeIds } }, { camionId: id }] } })
-    await tx.viaje.deleteMany({ where: { id: { in: viajeIds } } })
-    await tx.mantenimientoVehiculo.deleteMany({ where: { camionId: id } })
+    await tx.configuracionCombustibleCamion.deleteMany({ where: { camionId: id } })
     await tx.truckPosition.deleteMany({ where: { truckId: id } })
     await tx.choferUnidad.deleteMany({ where: { camionId: id } })
     return tx.camion.delete({ where: { id } })
