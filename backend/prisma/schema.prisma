@@ -219,6 +219,7 @@ model Chofer {
   unidadesAsignadas ChoferUnidad[]
   retornableMovimientos RetornableMovimiento[]
   controlesCombustible ControlCombustible[]
+  documentos        DocumentoVencimiento[]
   usuario           Usuario?
 
   @@index([estado, activo])
@@ -247,6 +248,7 @@ model Camion {
   retornableMovimientos RetornableMovimiento[]
   configuracionCombustible ConfiguracionCombustibleCamion?
   controlesCombustible ControlCombustible[]
+  documentos        DocumentoVencimiento[]
 
   @@index([estado, activo])
   @@map("camiones")
@@ -583,4 +585,28 @@ model EventoCombustible {
 
   @@index([controlCombustibleId, createdAt])
   @@map("eventos_combustible")
+}
+
+// Documento con fecha de vencimiento de un chofer (cedula, licencia...) o de
+// una unidad (RCV, ROTC...). Pertenece a exactamente uno de los dos. Hay un
+// solo registro por tipo y dueno: al renovar se actualiza la fecha, no se
+// acumula historial. `fechaVencimiento` nulo significa "no vence".
+model DocumentoVencimiento {
+  id               String    @id @default(uuid())
+  choferId         String?   @map("chofer_id")
+  camionId         String?   @map("camion_id")
+  tipo             String
+  numero           String?
+  fechaVencimiento DateTime? @map("fecha_vencimiento") @db.Date
+  nota             String?
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  chofer Chofer? @relation(fields: [choferId], references: [id], onDelete: Cascade)
+  camion Camion? @relation(fields: [camionId], references: [id], onDelete: Cascade)
+
+  @@unique([choferId, tipo])
+  @@unique([camionId, tipo])
+  @@index([fechaVencimiento])
+  @@map("documentos_vencimiento")
 }

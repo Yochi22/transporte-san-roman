@@ -20,6 +20,7 @@ const REQUIRED_RLS_TABLES = [
   'retornables',
   'retornables_movimientos',
   'gastos',
+  'documentos_vencimiento',
 ]
 
 const add = (items, ok, message, detail = null) => items.push({ ok, message, detail })

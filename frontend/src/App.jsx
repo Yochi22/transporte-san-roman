@@ -1,10 +1,15 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { io } from 'socket.io-client'
 import Swal from 'sweetalert2'
-import 'sweetalert2/dist/sweetalert2.min.css'
 import logo from './assets/logo.png'
 import GpsMap from './components/GpsMap.jsx'
+import VencimientosView from './components/VencimientosView.jsx'
+import DocumentosModal from './components/DocumentosModal.jsx'
+import ExportarExcel from './components/ExportarExcel.jsx'
+import { MarcaVencimiento } from './components/DocumentoEstado.jsx'
+import { totalUrgentes } from './lib/documentos'
 import { api, SOCKET_URL } from './lib/api'
+import { alertOptions, confirmAction, notifyError, notifySuccess, notifyWarning, requestNumber } from './lib/alerts'
 import {
   AlertTriangle,
   Archive,
@@ -22,6 +27,7 @@ import {
   Eye,
   EyeOff,
   FileCheck,
+  FileSpreadsheet,
   Fuel,
   LayoutDashboard,
   LogOut,
@@ -53,66 +59,6 @@ const createClientId = () => {
   const randomPart = Math.random().toString(36).slice(2)
   return `tmp-${Date.now().toString(36)}-${randomPart}`
 }
-
-const alertOptions = {
-  customClass: {
-    popup: 'sanroman-alert',
-    confirmButton: 'sanroman-alert-confirm',
-    cancelButton: 'sanroman-alert-cancel',
-    input: 'sanroman-alert-input',
-  },
-  buttonsStyling: false,
-}
-
-const notifySuccess = (title, text = '') => Swal.fire({
-  ...alertOptions,
-  icon: 'success',
-  title,
-  text,
-  timer: 1800,
-  showConfirmButton: false,
-})
-
-const notifyError = (text) => Swal.fire({
-  ...alertOptions,
-  icon: 'error',
-  title: 'No se pudo completar',
-  text,
-})
-
-const notifyWarning = (title, text) => Swal.fire({
-  ...alertOptions,
-  icon: 'warning',
-  title,
-  text,
-})
-
-const confirmAction = (title, text, confirmButtonText = 'Confirmar') => Swal.fire({
-  ...alertOptions,
-  imageUrl: logo,
-  imageWidth: 112,
-  imageAlt: 'Transporte San Román',
-  title,
-  text,
-  showCancelButton: true,
-  confirmButtonText,
-  cancelButtonText: 'Cancelar',
-  reverseButtons: true,
-})
-
-const requestNumber = (title, value = '', placeholder = '0.00') => Swal.fire({
-  ...alertOptions,
-  title,
-  input: 'number',
-  inputValue: value,
-  inputPlaceholder: placeholder,
-  inputAttributes: { min: '0', step: '0.01' },
-  showCancelButton: true,
-  confirmButtonText: 'Guardar',
-  cancelButtonText: 'Cancelar',
-  reverseButtons: true,
-  inputValidator: (inputValue) => (inputValue === '' || Number(inputValue) < 0 ? 'Ingresa un monto valido' : undefined),
-})
 
 const UBICACIONES_DISPONIBLE = ['TSR1', 'TSR2', 'Estacionamiento Cagua']
 
@@ -172,6 +118,9 @@ export default function App() {
   const [empresas, setEmpresas] = useState([])
   const [retornables, setRetornables] = useState([])
   const [controlesCombustible, setControlesCombustible] = useState([])
+  const [docResumen, setDocResumen] = useState(null)
+  const [recursosSeccion, setRecursosSeccion] = useState('choferes')
+  const [exportarAbierto, setExportarAbierto] = useState(false)
 
   const logout = useCallback(() => {
     setIsAuthenticated(false)
@@ -206,8 +155,9 @@ export default function App() {
         soloCombustibleTaller ? sinAcceso : api.get('/empresas', { params: { estado: 'todos' } }),
         soloCombustibleTaller ? sinAcceso : api.get('/retornables', { params: { estado: 'todos', pageSize: 500 } }),
         api.get('/combustible/controles', { params: { estado: 'ABIERTO', pageSize: 100 } }),
+        api.get('/documentos/resumen'),
       ])
-      const [viajesResult, choferesResult, camionesResult, empresasResult, retornablesResult, combustibleResult] = resultados
+      const [viajesResult, choferesResult, camionesResult, empresasResult, retornablesResult, combustibleResult, documentosResult] = resultados
       const rechazado = resultados.find((resultado) => resultado.status === 'rejected')
       if (rechazado?.reason?.response?.status === 401) {
         logout()
@@ -227,6 +177,7 @@ export default function App() {
         const dataCombustible = combustibleResult.value.data?.data
         setControlesCombustible(dataCombustible?.items || dataCombustible || [])
       }
+      if (documentosResult.status === 'fulfilled') setDocResumen(documentosResult.value.data?.data || null)
       if (rechazado) setError('Parte de la informacion no pudo cargarse. Revisa el detalle e intenta actualizar.')
 
       if (refreshSelected && nextViajes) {
@@ -401,7 +352,7 @@ export default function App() {
     <div className="min-h-screen bg-stone-50 text-neutral-950">
       <div className="flex min-h-screen">
         <aside className={`fixed inset-y-0 left-0 z-40 w-72 border-r border-neutral-200 bg-white transition-transform lg:static lg:translate-x-0 ${menuOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-          <div className="flex h-full flex-col px-5 py-6">
+          <div className="flex h-full flex-col overflow-y-auto px-5 py-6">
             <div className="flex items-center gap-3 px-2 py-2">
               <img src={logo} alt="Transporte San Román" className="h-12 w-20 rounded-md object-cover object-center" />
               <div>
@@ -425,12 +376,21 @@ export default function App() {
                   >
                     <Icon size={18} />
                     {tab.label}
+                    {tab.id === 'recursos' && totalUrgentes(docResumen) > 0 && (
+                      <span title="Documentos vencidos o por vencer en 30 dias" className="ml-auto rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white">
+                        {totalUrgentes(docResumen)}
+                      </span>
+                    )}
                   </button>
                 )
               })}
             </nav>
 
-            <div className="mt-auto space-y-3">
+            <div className="mt-auto space-y-3 pt-4">
+              <button onClick={() => { setExportarAbierto(true); setMenuOpen(false) }} className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-neutral-200 text-[13px] font-medium text-neutral-700 hover:bg-neutral-50">
+                <FileSpreadsheet size={16} />
+                Exportar a Excel
+              </button>
               <button onClick={() => fetchData({ refreshSelected: true })} className="flex h-9 w-full items-center justify-center gap-2 rounded-md border border-neutral-200 text-[13px] font-medium text-neutral-700 hover:bg-neutral-50">
                 <RefreshCw size={16} />
                 Actualizar
@@ -490,6 +450,8 @@ export default function App() {
                 onResetWhatsapp={reiniciarWhatsapp}
                 onRefreshWhatsapp={cargarWhatsappStatus}
                 onSelect={setSelectedViaje}
+                docResumen={docResumen}
+                onVerVencimientos={() => { setRecursosSeccion('vencimientos'); setActiveTab('recursos') }}
               />
             )}
             {effectiveTab === 'viajes' && (
@@ -511,7 +473,7 @@ export default function App() {
               <EmpresasView empresas={empresas} isAdmin={isAdmin} onDone={() => fetchData()} />
             )}
             {effectiveTab === 'recursos' && (
-              <RecursosView data={data} isAdmin={isAdmin} onDone={() => fetchData()} />
+              <RecursosView data={data} isAdmin={isAdmin} onDone={() => fetchData()} docResumen={docResumen} seccion={recursosSeccion} onSeccion={setRecursosSeccion} />
             )}
             {isAdmin && effectiveTab === 'usuarios' && (
               <UsuariosView currentUser={usuario} />
@@ -537,6 +499,7 @@ export default function App() {
           onDone={() => fetchData({ refreshSelected: true })}
         />
       )}
+      {exportarAbierto && <ExportarExcel onClose={() => setExportarAbierto(false)} />}
     </div>
   )
 }
@@ -550,6 +513,8 @@ function Monitor({
   onResetWhatsapp,
   onRefreshWhatsapp,
   onSelect,
+  docResumen,
+  onVerVencimientos,
 }) {
   const [tripPage, setTripPage] = useState(1)
   const [reportPage, setReportPage] = useState(1)
@@ -589,6 +554,15 @@ function Monitor({
 
   return (
     <div className="space-y-5">
+      {totalUrgentes(docResumen) > 0 && (
+        <button type="button" onClick={onVerVencimientos} className="flex w-full items-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-left text-[13px] text-red-700 hover:bg-red-100">
+          <FileCheck size={16} className="shrink-0" />
+          <span className="min-w-0 flex-1">
+            Documentos: {docResumen.vencidos} vencidos y {docResumen.porVencer} por vencer en 30 dias o menos.
+          </span>
+          <span className="shrink-0 font-medium underline">Ver</span>
+        </button>
+      )}
       <section className="grid gap-3 sm:grid-cols-3">
         <Metric title="Viajes en curso" value={data.activos.length} icon={Route} />
         <Metric title="Por liquidar" value={data.pendientesLiquidacion.length} icon={Wallet} tone="blue" />
@@ -2290,17 +2264,44 @@ function EmpresasView({ empresas, isAdmin, onDone }) {
   )
 }
 
-function RecursosView({ data, isAdmin, onDone }) {
+function RecursosView({ data, isAdmin, onDone, docResumen, seccion, onSeccion }) {
+  const urgentes = totalUrgentes(docResumen)
+  const secciones = [
+    ['choferes', 'Choferes'],
+    ['unidades', 'Unidades'],
+    ['vencimientos', 'Vencimientos'],
+  ]
   return (
-    <div className="grid gap-5 xl:grid-cols-2">
-      <ResourcePanel title="Choferes" items={data.choferesRecursos} type="chofer" isAdmin={isAdmin} onDone={onDone} camiones={data.camionesActivosTodos} />
-      <ResourcePanel title="Camiones" items={data.camionesRecursos} type="camion" isAdmin={isAdmin} onDone={onDone} />
+    <div className="space-y-4">
+      <div className="inline-flex flex-wrap gap-1 rounded-md border border-neutral-200 bg-white p-1">
+        {secciones.map(([valor, etiqueta]) => (
+          <button
+            key={valor}
+            type="button"
+            onClick={() => onSeccion(valor)}
+            className={`flex h-9 items-center gap-2 px-4 text-[13px] font-medium ${seccion === valor ? 'rounded bg-neutral-950 text-white' : 'text-neutral-600 hover:text-neutral-950'}`}
+          >
+            {etiqueta}
+            {valor === 'vencimientos' && urgentes > 0 && (
+              <span className="rounded-full bg-red-600 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-white">{urgentes}</span>
+            )}
+          </button>
+        ))}
+      </div>
+      {seccion === 'choferes' && (
+        <ResourcePanel title="Choferes" items={data.choferesRecursos} type="chofer" isAdmin={isAdmin} onDone={onDone} camiones={data.camionesActivosTodos} docEstados={docResumen?.choferes} />
+      )}
+      {seccion === 'unidades' && (
+        <ResourcePanel title="Unidades" items={data.camionesRecursos} type="camion" isAdmin={isAdmin} onDone={onDone} docEstados={docResumen?.camiones} />
+      )}
+      {seccion === 'vencimientos' && <VencimientosView isAdmin={isAdmin} resumen={docResumen} onChange={onDone} />}
     </div>
   )
 }
 
-function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
+function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [], docEstados = {} }) {
   const [open, setOpen] = useState(false)
+  const [documentosDe, setDocumentosDe] = useState(null)
   const [estadoFiltro, setEstadoFiltro] = useState('activos')
   const emptyForm = () => type === 'chofer'
     ? { nombre: '', cedula: '', telefono: '', unidadIds: [] }
@@ -2564,7 +2565,10 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
         {pageItems.map((item) => (
           <div key={item.id} className="flex items-center justify-between gap-3 border-b border-neutral-100 px-4 py-3 last:border-b-0">
             <div className="min-w-0">
-              <p className="truncate text-sm font-medium text-neutral-950">{type === 'chofer' ? item.nombre : item.placa}</p>
+              <p className="flex items-center gap-2 text-sm font-medium text-neutral-950">
+                <span className="truncate">{type === 'chofer' ? item.nombre : item.placa}</span>
+                <MarcaVencimiento estado={docEstados?.[item.id]} />
+              </p>
               <p className="truncate text-xs text-neutral-500">
                 {type === 'chofer'
                   ? item.telefono
@@ -2615,6 +2619,9 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
               <span className={`rounded-md px-2 py-1 text-xs font-medium ${resourceStatusClass(item.estadoCalculado)}`}>
                 {item.activo ? formatStatus(item.estadoCalculado) : 'INACTIVO'}
               </span>
+              <button onClick={() => setDocumentosDe(item)} title="Documentos y vencimientos" className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100">
+                <FileCheck size={14} />
+              </button>
               {isAdmin && (
                 <button onClick={() => editar(item)} title="Editar" className="grid h-8 w-8 place-items-center rounded-md text-neutral-500 hover:bg-neutral-100">
                   <Edit3 size={14} />
@@ -2657,6 +2664,15 @@ function ResourcePanel({ title, items, type, isAdmin, onDone, camiones = [] }) {
           onSubmit={submit}
           onClose={cerrarModal}
           onToggleUnidad={toggleUnidad}
+        />
+      )}
+      {documentosDe && (
+        <DocumentosModal
+          entidad={type}
+          titular={{ id: documentosDe.id, nombre: type === 'chofer' ? documentosDe.nombre : documentosDe.placa }}
+          isAdmin={isAdmin}
+          onClose={() => setDocumentosDe(null)}
+          onChange={onDone}
         />
       )}
     </section>

@@ -50,6 +50,8 @@ Transporte San Roman centraliza:
 - Taller e historial de mantenimiento.
 - Control de combustible por unidad: configuracion de tanques (tabla de calibracion cm->litros) y umbrales de rendimiento, controles abiertos/cerrados con lecturas de odometro y varilla, eventos de recarga/transferencia, e historico de rendimiento. Independiente del cierre/liquidacion del viaje.
 - Ultima posicion GPS por unidad mediante Traccar.
+- Vencimientos de documentos de choferes (cedula, licencia, certificados, RIF) y de unidades (RCV, trimestre, permiso sanitario, ROTC, fumigacion, CGT, IAC, publicidad), con alertas en el panel.
+- Exportacion a Excel por rango de fechas de viajes, liquidaciones, gastos, combustible, taller y vencimientos.
 - Usuarios `ADMIN`, `OPERACIONES`, `CHOFER` y `COMBUSTIBLE_TALLER` (acceso reducido a Combustible, Taller y consulta de unidades/choferes).
 
 Es un MVP operativo avanzado. Prioriza integridad de estados, trazabilidad, disponibilidad, seguridad y claridad para operadores.
@@ -116,6 +118,8 @@ No mezcles procedimientos del modo unificado con el Compose separado sin adaptar
 |       |-- middlewares/            Auth, CSRF, rate limit y GPS
 |       |-- modules/empresas/       Empresas, sedes y estadisticas
 |       |-- modules/viajes/         Agendamiento, operacion y liquidacion
+|       |-- modules/documentos/     Vencimientos de documentos
+|       |-- modules/exportar/       Datos para exportar a Excel
 |       |-- modules/                Demas dominios
 |       `-- services/messaging/     WhatsApp y Gemini
 |-- frontend/
@@ -145,6 +149,7 @@ No mezcles procedimientos del modo unificado con el Compose separado sin adaptar
 - `Retornable` y `RetornableMovimiento`: saldo y trazabilidad.
 - `ConfiguracionCombustibleCamion`, `TanqueCombustible` y `PuntoCalibracionTanque`: ficha de combustible por unidad (1 o 2 tanques, tabla de calibracion cm->litros, umbrales de rendimiento optimo/deficiente; debajo del deficiente es critico). Solo `ADMIN` la edita.
 - `ControlCombustible` y `EventoCombustible`: un control por unidad entre lectura inicial y final (odometro + varilla por tanque, convertida a litros via interpolacion lineal sobre la tabla de calibracion), con eventos de recarga/transferencia durante el viaje. Una transferencia a otra unidad crea automaticamente el evento espejo en el control de la unidad destino (exige que ese control este `ABIERTO`). Al cerrar se calculan `kmRecorridos`, `consumoNetoLitros`, `rendimientoKmLitro` y `clasificacion`. Independiente de `estadoLogistico`/`estadoFinanciero` del viaje: no bloquea ni depende del cierre/liquidacion.
+- `DocumentoVencimiento`: documento con fecha de vencimiento que pertenece a exactamente un `Chofer` o un `Camion` (restriccion `CHECK` en la base; `onDelete: Cascade`). Hay un solo registro por tipo y dueno (`@@unique`): al renovar se actualiza la fecha, no se acumula historial. `tipo` es texto validado contra `backend/src/modules/documentos/documentos.catalogo.js` (no es enum, para agregar tipos sin migracion). `fechaVencimiento` es `DATE` y nulo significa "no vence".
 
 Estados principales:
 
@@ -159,6 +164,7 @@ Reporte: CARGANDO | EN_RUTA | EN_PERNOCTA | DESCARGADO |
          ESPERANDO_INSTRUCCIONES | LIBRE | NOVEDAD | OTRO
 Motor: ENCENDIDO | APAGADO
 Retornable: PENDIENTE | PARCIAL | DEVUELTO | AJUSTADO
+Documento (calculado, no se guarda): VENCIDO | POR_VENCER | PROXIMO | VIGENTE | NO_VENCE
 ```
 
 Compatibilidad historica: `Viaje.camionId` conserva la unidad principal; `ViajeUnidad` representa el conjunto real. Usa primero `viaje.unidades` y `camionId` solo como fallback, como hace `tripUnitIds`.
@@ -216,6 +222,22 @@ Compatibilidad de empresas: `Viaje.empresaId` y `Parada.empresaSedeId` son nulla
 - USD exige tasa BCV; `monto` queda en VES y `montoOriginal` conserva USD.
 - Eliminar decrementa `viaticosGastados`.
 - No cambies redondeo sin revisar PDF, totales e historicos.
+
+### Vencimientos de documentos
+
+- El estado se calcula al consultar, contra la fecha de hoy en Venezuela (`backend/src/utils/fechasCaracas.js`, UTC-4 fijo): `VENCIDO` si ya paso, `POR_VENCER` a 30 dias o menos, `PROXIMO` entre 31 y 60, `VIGENTE` a mas de 60. Es el mismo criterio de colores de la hoja de control de la oficina (rojo/amarillo/verde); los umbrales viven en `documentos.catalogo.js`.
+- `ADMIN` crea, renueva (edita fecha, numero o nota) y elimina. `OPERACIONES` y `COMBUSTIBLE_TALLER` solo consultan.
+- El tipo y el dueno de un documento no se editan: se elimina y se crea otro.
+- Las alertas (contador del menu, aviso en Resumen, marcas en Recursos) solo consideran choferes y unidades activos. Los documentos de un recurso inactivo se conservan y siguen visibles en su ficha.
+- El contador rojo cuenta vencidos + por vencer (30 dias o menos). Los `PROXIMO` solo generan marca ambar.
+- La carga inicial desde la hoja de la oficina se hace con `backend/scripts/importar_vencimientos.js` (ver seccion 13.5). El archivo de datos contiene informacion personal y nunca se guarda en Git.
+
+### Exportacion a Excel
+
+- `GET /api/exportar` devuelve filas en JSON; el archivo `.xlsx` se arma en el navegador (`frontend/src/components/ExportarExcel.jsx`, libreria `write-excel-file/universal`, sin Web Workers para no chocar con la CSP).
+- El servidor decide que puede exportar cada rol, igual que en el panel: `gastos` y `liquidaciones` solo `ADMIN`; en `viajes`, `OPERACIONES` no recibe guia ni montos; `COMBUSTIBLE_TALLER` solo `combustible`, `taller` y `vencimientos`. Al agregar columnas financieras conserva ese filtrado.
+- El rango es obligatorio, se interpreta en dias de Venezuela y no puede superar 366 dias. Cada hoja se limita a 5000 filas y avisa si quedo truncada.
+- Criterio de fecha por hoja: viajes por fecha de agendamiento, liquidaciones por fecha de liquidacion, gastos por fecha de registro, combustible por fecha de cierre del control (y recargas por fecha del evento), taller por fecha de ingreso. Vencimientos no usa el rango: es la foto actual.
 
 ### Retornables
 
@@ -319,6 +341,14 @@ El rol `COMBUSTIBLE_TALLER` (middleware `rolesPermitidos`, `backend/src/middlewa
 | `POST /api/combustible/controles/:id/eventos` | A/O | Registra recarga/transferencia (fallback manual) |
 | `DELETE /api/combustible/controles/:id/eventos/:eventoId` | ADMIN | Elimina un evento erroneo, recalcula si el control ya esta cerrado |
 | `POST /api/combustible/controles/:id/cerrar` | A/O | Cierra con lectura final (fallback manual) |
+| `GET /api/documentos` | A/O y COMBUSTIBLE_TALLER | Lista documentos con estado calculado; filtra por estado, rango de fechas, entidad, chofer/unidad, tipo y texto |
+| `GET /api/documentos/resumen` | A/O y COMBUSTIBLE_TALLER | Conteos y peor estado por chofer/unidad; va en el refresco general |
+| `GET /api/documentos/catalogo` | A/O y COMBUSTIBLE_TALLER | Tipos de documento por entidad y umbrales de dias |
+| `POST /api/documentos` | ADMIN | Registra un documento de un chofer o una unidad |
+| `PUT /api/documentos/:id` | ADMIN | Renueva o corrige fecha, numero o nota |
+| `DELETE /api/documentos/:id` | ADMIN | Elimina un documento |
+| `GET /api/exportar` | Segun conjunto | Filas para el Excel por rango de fechas (`desde`, `hasta`, `conjuntos`) |
+| `GET /api/exportar/conjuntos` | A/O y COMBUSTIBLE_TALLER | Conjuntos que el rol puede exportar |
 | `GET /api/mi/combustible` | CHOFER | Controles propios abiertos y unidades disponibles (con tanques configurados) de su viaje activo |
 | `POST /api/mi/combustible/controles` | CHOFER | Abre un control propio |
 | `POST /api/mi/combustible/controles/:id/eventos` | CHOFER | Registra una recarga en un control propio abierto (solo `RECARGA_*`, tope = capacidad total de la unidad; las transferencias son de operaciones) |
@@ -949,6 +979,26 @@ Para el rol `COMBUSTIBLE_TALLER`, la migracion esperada es `20261110230000_add_c
 5. Confirma que `OPERACIONES` y `ADMIN` siguen funcionando exactamente igual que antes (el cambio es aditivo sobre los middlewares existentes).
 6. Elimina el usuario de prueba solo si no generaron historial real.
 
+Para los vencimientos de documentos, la migracion esperada es `20261114120000_add_document_expirations`. Es aditiva: crea `documentos_vencimiento` con RLS habilitado y sin grants a `PUBLIC`/`anon`/`authenticated`; ninguna tabla existente se modifica y no necesita variables de entorno nuevas. La exportacion a Excel no toca la base. Validacion especifica tras desplegar:
+
+1. En Recursos confirma el selector Choferes / Unidades / Vencimientos (una sola vista a la vez).
+2. Abre los documentos de una unidad (icono de documento en su fila), agrega uno con fecha de hace unos dias y confirma: marca roja junto a la placa, contador rojo en "Recursos" del menu y aviso en Resumen.
+3. Usa "Renovar" para ponerle una fecha futura y confirma que la alerta desaparece.
+4. En Vencimientos prueba los filtros por estado y por rango de fechas.
+5. Con un usuario `OPERACIONES` confirma que ve los documentos pero no puede agregarlos ni renovarlos.
+6. Usa "Exportar a Excel" con un rango corto, abre el archivo y confirma hojas, fechas en hora de Venezuela y montos. Con `OPERACIONES` confirma que no aparecen Gastos ni Liquidaciones.
+7. Elimina los documentos de prueba.
+
+Carga inicial de vencimientos desde la hoja de la oficina. El archivo JSON se genera a partir del Excel, contiene datos personales y se copia al VPS fuera del repositorio (por ejemplo `/root/vencimientos.json`, permisos `600`). El script solo simula mientras no reciba `--aplicar`: lee la base y lista que choferes (por nombre, o por `cedula` si la fila la trae) y unidades (por placa) coinciden, cuales no, y cuantos documentos crearia o cambiaria.
+
+```bash
+cd /opt/sanroman
+docker compose run --rm -v /root/vencimientos.json:/tmp/vencimientos.json:ro backend node scripts/importar_vencimientos.js /tmp/vencimientos.json
+docker compose run --rm -v /root/vencimientos.json:/tmp/vencimientos.json:ro backend node scripts/importar_vencimientos.js /tmp/vencimientos.json --aplicar
+```
+
+Revisa la simulacion antes de aplicar, en especial las coincidencias marcadas como parciales. La carga es repetible: no duplica documentos y solo actualiza los que tengan otra fecha. Borra el JSON del VPS al terminar.
+
 ### 13.6 Aplicacion
 
 ```bash
@@ -1154,6 +1204,9 @@ No registres payloads completos de produccion. Enmascara IMEI, telefonos, JID, t
 - El panel Empresas es exclusivamente un catalogo operativo: alta, busqueda, estado, sedes y acciones. No muestra metricas generales ni por empresa; esos analisis pertenecen a Viajes o Archivo logistico.
 - Evita cards decorativas, gradientes, heroes y texto instructivo innecesario.
 - Mantiene iPhone/escritorio y evita desbordes de nombres, rutas y montos.
+- Recursos muestra una sola vista a la vez mediante un selector (Choferes, Unidades, Vencimientos); no vuelvas a poner paneles lado a lado. Los vencimientos no tienen item propio en el menu lateral: viven dentro de Recursos, con contador en ese item.
+- Los componentes nuevos van en `frontend/src/components/` y los avisos compartidos (SweetAlert) en `frontend/src/lib/alerts.js`, no dentro de `App.jsx`.
+- Las cargas de datos en efectos asignan estado solo dentro de `.then/.catch/.finally` (ver `VencimientosView.jsx`); no llames `setState` de forma sincrona en el cuerpo del efecto.
 - Si divides `App.jsx`, hazlo por dominio sin reescritura total incidental.
 
 ### Prisma
