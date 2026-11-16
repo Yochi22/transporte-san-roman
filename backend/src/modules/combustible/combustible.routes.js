@@ -10,6 +10,7 @@ router.put('/configuracion/:camionId', rolesPermitidos('ADMIN', 'COMBUSTIBLE_TAL
 
 router.get('/controles', ctrl.listarControles)
 router.get('/controles/resumen', ctrl.obtenerResumen)
+router.get('/nivel/:camionId', ctrl.obtenerNivelActual)
 router.get('/controles/:id', ctrl.obtenerControl)
 router.post('/controles', ctrl.abrirControl)
 router.patch('/controles/:id', soloAdmin, ctrl.editarControl)

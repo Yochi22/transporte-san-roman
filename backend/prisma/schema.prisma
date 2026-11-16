@@ -75,6 +75,7 @@ enum ClasificacionRendimiento {
   OPTIMO
   DEFICIENTE
   CRITICO
+  REVISAR
 }
 
 enum EstadoParada {
@@ -541,6 +542,13 @@ model ControlCombustible {
   odometroInicial          Float @map("odometro_inicial")
   lecturasInicialesTanques Json  @map("lecturas_iniciales_tanques")
   litrosInicialesTotal     Float @map("litros_iniciales_total")
+
+  // Diferencia detectada al abrir contra el cierre anterior de la misma
+  // unidad (negativa = faltante, positiva = excedente); null si no hay
+  // cierre previo o el nivel cuadra dentro de tolerancia. Queda en el
+  // registro para poder auditar la unidad despues, no es un aviso flotante.
+  diferenciaNivelApertura Float?  @map("diferencia_nivel_apertura")
+  notaNivelApertura       String? @map("nota_nivel_apertura")
 
   odometroFinal          Float? @map("odometro_final")
   lecturasFinalesTanques Json?  @map("lecturas_finales_tanques")

@@ -3028,12 +3028,14 @@ const CLASIFICACION_STYLES = {
   OPTIMO: 'bg-emerald-50 text-emerald-700',
   DEFICIENTE: 'bg-amber-50 text-amber-700',
   CRITICO: 'bg-red-50 text-red-700',
+  REVISAR: 'bg-purple-50 text-purple-700',
 }
 
 function CombustibleView({ camiones, choferes, viajesActivos, controlesAbiertos, isAdmin, onDone }) {
   const [subTab, setSubTab] = useState('activos')
   const subTabs = [
     { id: 'activos', label: 'Controles activos' },
+    { id: 'nivel', label: 'Nivel actual por unidad' },
     { id: 'configuracion', label: 'Configuracion de unidades' },
     { id: 'historico', label: 'Historico' },
   ]
@@ -3054,9 +3056,70 @@ function CombustibleView({ camiones, choferes, viajesActivos, controlesAbiertos,
         ))}
       </div>
       {subTab === 'activos' && <ControlesCombustibleActivos camiones={camiones} viajesActivos={viajesActivos} controlesAbiertos={controlesAbiertos} onDone={onDone} />}
+      {subTab === 'nivel' && <NivelActualCombustibleView camiones={camiones} />}
       {subTab === 'configuracion' && <ConfiguracionCombustibleView camiones={camiones} isAdmin={isAdmin} />}
       {subTab === 'historico' && <HistoricoCombustibleView camiones={camiones} choferes={choferes} />}
     </div>
+  )
+}
+
+const FUENTE_NIVEL_LABEL = {
+  CONTROL_ABIERTO: 'Calculado desde el control abierto',
+  ULTIMO_CIERRE: 'Lectura del ultimo cierre',
+  SIN_DATOS: 'Sin controles registrados para esta unidad',
+}
+
+// Busca una unidad por placa y responde "cuanto deberia tener ahora", sin
+// necesidad de medir con varilla: si tiene un control abierto, parte de la
+// lectura inicial mas los eventos registrados; si no, usa lo que marco el
+// ultimo cierre. Es una consulta directa, no agrega ningun dato nuevo.
+function NivelActualCombustibleView({ camiones }) {
+  const [camionId, setCamionId] = useState('')
+  const [nivel, setNivel] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!camionId) { setNivel(null); return }
+    let active = true
+    setLoading(true)
+    api.get(`/combustible/nivel/${camionId}`)
+      .then(({ data }) => { if (active) setNivel(data?.data || null) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [camionId])
+
+  const porcentaje = nivel?.nivelEstimado != null && nivel.capacidadTotal > 0
+    ? Math.min(100, Math.round((nivel.nivelEstimado / nivel.capacidadTotal) * 100))
+    : null
+
+  return (
+    <section className="space-y-4">
+      <div className="max-w-sm">
+        <Field label="Buscar unidad por placa">
+          <SearchableSelect value={camionId} options={unitFilterOptions(camiones)} onChange={setCamionId} placeholder="Buscar unidad" />
+        </Field>
+      </div>
+
+      {!camionId && <Empty text="Busca una unidad para ver cuanto combustible deberia tener." />}
+      {camionId && loading && <Empty text="Consultando..." />}
+
+      {camionId && !loading && nivel && (
+        <div className="rounded-md border border-neutral-200 bg-white p-4">
+          <p className="text-sm font-semibold">{nivel.placa}</p>
+          {nivel.fuente === 'SIN_DATOS' ? (
+            <p className="mt-2 text-sm text-neutral-500">Esta unidad no tiene ningun control de combustible registrado.</p>
+          ) : (
+            <>
+              <p className="mt-2 text-2xl font-semibold">
+                {nivel.nivelEstimado.toFixed(1)} L
+                {nivel.capacidadTotal > 0 && <span className="text-sm font-normal text-neutral-500"> / {nivel.capacidadTotal} L ({porcentaje}%)</span>}
+              </p>
+              <p className="mt-1 text-xs text-neutral-500">{FUENTE_NIVEL_LABEL[nivel.fuente]} - {formatDate(nivel.actualizadoAt)}</p>
+            </>
+          )}
+        </div>
+      )}
+    </section>
   )
 }
 
@@ -3550,6 +3613,7 @@ function HistoricoCombustibleView({ camiones, choferes }) {
   const [page, setPage] = useState(1)
   const [data, setData] = useState({ items: [], total: 0, pageSize: 20 })
   const [loading, setLoading] = useState(false)
+  const [expandido, setExpandido] = useState(null)
   useClampPage(page, data.total, data.pageSize, setPage)
 
   useEffect(() => {
@@ -3619,6 +3683,7 @@ function HistoricoCombustibleView({ camiones, choferes }) {
           <table className="w-full min-w-[800px] text-left text-sm">
             <thead className="bg-neutral-50 text-xs text-neutral-500">
               <tr>
+                <th className="px-4 py-3"></th>
                 <th className="px-4 py-3">Unidad</th>
                 <th className="px-4 py-3">Chofer</th>
                 <th className="px-4 py-3">Km</th>
@@ -3629,21 +3694,61 @@ function HistoricoCombustibleView({ camiones, choferes }) {
               </tr>
             </thead>
             <tbody>
-              {data.items.map((control) => (
-                <tr key={control.id} className="border-t border-neutral-100">
-                  <td className="px-4 py-3 font-medium">{control.camion?.placa || '-'}</td>
-                  <td className="px-4 py-3 text-neutral-500">{control.chofer?.nombre || '-'}</td>
-                  <td className="px-4 py-3 text-neutral-500">{control.kmRecorridos?.toFixed(1) ?? '-'}</td>
-                  <td className="px-4 py-3 text-neutral-500">{control.consumoNetoLitros?.toFixed(1) ?? '-'}</td>
-                  <td className="px-4 py-3 text-neutral-500">{control.rendimientoKmLitro?.toFixed(2) ?? '-'} km/L</td>
-                  <td className="px-4 py-3">
-                    {control.clasificacion && (
-                      <span className={`rounded-md px-2 py-1 text-xs font-medium ${CLASIFICACION_STYLES[control.clasificacion] || ''}`}>{formatStatus(control.clasificacion)}</span>
+              {data.items.map((control) => {
+                const abierta = expandido === control.id
+                const litrosIniciales = control.lecturasInicialesTanques?.reduce((total, lectura) => total + lectura.litros, 0) ?? control.litrosInicialesTotal
+                const litrosFinales = control.lecturasFinalesTanques?.reduce((total, lectura) => total + lectura.litros, 0) ?? control.litrosFinalesTotal
+                return (
+                  <Fragment key={control.id}>
+                    <tr className="cursor-pointer border-t border-neutral-100 hover:bg-neutral-50" onClick={() => setExpandido(abierta ? null : control.id)}>
+                      <td className="px-4 py-3">
+                        <ChevronRight className={`text-neutral-400 transition-transform ${abierta ? 'rotate-90' : ''}`} size={16} />
+                      </td>
+                      <td className="px-4 py-3 font-medium">{control.camion?.placa || '-'}</td>
+                      <td className="px-4 py-3 text-neutral-500">{control.chofer?.nombre || '-'}</td>
+                      <td className="px-4 py-3 text-neutral-500">{control.kmRecorridos?.toFixed(1) ?? '-'}</td>
+                      <td className="px-4 py-3 text-neutral-500">{control.consumoNetoLitros?.toFixed(1) ?? '-'}</td>
+                      <td className="px-4 py-3 text-neutral-500">{control.rendimientoKmLitro?.toFixed(2) ?? '-'} km/L</td>
+                      <td className="px-4 py-3">
+                        {control.clasificacion && (
+                          <span className={`rounded-md px-2 py-1 text-xs font-medium ${CLASIFICACION_STYLES[control.clasificacion] || ''}`}>{formatStatus(control.clasificacion)}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-neutral-500">{formatDate(control.cerradoAt)}</td>
+                    </tr>
+                    {abierta && (
+                      <tr className="border-t border-neutral-100 bg-neutral-50">
+                        <td colSpan={8} className="px-4 py-4">
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-1 text-xs text-neutral-600">
+                              <p><span className="text-neutral-400">Odometro:</span> {control.odometroInicial} km &rarr; {control.odometroFinal} km</p>
+                              <p><span className="text-neutral-400">Salio con:</span> {litrosIniciales?.toFixed(1)} L</p>
+                              <p><span className="text-neutral-400">Llego con:</span> {litrosFinales?.toFixed(1)} L</p>
+                              {control.notaNivelApertura && (
+                                <p className="text-amber-700">{control.notaNivelApertura}</p>
+                              )}
+                            </div>
+                            <div>
+                              <p className="mb-1 text-xs font-medium text-neutral-500">Eventos ({control.eventos?.length || 0})</p>
+                              {control.eventos?.length === 0 && <p className="text-xs text-neutral-400">Sin recargas ni transferencias registradas.</p>}
+                              {control.eventos?.length > 0 && (
+                                <div className="divide-y divide-neutral-200">
+                                  {control.eventos.map((evento) => (
+                                    <div key={evento.id} className="flex items-center justify-between py-1.5 text-xs">
+                                      <span>{formatStatus(evento.tipo)} - {evento.litros} L{evento.ubicacion ? ` - ${evento.ubicacion}` : ''}{evento.observacion ? ` (${evento.observacion})` : ''}</span>
+                                      <span className="shrink-0 text-neutral-400">{formatDate(evento.createdAt)}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                  <td className="px-4 py-3 text-neutral-500">{formatDate(control.cerradoAt)}</td>
-                </tr>
-              ))}
+                  </Fragment>
+                )
+              })}
             </tbody>
           </table>
           {!loading && data.items.length === 0 && <Empty text="Sin controles cerrados en este filtro." />}

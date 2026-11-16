@@ -21,6 +21,11 @@ const obtenerResumen = async (req, res) => {
   return ok(res, resumen)
 }
 
+const obtenerNivelActual = async (req, res) => {
+  const nivel = await service.obtenerNivelActual(req.params.camionId)
+  return ok(res, nivel)
+}
+
 const obtenerControl = async (req, res) => {
   const control = await service.obtenerControl(req.params.id)
   return ok(res, control)
@@ -56,6 +61,7 @@ module.exports = {
   guardarConfiguracion,
   listarControles,
   obtenerResumen,
+  obtenerNivelActual,
   obtenerControl,
   abrirControl,
   registrarEvento,

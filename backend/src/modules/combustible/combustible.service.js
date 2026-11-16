@@ -200,6 +200,13 @@ const requerirConfiguracionConTanques = async (camionId) => {
   return configuracion
 }
 
+// Compara el nivel con el que cerro el control anterior de la misma unidad.
+// Bidireccional: una diferencia negativa (falta) sugiere fuga o combustible
+// no registrado; una positiva (excedente) sugiere una recarga real que nadie
+// cargo en la app, o una lectura de varilla equivocada. A diferencia del
+// aviso original, esto queda GUARDADO en el control (diferenciaNivelApertura/
+// notaNivelApertura) para poder auditar la unidad despues, no solo mostrarse
+// una vez en pantalla.
 const calcularAdvertenciaNivel = async (camionId, tanques, litrosNuevoInicio) => {
   const ultimoCerrado = await prisma.controlCombustible.findFirst({
     where: { camionId, estado: 'CERRADO', litrosFinalesTotal: { not: null } },
@@ -211,13 +218,14 @@ const calcularAdvertenciaNivel = async (camionId, tanques, litrosNuevoInicio) =>
   const capacidadTotal = tanques.reduce((total, tanque) => total + tanque.capacidadLitros, 0)
   const tolerancia = Math.max(5, capacidadTotal * 0.03)
   const diferencia = litrosNuevoInicio - ultimoCerrado.litrosFinalesTotal
-  if (diferencia >= -tolerancia) return null
+  if (Math.abs(diferencia) <= tolerancia) return null
 
+  const tipo = diferencia < 0 ? 'faltante' : 'excedente'
   return {
     litrosUltimoCierre: ultimoCerrado.litrosFinalesTotal,
     litrosAhora: litrosNuevoInicio,
     diferencia,
-    mensaje: `El ultimo cierre de esta unidad termino con ${ultimoCerrado.litrosFinalesTotal.toFixed(1)} L y ahora abre con ${litrosNuevoInicio.toFixed(1)} L (${diferencia.toFixed(1)} L), sin una recarga que lo explique. Verifica la lectura o si falta combustible.`
+    mensaje: `El ultimo cierre de esta unidad termino con ${ultimoCerrado.litrosFinalesTotal.toFixed(1)} L y ahora abre con ${litrosNuevoInicio.toFixed(1)} L: ${tipo} de ${Math.abs(diferencia).toFixed(1)} L sin un evento que lo explique. Verifica la lectura o si falta/sobra combustible.`
   }
 }
 
@@ -234,6 +242,7 @@ const abrirControl = async ({ viajeId = null, camionId, choferId = null, odometr
   }
 
   const { detalle, litrosTotal } = calcularLecturas(configuracion.tanques, lecturas)
+  const advertenciaNivel = await calcularAdvertenciaNivel(camionId, configuracion.tanques, litrosTotal)
 
   const control = await prisma.controlCombustible.create({
     data: {
@@ -243,16 +252,12 @@ const abrirControl = async ({ viajeId = null, camionId, choferId = null, odometr
       odometroInicial: odometro,
       lecturasInicialesTanques: detalle,
       litrosInicialesTotal: litrosTotal,
+      diferenciaNivelApertura: advertenciaNivel?.diferencia ?? null,
+      notaNivelApertura: advertenciaNivel?.mensaje ?? null,
       creadoPorId
     },
     include: controlIncludeBasico
   })
-
-  // Aviso de un solo momento (no se guarda en la base): compara contra el
-  // cierre del ultimo control de esta misma unidad. Si el nivel bajo sin
-  // que haya una recarga/transferencia que lo explique, puede ser una mala
-  // lectura o combustible que falta.
-  const advertenciaNivel = await calcularAdvertenciaNivel(camionId, configuracion.tanques, litrosTotal)
 
   return { ...control, advertenciaNivel }
 }
@@ -341,8 +346,17 @@ const sumarEventos = (eventos) => eventos.reduce((totales, evento) => {
   return totales
 }, { recargas: 0, transferenciasEntrada: 0, transferenciasSalida: 0 })
 
-const clasificarRendimiento = (rendimiento, configuracion) => {
+// Un rendimiento varias veces mejor que el optimo casi nunca es un logro
+// real: normalmente significa que faltan recargas por registrar durante el
+// tramo (el consumo real quedo incompleto). Igual que un consumo neto <= 0
+// (matematicamente imposible: mas combustible del que entro), se marca para
+// revisar en vez de mostrarse como el mejor desempeno de la flota.
+const MULTIPLO_RENDIMIENTO_SOSPECHOSO = 3
+
+const clasificarRendimiento = (rendimiento, consumoNetoLitros, configuracion) => {
+  if (consumoNetoLitros <= 0) return 'REVISAR'
   if (rendimiento === null) return null
+  if (rendimiento >= configuracion.umbralOptimoKmLitro * MULTIPLO_RENDIMIENTO_SOSPECHOSO) return 'REVISAR'
   if (rendimiento >= configuracion.umbralOptimoKmLitro) return 'OPTIMO'
   if (rendimiento >= configuracion.umbralDeficienteKmLitro) return 'DEFICIENTE'
   return 'CRITICO'
@@ -360,7 +374,7 @@ const calcularCierre = (control, tanques, configuracion, lecturas, odometroFinal
   const totales = sumarEventos(control.eventos)
   const consumoNetoLitros = control.litrosInicialesTotal + totales.recargas + totales.transferenciasEntrada - totales.transferenciasSalida - litrosTotal
   const rendimientoKmLitro = consumoNetoLitros > 0 ? kmRecorridos / consumoNetoLitros : null
-  const clasificacion = clasificarRendimiento(rendimientoKmLitro, configuracion)
+  const clasificacion = clasificarRendimiento(rendimientoKmLitro, consumoNetoLitros, configuracion)
 
   return { odometroFinal, lecturasFinalesTanques: detalle, litrosFinalesTotal: litrosTotal, kmRecorridos, consumoNetoLitros, rendimientoKmLitro, clasificacion }
 }
@@ -392,7 +406,7 @@ const recalcularCierre = async (controlId) => {
   const totales = sumarEventos(control.eventos)
   const consumoNetoLitros = control.litrosInicialesTotal + totales.recargas + totales.transferenciasEntrada - totales.transferenciasSalida - control.litrosFinalesTotal
   const rendimientoKmLitro = consumoNetoLitros > 0 ? kmRecorridos / consumoNetoLitros : null
-  const clasificacion = clasificarRendimiento(rendimientoKmLitro, config)
+  const clasificacion = clasificarRendimiento(rendimientoKmLitro, consumoNetoLitros, config)
 
   return prisma.controlCombustible.update({
     where: { id: controlId },
@@ -488,7 +502,10 @@ const obtenerControlesAbiertosPorCamiones = async (camionIds) => {
 }
 
 const obtenerResumen = async ({ camionId, choferId } = {}) => {
-  const where = { estado: 'CERRADO', rendimientoKmLitro: { not: null } }
+  // Los marcados REVISAR no son datos de desempeno validos (faltan recargas
+  // por registrar o el consumo es matematicamente imposible): no deben
+  // inflar ni distorsionar el promedio de la unidad/chofer.
+  const where = { estado: 'CERRADO', rendimientoKmLitro: { not: null }, clasificacion: { not: 'REVISAR' } }
   if (camionId) where.camionId = camionId
   if (choferId) where.choferId = choferId
 
@@ -520,6 +537,56 @@ const obtenerResumen = async ({ camionId, choferId } = {}) => {
   }
 }
 
+// Cuanto combustible deberia tener la unidad AHORA, sin abrir nada: si tiene
+// un control abierto, el nivel inicial mas los eventos registrados hasta el
+// momento; si no, el nivel con el que cerro su ultimo control. Es una
+// lectura directa sobre lo que ya existe (sin tabla ni calculo nuevo que
+// guardar), para resolver "cuanto deberia tener la unidad X" sin esperar a
+// que alguien la vuelva a medir con varilla.
+const obtenerNivelActual = async (camionId) => {
+  const camion = await prisma.camion.findUniqueOrThrow({ where: { id: camionId }, select: { placa: true } })
+  const configuracion = await prisma.configuracionCombustibleCamion.findUnique({
+    where: { camionId },
+    select: { tanques: { select: { capacidadLitros: true } } }
+  })
+  const capacidadTotal = (configuracion?.tanques || []).reduce((total, tanque) => total + tanque.capacidadLitros, 0)
+
+  const abierto = await prisma.controlCombustible.findFirst({
+    where: { camionId, estado: 'ABIERTO' },
+    include: { eventos: true }
+  })
+  if (abierto) {
+    const totales = sumarEventos(abierto.eventos)
+    const nivelEstimado = abierto.litrosInicialesTotal + totales.recargas + totales.transferenciasEntrada - totales.transferenciasSalida
+    return {
+      placa: camion.placa,
+      capacidadTotal,
+      nivelEstimado,
+      fuente: 'CONTROL_ABIERTO',
+      actualizadoAt: abierto.eventos[0]?.createdAt || abierto.createdAt,
+      controlId: abierto.id
+    }
+  }
+
+  const ultimoCerrado = await prisma.controlCombustible.findFirst({
+    where: { camionId, estado: 'CERRADO', litrosFinalesTotal: { not: null } },
+    orderBy: { cerradoAt: 'desc' },
+    select: { id: true, litrosFinalesTotal: true, cerradoAt: true }
+  })
+  if (ultimoCerrado) {
+    return {
+      placa: camion.placa,
+      capacidadTotal,
+      nivelEstimado: ultimoCerrado.litrosFinalesTotal,
+      fuente: 'ULTIMO_CIERRE',
+      actualizadoAt: ultimoCerrado.cerradoAt,
+      controlId: ultimoCerrado.id
+    }
+  }
+
+  return { placa: camion.placa, capacidadTotal, nivelEstimado: null, fuente: 'SIN_DATOS', actualizadoAt: null, controlId: null }
+}
+
 module.exports = {
   obtenerConfiguracion,
   guardarConfiguracion,
@@ -532,5 +599,6 @@ module.exports = {
   obtenerControl,
   obtenerMisControlesAbiertos,
   obtenerControlesAbiertosPorCamiones,
-  obtenerResumen
+  obtenerResumen,
+  obtenerNivelActual
 }
