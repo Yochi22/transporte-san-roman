@@ -8,23 +8,34 @@ const { SESSION_COOKIE_NAME } = require('../config/session')
 // una cookie con firma valida cambia la clave; cualquier otra cosa sigue
 // contando por IP, asi un atacante no puede inventar cookies para saltarse
 // el limite.
-const claveUsuarioOIp = (req) => {
+const identidadLimite = (req) => {
+  if (req.identidadLimite) return req.identidadLimite
+  let identidad = null
   const token = req.cookies?.[SESSION_COOKIE_NAME]
   if (token) {
     try {
       const payload = verificarToken(token)
-      if (payload?.id) return `usuario:${payload.id}`
+      if (payload?.id) identidad = { clave: `usuario:${payload.id}`, autenticado: true }
     } catch {
       // token invalido o vencido: cae al limite por IP
     }
   }
-  return ipKeyGenerator(req.ip)
+  req.identidadLimite = identidad || { clave: ipKeyGenerator(req.ip), autenticado: false }
+  return req.identidadLimite
 }
+
+// Un usuario con sesion valida es trafico legitimo del panel: el refresco
+// automatico (8 llamadas cada 30 s) mas el estado de WhatsApp, varias
+// pestanas y los refrescos que disparan los reportes de los choferes superan
+// con facilidad 500 en 15 min. El cupo autenticado solo debe frenar abuso
+// real; el anonimo (login/perfil sin sesion) si se mantiene corto.
+const LIMITE_AUTENTICADO = 3000
+const LIMITE_ANONIMO = 300
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 500,
-  keyGenerator: claveUsuarioOIp,
+  limit: (req) => (identidadLimite(req).autenticado ? LIMITE_AUTENTICADO : LIMITE_ANONIMO),
+  keyGenerator: (req) => identidadLimite(req).clave,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   message: { ok: false, mensaje: 'Demasiadas solicitudes. Intenta nuevamente más tarde.', detalle: null }

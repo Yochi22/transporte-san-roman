@@ -390,7 +390,7 @@ Solicitudes mutables bajo `/api` deben enviar JSON y `X-Requested-With: XMLHttpR
 - Logout incrementa `sessionVersion` e invalida sesiones anteriores.
 - Socket.IO verifica cookie, origen, usuario activo y version de sesion.
 - CORS produccion acepta solo origenes HTTPS exactos de `FRONTEND_URL`.
-- Helmet/CSP activos, JSON maximo 100 KB y API 500 solicitudes/15 minutos.
+- Helmet/CSP activos, JSON maximo 100 KB. Limite de API (`security.middleware.js`): 3000 solicitudes/15 min por usuario con cookie de sesion valida (clave `usuario:<id>`, asi varios operadores en la misma IP no se bloquean entre si), 300/15 min por IP para trafico sin sesion, 10 fallos/15 min por IP en login, y el webhook GPS aparte con 20000/15 min. El panel reintenta `GET /api/auth/perfil` ante 429/5xx antes de dar la sesion por perdida, y agrupa los refrescos disparados por socket en uno cada 1,5 s.
 - Errores de produccion no devuelven detalle interno.
 
 No debilites cookie, CORS, CSP, CSRF o rate limits para resolver desarrollo. Corrige proxy, origen o cliente. `DEMO_PUBLIC_WHATSAPP_QR=true` esta prohibido en produccion.

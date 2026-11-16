@@ -244,22 +244,36 @@ export default function App() {
     let mounted = true
     localStorage.removeItem('token')
 
-    api.get('/auth/perfil')
-      .then((response) => {
-        if (mounted) {
+    // Un 429 o una caida momentanea del backend no significan "sin sesion":
+    // se reintenta antes de mandar al usuario al login (si no, pierde la
+    // sesion valida y al intentar entrar vuelve a chocar con el mismo limite).
+    let reintento = null
+    const verificarSesion = (intentos = 0) => {
+      api.get('/auth/perfil')
+        .then((response) => {
+          if (!mounted) return
           setUsuario(response.data?.data || null)
           setIsAuthenticated(true)
-        }
-      })
-      .catch(() => {
-        if (mounted) setIsAuthenticated(false)
-      })
-      .finally(() => {
-        if (mounted) setAuthChecking(false)
-      })
+          setAuthChecking(false)
+        })
+        .catch((err) => {
+          if (!mounted) return
+          const status = err.response?.status
+          const transitorio = status === 429 || status >= 500 || !status
+          if (transitorio && intentos < 3) {
+            const espera = status === 429 ? 15000 : 4000
+            reintento = setTimeout(() => verificarSesion(intentos + 1), espera)
+            return
+          }
+          setIsAuthenticated(false)
+          setAuthChecking(false)
+        })
+    }
+    verificarSesion()
 
     return () => {
       mounted = false
+      clearTimeout(reintento)
     }
   }, [])
 
@@ -269,7 +283,17 @@ export default function App() {
     const initialRefresh = setTimeout(() => fetchData(), 0)
     socket.connect()
 
-    const refresh = () => fetchData({ refreshSelected: true })
+    // Varios eventos de socket seguidos (una tanda de reportes de choferes)
+    // se agrupan en un solo refresco, en vez de disparar la carga completa
+    // del panel por cada uno.
+    let refreshPendiente = null
+    const refresh = () => {
+      if (refreshPendiente) return
+      refreshPendiente = setTimeout(() => {
+        refreshPendiente = null
+        fetchData({ refreshSelected: true })
+      }, 1500)
+    }
     const handleReporte = (payload) => {
       playAlertSound()
       if (payload?.reporte?.tipoReporte === 'NOVEDAD') {
@@ -305,6 +329,7 @@ export default function App() {
     return () => {
       clearInterval(interval)
       clearTimeout(initialRefresh)
+      clearTimeout(refreshPendiente)
       socket.off('reporte:nuevo', handleReporte)
       socket.off('gasto:nuevo', refresh)
       socket.off('viaje_actualizado', refresh)
@@ -321,7 +346,7 @@ export default function App() {
     if (!isAuthenticated || !isAdmin) return
 
     cargarWhatsappStatus()
-    const interval = setInterval(cargarWhatsappStatus, 15000)
+    const interval = setInterval(cargarWhatsappStatus, 60000)
     return () => clearInterval(interval)
   }, [cargarWhatsappStatus, isAdmin, isAuthenticated])
 
