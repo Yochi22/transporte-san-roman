@@ -24,7 +24,7 @@ COPY --chown=node:node --from=build /app/prisma ./prisma
 COPY --chown=node:node src ./src
 COPY --chown=node:node scripts ./scripts
 
-RUN mkdir -p /app/.whatsapp-auth && chown -R node:node /app
+RUN mkdir -p /app/.whatsapp-auth /app/.relacion-gastos && chown -R node:node /app
 
 ENV NODE_ENV=production
 EXPOSE 3000
