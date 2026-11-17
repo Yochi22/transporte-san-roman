@@ -1,6 +1,7 @@
 const prisma = require('../../config/database')
 const { aplicarReporteChofer } = require('../../services/reportes/aplicarReporte.service')
 const combustibleService = require('../combustible/combustible.service')
+const { guardarArchivo, eliminarArchivo } = require('../../utils/almacenamientoRelacionGastos')
 
 const TIPOS_VALIDOS = new Set(['LLEGADA', 'CARGANDO', 'DESCARGADO', 'ESPERANDO_INSTRUCCIONES', 'LIBRE', 'NOVEDAD', 'OTRO'])
 const ESTADOS_PARADA_VALIDOS = new Set(['EN_CURSO', 'COMPLETADA'])
@@ -45,6 +46,8 @@ const viajeChoferSelect = {
     take: 20,
     select: { id: true, tipoReporte: true, ubicacion: true, mensajeOriginal: true, origen: true, createdAt: true },
   },
+  estadoFinanciero: true,
+  relacionGastosSubidaAt: true,
 }
 
 // El chofer solo debe ver la etapa actual (y las ya completadas). Las etapas
@@ -262,6 +265,37 @@ const obtenerMiHistoricoCombustible = async (choferId, { page, pageSize } = {}) 
   return combustibleService.listarControles({ choferId, estado: 'CERRADO', page, pageSize })
 }
 
+// Foto de la relacion de gastos, normalmente subida al marcar "disponible"
+// al volver. Se puede resubir mientras el viaje no este liquidado (el admin
+// aun podria pedir una foto mas clara); una vez liquidado queda fijo, igual
+// que el resto de los datos financieros del viaje.
+const subirMiRelacionGastos = async (choferId, viajeId, archivo) => {
+  if (!archivo) throw { status: 400, message: 'Falta la imagen' }
+  const viaje = await prisma.viaje.findFirst({
+    where: { id: viajeId, choferId },
+    select: { id: true, estadoFinanciero: true, relacionGastosArchivo: true }
+  })
+  if (!viaje) throw { status: 404, message: 'Ese viaje no te pertenece' }
+  if (viaje.estadoFinanciero === 'LIQUIDADO') {
+    throw { status: 409, message: 'Este viaje ya fue liquidado, no se puede cambiar la relacion de gastos' }
+  }
+
+  const nombreArchivo = await guardarArchivo(archivo.buffer, archivo.mimetype)
+  const anterior = viaje.relacionGastosArchivo
+
+  const actualizado = await prisma.viaje.update({
+    where: { id: viajeId },
+    data: { relacionGastosArchivo: nombreArchivo, relacionGastosSubidaAt: new Date() },
+    select: { relacionGastosSubidaAt: true }
+  })
+
+  // Si estaba resubiendo (ej. foto borrosa), elimina la anterior del disco
+  // despues de que la nueva ya quedo guardada, para no dejar huerfanos.
+  if (anterior) await eliminarArchivo(anterior)
+
+  return actualizado
+}
+
 module.exports = {
   obtenerMiViaje,
   registrarReporte,
@@ -270,4 +304,5 @@ module.exports = {
   registrarMiEventoCombustible,
   cerrarMiControlCombustible,
   obtenerMiHistoricoCombustible,
+  subirMiRelacionGastos,
 }

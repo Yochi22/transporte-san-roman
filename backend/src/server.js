@@ -8,6 +8,7 @@ const { crearUsuarioInicial } = require('./modules/auth/auth.service')
 const { iniciarWhatsApp } = require('./services/messaging/whatsapp')
 const { depurarReportesAntiguos } = require('./modules/reportes/reportes.service')
 const { depurarDevueltosAntiguos } = require('./modules/retornables/retornables.service')
+const { depurarRelacionGastosLiquidadas } = require('./modules/viajes/viajes.service')
 const { iniciarSincronizacionTraccar } = require('./modules/gps/traccar-sync.service')
 const { verificarToken } = require('./config/jwt')
 const prisma = require('./config/database')
@@ -25,6 +26,7 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
 const server = http.createServer(app)
 const DIAS_RETENCION_REPORTES = Math.max(1, Number(process.env.DIAS_RETENCION_REPORTES) || 5)
 const DIAS_RETENCION_RETORNABLES = Math.max(1, Number(process.env.DIAS_RETENCION_RETORNABLES) || 30)
+const DIAS_RETENCION_RELACION_GASTOS = Math.max(1, Number(process.env.DIAS_RETENCION_RELACION_GASTOS) || 30)
 const INTERVALO_DEPURACION = 24 * 60 * 60 * 1000
 
 const ejecutarDepuracionReportes = async () => {
@@ -42,6 +44,15 @@ const ejecutarDepuracionRetornables = async () => {
     if (resultado.count > 0) console.log(`Retornables devueltos eliminados: ${resultado.count}`)
   } catch (error) {
     console.error('No se pudieron depurar los retornables devueltos:', error.message)
+  }
+}
+
+const ejecutarDepuracionRelacionGastos = async () => {
+  try {
+    const resultado = await depurarRelacionGastosLiquidadas(DIAS_RETENCION_RELACION_GASTOS)
+    if (resultado.count > 0) console.log(`Fotos de relacion de gastos eliminadas (viajes liquidados hace mas de ${DIAS_RETENCION_RELACION_GASTOS} dias): ${resultado.count}`)
+  } catch (error) {
+    console.error('No se pudieron depurar las relaciones de gastos:', error.message)
   }
 }
 
@@ -102,8 +113,10 @@ server.listen(PORT, async () => {
     await crearUsuarioInicial()
     await ejecutarDepuracionReportes()
     await ejecutarDepuracionRetornables()
+    await ejecutarDepuracionRelacionGastos()
     setInterval(ejecutarDepuracionReportes, INTERVALO_DEPURACION).unref()
     setInterval(ejecutarDepuracionRetornables, INTERVALO_DEPURACION).unref()
+    setInterval(ejecutarDepuracionRelacionGastos, INTERVALO_DEPURACION).unref()
     iniciarSincronizacionTraccar()
     await iniciarWhatsApp(io)
   } catch (error) {

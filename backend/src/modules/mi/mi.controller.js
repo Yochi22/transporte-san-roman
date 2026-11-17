@@ -40,6 +40,11 @@ const historicoCombustible = async (req, res) => {
   return ok(res, resultado)
 }
 
+const subirRelacionGastos = async (req, res) => {
+  const resultado = await service.subirMiRelacionGastos(req.usuario.choferId, req.params.id, req.file)
+  return ok(res, resultado, 'Relacion de gastos subida', 201)
+}
+
 module.exports = {
   miViaje,
   crearReporte,
@@ -48,4 +53,5 @@ module.exports = {
   registrarEventoCombustible,
   cerrarControlCombustible,
   historicoCombustible,
+  subirRelacionGastos,
 }

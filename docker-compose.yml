@@ -9,8 +9,10 @@ services:
       NODE_ENV: production
       PORT: 3000
       WHATSAPP_AUTH_PATH: /app/.whatsapp-auth
+      RELACION_GASTOS_PATH: /app/.relacion-gastos
     volumes:
       - whatsapp_auth:/app/.whatsapp-auth
+      - relacion_gastos:/app/.relacion-gastos
     expose:
       - "3000"
     healthcheck:
@@ -44,5 +46,6 @@ services:
 
 volumes:
   whatsapp_auth:
+  relacion_gastos:
   caddy_data:
   caddy_config:

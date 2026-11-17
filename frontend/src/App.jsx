@@ -10,6 +10,7 @@ import { MarcaVencimiento } from './components/DocumentoEstado.jsx'
 import { totalUrgentes } from './lib/documentos'
 import { api, SOCKET_URL } from './lib/api'
 import { alertOptions, confirmAction, notifyError, notifySuccess, notifyWarning, requestNumber } from './lib/alerts'
+import { comprimirImagen } from './lib/imagenes'
 import {
   AlertTriangle,
   Archive,
@@ -4294,6 +4295,20 @@ function ViajeDrawer({ viaje, isAdmin, onClose, onDone }) {
             </div>
           </section>
 
+          {isAdmin && (
+            <section className="border-t border-neutral-200 pt-5">
+              <SectionTitle title="Relacion de gastos del chofer" subtitle="Foto entregada desde la app al volver disponible" />
+              {viaje.relacionGastosSubidaAt ? (
+                <a href={`/api/viajes/${viaje.id}/relacion-gastos`} target="_blank" rel="noreferrer" className="mt-2 block">
+                  <img src={`/api/viajes/${viaje.id}/relacion-gastos`} alt="Relacion de gastos" className="max-h-64 rounded-md border border-neutral-200 object-contain" />
+                  <p className="mt-1 text-xs text-neutral-400">Subida {formatDate(viaje.relacionGastosSubidaAt)} - click para ver completa</p>
+                </a>
+              ) : (
+                <Empty text="El chofer aun no ha subido la foto de este viaje." />
+              )}
+            </section>
+          )}
+
           <section className="flex flex-col gap-2 border-t border-neutral-200 pt-5 sm:flex-row sm:justify-end">
             {isAdmin && (
               <button onClick={recargar} disabled={Boolean(saving)} className="btn-secondary">
@@ -4790,6 +4805,7 @@ function ChoferApp({ onLogout }) {
   const [reporteAbierto, setReporteAbierto] = useState(null)
   const [reporteTexto, setReporteTexto] = useState('')
   const [disponibleAbierto, setDisponibleAbierto] = useState(null)
+  const [fotosGastos, setFotosGastos] = useState({})
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -4832,6 +4848,37 @@ function ChoferApp({ onLogout }) {
       await cargar()
     } catch (err) {
       await notifyError(err.response?.data?.mensaje || 'No se pudo enviar el reporte.')
+    } finally {
+      setEnviando('')
+    }
+  }
+
+  // Al volver disponible, exige la foto de la relacion de gastos (si todavia
+  // no se subio para este viaje): se comprime en el telefono antes de
+  // enviarla, el chofer no tiene que hacer nada por su cuenta.
+  const marcarDisponible = async (viaje, ubicacion) => {
+    const clave = viaje.id + 'LIBRE'
+    const yaSubida = Boolean(viaje.relacionGastosSubidaAt)
+    const archivo = fotosGastos[viaje.id]
+    if (!yaSubida && !archivo) {
+      await notifyError('Adjunta la foto de la relacion de gastos antes de marcarte disponible.')
+      return
+    }
+    setEnviando(clave)
+    try {
+      if (!yaSubida) {
+        const comprimida = await comprimirImagen(archivo)
+        const formData = new FormData()
+        formData.append('imagen', comprimida, 'relacion-gastos.jpg')
+        await api.post(`/mi/viaje/${viaje.id}/relacion-gastos`, formData)
+      }
+      await api.post('/mi/reportes', { viajeId: viaje.id, tipoReporte: 'LIBRE', ubicacion })
+      await notifySuccess('Reporte enviado', 'Operaciones ya puede verlo en el panel.')
+      setDisponibleAbierto(null)
+      setFotosGastos((prev) => { const siguiente = { ...prev }; delete siguiente[viaje.id]; return siguiente })
+      await cargar()
+    } catch (err) {
+      await notifyError(err.response?.data?.mensaje || err.message || 'No se pudo enviar el reporte.')
     } finally {
       setEnviando('')
     }
@@ -5011,20 +5058,39 @@ function ChoferApp({ onLogout }) {
               )}
 
               {disponibleAbierto === viaje.id && (
-                <div className="space-y-2 rounded-md border border-neutral-200 bg-stone-50 p-3">
-                  <p className="text-xs font-medium text-neutral-600">Donde quedaron disponibles</p>
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {UBICACIONES_DISPONIBLE.map((ubicacion) => (
-                      <button
-                        key={ubicacion}
-                        type="button"
-                        disabled={bloqueado}
-                        onClick={() => enviarReporte(viaje.id, { tipoReporte: 'LIBRE', ubicacion })}
-                        className="btn-primary justify-center"
-                      >
-                        {ubicacion}
-                      </button>
-                    ))}
+                <div className="space-y-3 rounded-md border border-neutral-200 bg-stone-50 p-3">
+                  <div>
+                    <p className="text-xs font-medium text-neutral-600">Foto de la relacion de gastos</p>
+                    {viaje.relacionGastosSubidaAt ? (
+                      <p className="mt-1 text-xs text-emerald-600">Ya subiste la foto de este viaje.</p>
+                    ) : (
+                      <>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={(event) => setFotosGastos((prev) => ({ ...prev, [viaje.id]: event.target.files?.[0] || null }))}
+                          className="mt-1 block w-full text-xs"
+                        />
+                        {fotosGastos[viaje.id] && <p className="mt-1 text-xs text-neutral-500">Foto lista, se sube al confirmar.</p>}
+                      </>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-neutral-600">Donde quedaron disponibles</p>
+                    <div className="mt-1 grid gap-2 sm:grid-cols-3">
+                      {UBICACIONES_DISPONIBLE.map((ubicacion) => (
+                        <button
+                          key={ubicacion}
+                          type="button"
+                          disabled={bloqueado || (!viaje.relacionGastosSubidaAt && !fotosGastos[viaje.id])}
+                          onClick={() => marcarDisponible(viaje, ubicacion)}
+                          className="btn-primary justify-center"
+                        >
+                          {ubicacion}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <div className="flex justify-end">
                     <button type="button" onClick={() => setDisponibleAbierto(null)} className="btn-secondary">Cancelar</button>

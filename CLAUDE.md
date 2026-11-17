@@ -47,6 +47,7 @@ Transporte San Roman centraliza:
 - Viajes completados logisticamente y pendientes de liquidacion.
 - Gastos, viaticos, tasa BCV, documentacion y liquidaciones.
 - Retornables y sus movimientos.
+- Foto de la relacion de gastos del chofer (para liquidar sus honorarios), subida desde su app al volver disponible; el archivo vive en disco, nunca en la base, y se depura automaticamente tiempo despues de liquidado el viaje.
 - Taller e historial de mantenimiento.
 - Control de combustible por unidad: configuracion de tanques (tabla de calibracion cm->litros) y umbrales de rendimiento, controles abiertos/cerrados con lecturas de odometro y varilla, eventos de recarga/transferencia, e historico de rendimiento. Independiente del cierre/liquidacion del viaje.
 - Ultima posicion GPS por unidad mediante Traccar.
@@ -147,6 +148,7 @@ No mezcles procedimientos del modo unificado con el Compose separado sin adaptar
 - `TruckPosition`: una fila por camion; no es historial.
 - `MantenimientoVehiculo`: entradas de taller.
 - `Retornable` y `RetornableMovimiento`: saldo y trazabilidad.
+- `Viaje.relacionGastosArchivo`/`relacionGastosSubidaAt`: nombre del archivo (no la imagen) y fecha de subida de la foto de relacion de gastos. El archivo real vive en `RELACION_GASTOS_PATH` (volumen Docker `relacion_gastos`), nunca en una columna de la base.
 - `ConfiguracionCombustibleCamion`, `TanqueCombustible` y `PuntoCalibracionTanque`: ficha de combustible por unidad (1 o 2 tanques, tabla de calibracion cm->litros, umbrales de rendimiento optimo/deficiente; debajo del deficiente es critico). Solo `ADMIN` la edita.
 - `ControlCombustible` y `EventoCombustible`: un control por unidad entre lectura inicial y final (odometro + varilla por tanque, convertida a litros via interpolacion lineal sobre la tabla de calibracion), con eventos de recarga/transferencia durante el viaje. Una transferencia a otra unidad crea automaticamente el evento espejo en el control de la unidad destino (exige que ese control este `ABIERTO`). Al cerrar se calculan `kmRecorridos`, `consumoNetoLitros`, `rendimientoKmLitro` y `clasificacion`. Independiente de `estadoLogistico`/`estadoFinanciero` del viaje: no bloquea ni depende del cierre/liquidacion.
 - `DocumentoVencimiento`: documento con fecha de vencimiento que pertenece a exactamente un `Chofer` o un `Camion` (restriccion `CHECK` en la base; `onDelete: Cascade`). Hay un solo registro por tipo y dueno (`@@unique`): al renovar se actualiza la fecha, no se acumula historial. `tipo` es texto validado contra `backend/src/modules/documentos/documentos.catalogo.js` (no es enum, para agregar tipos sin migracion). `fechaVencimiento` es `DATE` y nulo significa "no vence".
@@ -306,6 +308,7 @@ El rol `COMBUSTIBLE_TALLER` (middleware `rolesPermitidos`, `backend/src/middlewa
 | `DELETE /api/empresas/:id/sedes/:sedeId` | ADMIN | Elimina sede sin uso historico |
 | `GET /api/viajes` | A/O | Hasta 500 viajes con relaciones |
 | `GET /api/viajes/:id` | A/O | Detalle de viaje |
+| `GET /api/viajes/:id/relacion-gastos` | A/O | Imagen de la relacion de gastos (404 si no hay) |
 | `GET /api/viajes/archivo/listado` | A/O | Archivo paginado/por periodo |
 | `GET /api/viajes/pendientes-liquidacion/listado` | ADMIN | Pendientes paginados |
 | `POST /api/viajes` | A/O | Crea viaje o agrega tramo |
@@ -331,6 +334,7 @@ El rol `COMBUSTIBLE_TALLER` (middleware `rolesPermitidos`, `backend/src/middlewa
 | `POST /api/whatsapp/reiniciar` | ADMIN | Borra sesion y genera QR nuevo |
 | `GET /api/mi/viaje` | CHOFER | Viaje(s) propios en curso, con paradas y reportes recientes |
 | `POST /api/mi/reportes` | CHOFER | Registra un reporte estructurado desde la app |
+| `POST /api/mi/viaje/:id/relacion-gastos` | CHOFER | Sube la foto de relacion de gastos de un viaje propio (multipart, 1 imagen, tope 1.2 MB; bloqueado si el viaje ya esta liquidado) |
 | `GET /api/combustible/configuracion/:camionId` | A/O | Tanques, calibracion y umbrales de una unidad |
 | `PUT /api/combustible/configuracion/:camionId` | ADMIN | Crea/edita tanques, calibracion y umbrales |
 | `GET /api/combustible/controles` | A/O | Lista controles, filtra por camion/chofer/estado/clasificacion |
@@ -365,6 +369,7 @@ Autoservicio del chofer (`/api/mi`, rol `CHOFER`, requiere `autenticar` + `soloC
 |---|---|
 | `GET /api/mi/viaje` | Viaje(s) `EN_CURSO` del chofer autenticado, con paradas y sus reportes recientes |
 | `POST /api/mi/reportes` | Registra un reporte estructurado (botones, sin IA) para un viaje propio |
+| `POST /api/mi/viaje/:id/relacion-gastos` | Sube/resube la foto de relacion de gastos de un viaje propio, mientras no este liquidado |
 | `GET /api/mi/combustible` | Controles de combustible propios abiertos y unidades disponibles |
 | `POST /api/mi/combustible/controles` | Abre un control de combustible para una unidad de su viaje activo |
 | `POST /api/mi/combustible/controles/:id/eventos` | Registra una recarga en un control propio |
@@ -524,6 +529,8 @@ El backend usa `backend/.env`, con permisos `600` en servidor.
 | `ADMIN_RESET_PASSWORD` | `true` solo durante una rotacion |
 | `DIAS_RETENCION_REPORTES` | 5 por defecto |
 | `DIAS_RETENCION_RETORNABLES` | 30 por defecto |
+| `RELACION_GASTOS_PATH` | Carpeta en disco de las fotos de relacion de gastos. En Compose: `/app/.relacion-gastos` |
+| `DIAS_RETENCION_RELACION_GASTOS` | 30 por defecto; cuenta desde `fechaLiquidacion`, no desde la subida |
 
 Tras crear/rotar el admin, elimina `ADMIN_PASSWORD` y `ADMIN_RESET_PASSWORD` y recrea backend.
 
@@ -999,6 +1006,16 @@ docker compose run --rm -v /root/vencimientos.json:/tmp/vencimientos.json:ro bac
 
 Revisa la simulacion antes de aplicar, en especial las coincidencias marcadas como parciales. La carga es repetible: no duplica documentos y solo actualiza los que tengan otra fecha. Borra el JSON del VPS al terminar.
 
+Para la foto de relacion de gastos, la migracion esperada es `20261116233000_add_relacion_gastos_foto`. Es aditiva: agrega `viajes.relacion_gastos_archivo` y `viajes.relacion_gastos_subida_at` (ambas nullable); ninguna tabla existente se modifica ni se rellenan datos. Requiere ademas, por primera vez en este modulo, **un volumen Docker nuevo** (`relacion_gastos`) y la variable `RELACION_GASTOS_PATH`: sin eso el backend igual arranca, pero las fotos se escribirian dentro del contenedor y se perderian en el siguiente `--force-recreate`. Validacion especifica tras desplegar:
+
+1. Confirma que el volumen existe: `docker volume ls | grep relacion_gastos` (lo crea `docker compose up` solo, al estar declarado en `docker-compose.yml`).
+2. Desde la app de un chofer con un viaje `EN_CURSO`, marca "Disponible": confirma que pide la foto antes de habilitar las ubicaciones, que la sube (toma unos segundos en comprimir) y que el reporte `LIBRE` se envia despues.
+3. En el panel admin, abre ese viaje y confirma que la foto aparece en "Relacion de gastos del chofer", con su fecha.
+4. Intenta liquidar el viaje y confirma que la foto sigue visible despues de liquidado.
+5. Prueba que un `OPERACIONES` no ve esa seccion (es admin-only) pero el chofer si puede resubir la foto mientras el viaje no este liquidado, y que falla con 409 si ya esta liquidado.
+6. Verifica que una imagen de mas de ~1.2 MB (sin comprimir, por ejemplo subida fuera de la app) se rechaza con 413 antes de escribirse a disco.
+7. Elimina el viaje/chofer de prueba solo si no representan operacion real; si quieres limpiar el archivo sin esperar la depuracion automatica, hazlo por `docker compose exec backend sh -c "rm /app/.relacion-gastos/<archivo>"` y pon a `null` el campo en la base, nunca borres la carpeta completa.
+
 ### 13.6 Aplicacion
 
 ```bash
@@ -1125,6 +1142,7 @@ Debe existir retencion, cifrado, copia externa y restauracion periodica. Respald
 - PostgreSQL operacional mediante proveedor/herramienta oficial.
 - `traccar_data` con Traccar detenido o metodo consistente.
 - `whatsapp_auth`, cifrado y muy restringido.
+- `relacion_gastos`: fotos vigentes (viajes aun no liquidados, o liquidados hace menos de `DIAS_RETENCION_RELACION_GASTOS`). Se autodepura sola con el tiempo; no hace falta retenerla indefinidamente, pero si se pierde antes de que el admin liquide, se pierde el respaldo del pago de ese viaje.
 - Reverse proxy y configuracion Traccar externa.
 - Inventario de IMEI, destino original y configuracion por equipo.
 
@@ -1229,6 +1247,7 @@ Requieren confirmacion explicita y backup:
 - `backend/scripts/reset_viajes.js`, que borra solo viajes y lo que cuelga de ellos (paradas, reportes, gastos, viaje-unidad, retornables y sus movimientos), desvincula todas las asignaciones `ChoferUnidad` (chofer-unidad regular), resetea choferes/camiones a `DISPONIBLE`/`Sede`, y conserva choferes, camiones, usuarios y empresas. Exige `ALLOW_TRIPS_RESET=true`.
 - `DELETE`, `TRUNCATE`, migracion destructiva o limpieza masiva.
 - Borrar `.whatsapp-auth` o `whatsapp_auth`.
+- Borrar el volumen `relacion_gastos` o archivos dentro de el a mano (la depuracion automatica ya se encarga; borrar manualmente antes de tiempo deja viajes sin su respaldo de pago).
 - Borrar `traccar_data` o migrar H2.
 - Cambiar servidor/puerto de toda la flota GPS.
 - Rotar tokens sin actualizar ambos extremos.

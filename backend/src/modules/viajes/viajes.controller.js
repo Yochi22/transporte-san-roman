@@ -2,6 +2,7 @@ const service = require('./viajes.service')
 const prisma = require('../../config/database')
 const { ok, error } = require('../../utils/respuesta')
 const { enviarMensaje } = require('../../services/messaging/whatsapp')
+const { rutaCompleta, contentTypeDeArchivo } = require('../../utils/almacenamientoRelacionGastos')
 
 const filtrarFinanzas = (valor, rol) => {
   if (rol === 'ADMIN' || !valor) return valor
@@ -143,6 +144,15 @@ const listarPendientesLiquidacion = async (req, res) => {
   return ok(res, pendientes)
 }
 
+const obtenerRelacionGastos = async (req, res) => {
+  const nombreArchivo = await service.obtenerArchivoRelacionGastos(req.params.id)
+  res.set('Content-Type', contentTypeDeArchivo(nombreArchivo))
+  res.set('Cache-Control', 'private, max-age=3600')
+  res.sendFile(rutaCompleta(nombreArchivo), (err) => {
+    if (err && !res.headersSent) error(res, 'No se pudo leer la imagen', 404)
+  })
+}
+
 module.exports = {
   listar,
   listarArchivo,
@@ -155,5 +165,6 @@ module.exports = {
   cerrar,
   listarPendientesLiquidacion,
   recargarViaticos,
-  confirmarDocumentacion
+  confirmarDocumentacion,
+  obtenerRelacionGastos
 }

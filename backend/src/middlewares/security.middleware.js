@@ -62,7 +62,13 @@ const loginLimiter = rateLimit({
   message: { ok: false, mensaje: 'Demasiados intentos de acceso. Espera 15 minutos.', detalle: null }
 })
 
+// Unica excepcion: la subida de la foto de relacion de gastos va como
+// multipart/form-data (multer), no JSON. El resto de la API sigue exigiendo
+// JSON estricto.
+const RUTA_SUBIDA_RELACION_GASTOS = /^\/mi\/viaje\/[^/]+\/relacion-gastos$/
+
 const requerirJson = (req, res, next) => {
+  if (RUTA_SUBIDA_RELACION_GASTOS.test(req.path)) return next()
   const tieneCuerpo = Number(req.headers['content-length'] || 0) > 0 || req.headers['transfer-encoding']
   if (['POST', 'PUT', 'PATCH'].includes(req.method) && tieneCuerpo && !req.is('application/json')) {
     return error(res, 'Content-Type debe ser application/json', 415)

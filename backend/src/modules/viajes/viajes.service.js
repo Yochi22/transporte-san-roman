@@ -2,6 +2,7 @@ const prisma = require('../../config/database')
 const { generarCodigoViaje } = require('../../utils/generarCodigo')
 const { choferPanelSelect, camionPanelSelect, reportePanelSelect } = require('../../utils/prismaSelects')
 const { construirRangoPeriodo } = require('../../utils/rangoFechas')
+const { eliminarArchivo } = require('../../utils/almacenamientoRelacionGastos')
 
 const DIAS_RETENCION_REPORTES = Math.max(1, Number(process.env.DIAS_RETENCION_REPORTES) || 5)
 
@@ -704,6 +705,35 @@ const recalcularEstadoRecursos = async (tx, choferId, camionIds, ubicacion = nul
   }
 }
 
+// --- Relacion de gastos (foto) ------------------------------------------------
+
+const obtenerArchivoRelacionGastos = async (viajeId) => {
+  const viaje = await prisma.viaje.findUniqueOrThrow({ where: { id: viajeId }, select: { relacionGastosArchivo: true } })
+  if (!viaje.relacionGastosArchivo) throw { status: 404, message: 'Este viaje no tiene relacion de gastos cargada' }
+  return viaje.relacionGastosArchivo
+}
+
+// Corre junto a los demas jobs de depuracion (reportes, retornables): borra
+// SOLO el archivo en disco de viajes ya liquidados hace mas de diasRetencion
+// dias. Mientras un viaje no este liquidado, su foto nunca se toca aqui -
+// es el respaldo del pago, borrarla antes seria contraproducente.
+const depurarRelacionGastosLiquidadas = async (diasRetencion) => {
+  const limite = new Date()
+  limite.setDate(limite.getDate() - diasRetencion)
+
+  const candidatos = await prisma.viaje.findMany({
+    where: { relacionGastosArchivo: { not: null }, estadoFinanciero: 'LIQUIDADO', fechaLiquidacion: { lte: limite } },
+    select: { id: true, relacionGastosArchivo: true }
+  })
+
+  for (const viaje of candidatos) {
+    await eliminarArchivo(viaje.relacionGastosArchivo)
+    await prisma.viaje.update({ where: { id: viaje.id }, data: { relacionGastosArchivo: null } })
+  }
+
+  return { count: candidatos.length }
+}
+
 module.exports = {
   listar,
   listarArchivo,
@@ -717,5 +747,7 @@ module.exports = {
   actualizarRuta,
   cancelar,
   actualizarParada,
-  marcarLlegadaParada
+  marcarLlegadaParada,
+  obtenerArchivoRelacionGastos,
+  depurarRelacionGastosLiquidadas
 }

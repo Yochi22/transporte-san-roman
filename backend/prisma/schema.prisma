@@ -330,6 +330,13 @@ model Viaje {
   createdAt             DateTime         @default(now()) @map("created_at")
   updatedAt             DateTime         @updatedAt @map("updated_at")
 
+  // Foto de la relacion de gastos que el chofer entrega al volver. El
+  // archivo vive en disco (RELACION_GASTOS_PATH), nunca como bytea en la
+  // base: aqui solo se guarda el nombre de archivo y cuando se subio, para
+  // poder servirla y para la depuracion automatica tras liquidar.
+  relacionGastosArchivo  String?   @map("relacion_gastos_archivo")
+  relacionGastosSubidaAt DateTime? @map("relacion_gastos_subida_at")
+
   empresa   Empresa?        @relation(fields: [empresaId], references: [id], onDelete: SetNull)
   camion    Camion          @relation(fields: [camionId], references: [id])
   chofer    Chofer          @relation(fields: [choferId], references: [id])
