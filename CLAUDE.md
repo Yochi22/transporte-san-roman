@@ -1008,6 +1008,8 @@ Revisa la simulacion antes de aplicar, en especial las coincidencias marcadas co
 
 Para la foto de relacion de gastos, la migracion esperada es `20261116233000_add_relacion_gastos_foto`. Es aditiva: agrega `viajes.relacion_gastos_archivo` y `viajes.relacion_gastos_subida_at` (ambas nullable); ninguna tabla existente se modifica ni se rellenan datos. Requiere ademas, por primera vez en este modulo, **un volumen Docker nuevo** (`relacion_gastos`) y la variable `RELACION_GASTOS_PATH`: sin eso el backend igual arranca, pero las fotos se escribirian dentro del contenedor y se perderian en el siguiente `--force-recreate`. Validacion especifica tras desplegar:
 
+Nginx conserva `client_max_body_size 100k` como limite general, pero la ruta exacta `POST /api/mi/viaje/:id/relacion-gastos` tiene una excepcion de `2m` en `frontend/nginx.conf`. No retires esa excepcion: la app genera JPEG de hasta 800 KB y Multer aplica despues el tope efectivo de 1.2 MB. Sin ella, las fotos tomadas desde celulares son rechazadas por Nginx con 413 antes de llegar al backend.
+
 1. Confirma que el volumen existe: `docker volume ls | grep relacion_gastos` (lo crea `docker compose up` solo, al estar declarado en `docker-compose.yml`).
 2. Desde la app de un chofer con un viaje `EN_CURSO`, marca "Disponible": confirma que pide la foto antes de habilitar las ubicaciones, que la sube (toma unos segundos en comprimir) y que el reporte `LIBRE` se envia despues.
 3. En el panel admin, abre ese viaje y confirma que la foto aparece en "Relacion de gastos del chofer", con su fecha.

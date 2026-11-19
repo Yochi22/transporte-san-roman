@@ -4878,7 +4878,10 @@ function ChoferApp({ onLogout }) {
       setFotosGastos((prev) => { const siguiente = { ...prev }; delete siguiente[viaje.id]; return siguiente })
       await cargar()
     } catch (err) {
-      await notifyError(err.response?.data?.mensaje || err.message || 'No se pudo enviar el reporte.')
+      const mensaje = err.response?.status === 413
+        ? 'La foto supera el limite permitido. Intenta tomarla nuevamente con menor resolucion.'
+        : err.response?.data?.mensaje || err.message || 'No se pudo enviar el reporte.'
+      await notifyError(mensaje)
     } finally {
       setEnviando('')
     }
